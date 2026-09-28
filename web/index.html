@@ -15,6 +15,11 @@
       body {
         overflow: hidden; /* react-native-web owns scrolling inside the app */
       }
+      #app-root {
+        /* react-native-web's root view is `flex: 1`, which only fills a flex parent —
+           without this every screen collapses to its content height. */
+        display: flex;
+      }
     </style>
   </head>
   <body>

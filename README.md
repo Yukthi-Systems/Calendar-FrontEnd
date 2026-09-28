@@ -21,6 +21,37 @@ value into tracked source. Concretely:
   (`.env*`, `*.jks`, `*.p12`, `*.mobileprovision`, `google-services.json`,
   `GoogleService-Info.plist`) but is not a substitute for looking.
 
+# Sign-in (Yukthi SSO)
+
+Auth mirrors YFS-FrontEnd: sign in through Yukthi SSO, which sets the `SSO-Session-ID`
+cookie, then `POST /auth/login` on YCT-Mesh-API exchanges that cookie for an access token
+(sent as `x-session-access-id`) and a refresh token. The session is persisted, verified on
+launch, refreshed a minute before expiry, and torn down on both the API and SSO at logout.
+
+- Set `API_URL`, `SSO_URL` and `SSO_APP_ID` in `.env` (see `.env.example`).
+- **Web** (`src/services/sso.web.ts`) uses `@rjyspl/phoenix-sso-react`: a popup that falls
+  back to a full-page redirect, plus a hidden-iframe silent check. The web origin must be
+  in YCT-Mesh-API's CORS allow-list and accepted by the SSO service's origin check.
+- **iOS/Android** (`src/services/sso.native.ts`) load the SSO login page in an in-app
+  WebView (`src/components/SsoLoginModal.native.tsx`) and forward its
+  `window.opener.postMessage` result to React Native. On iOS, the WebView's cookies are
+  copied into the store `fetch` uses (`@preeternal/react-native-cookie-manager`).
+- Session logic lives in `src/services/authStore.ts`; components read it through `useAuth()`.
+
+# State & styling
+
+- **State: [jotai](https://jotai.org).** Atoms live in `src/atoms/` (same layout as
+  YFS-FrontEnd); non-React code uses `getDefaultStore()`, components use
+  `useAtomValue`/`useAtom`. The auth session is persisted by `authStore` itself
+  (AsyncStorage on native is async, which `atomWithStorage` would surface as Promises).
+- **Styling: Tailwind CSS via [NativeWind](https://www.nativewind.dev) v4** (Tailwind v3).
+  Use `className` on React Native components — it works on iOS, Android and Web. Theme
+  tokens (`bg-bg-main`, `text-text-heading`, `bg-accent`, `border-border-main`, …) match
+  YFS-FrontEnd and are defined as CSS variables in `global.css` with light/dark values
+  that follow the OS color scheme. Metro compiles `global.css` through `nativewind/metro`;
+  webpack through `postcss-loader`. Web-only utilities (`hover:`, `backdrop-blur`,
+  gradients) don't exist on native — stick to what NativeWind supports.
+
 # Getting Started
 
 This project has three targets: **Web**, **Android**, and **iOS**. Android and iOS share the

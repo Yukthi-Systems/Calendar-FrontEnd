@@ -24,7 +24,16 @@ module.exports = (_env, argv) => {
       // .web.* wins over the bare extension whenever both exist (env.web.ts vs
       // env.ts/env.native.ts being the main case in this project) — same idea as
       // Metro's platform-extension resolution on the native side.
-      extensions: ['.web.tsx', '.web.ts', '.web.jsx', '.web.js', '.tsx', '.ts', '.jsx', '.js'],
+      extensions: [
+        '.web.tsx',
+        '.web.ts',
+        '.web.jsx',
+        '.web.js',
+        '.tsx',
+        '.ts',
+        '.jsx',
+        '.js',
+      ],
       alias: {
         'react-native$': 'react-native-web',
       },
@@ -33,16 +42,24 @@ module.exports = (_env, argv) => {
       rules: [
         {
           test: /\.[jt]sx?$/,
-          // React Native packages ship untranspiled ES modules/JSX and need babel too;
-          // everything else in node_modules is skipped as usual.
-          exclude: /node_modules\/(?!(react-native|@react-native|react-native-.*)\/).*/,
+          // React Native packages (and NativeWind, which rides on them) ship
+          // untranspiled ES modules/JSX and need babel too; everything else in
+          // node_modules is skipped as usual.
+          exclude:
+            /node_modules\/(?!(react-native|@react-native|react-native-.*|nativewind)\/).*/,
           use: {
             loader: 'babel-loader',
             options: {
-              presets: ['module:@react-native/babel-preset'],
+              // babel.config.js (RN preset + nativewind/babel), plus the web alias plugin.
+              configFile: path.resolve(__dirname, 'babel.config.js'),
               plugins: ['react-native-web'],
             },
           },
+        },
+        {
+          // global.css → Tailwind via postcss.config.js; Metro does this via NativeWind.
+          test: /\.css$/,
+          use: ['style-loader', 'css-loader', 'postcss-loader'],
         },
         {
           test: /\.(png|jpe?g|gif|svg|ttf|otf|woff2?)$/i,
@@ -51,7 +68,9 @@ module.exports = (_env, argv) => {
       ],
     },
     plugins: [
-      new HtmlWebpackPlugin({ template: path.resolve(__dirname, 'web/index.html') }),
+      new HtmlWebpackPlugin({
+        template: path.resolve(__dirname, 'web/index.html'),
+      }),
       new Dotenv({
         path: path.resolve(__dirname, '.env'),
         safe: false,
@@ -60,7 +79,15 @@ module.exports = (_env, argv) => {
       }),
     ],
     devServer: {
-      port: 3000,
+      port: 5174,
+      host: '0.0.0.0',
+      // Dev-only: lets the server be reached by hostname/IP other than localhost
+      // (proxy, tunnel, LAN device) without webpack-dev-server's Host-header check
+      // rejecting the request as "Invalid Host header". Never applies to build:web.
+      allowedHosts: 'all',
+      // Behind a proxy the page isn't on :5174, so connect the hot-reload socket back to
+      // whatever host/port/protocol the page was actually loaded from.
+      client: { webSocketURL: 'auto://0.0.0.0:0/ws' },
       open: false,
       hot: true,
       historyApiFallback: true,

@@ -6,4 +6,4 @@
 // The actual values live in a local, git-ignored `.env` (mobile: read via
 // react-native-config; web: injected at build time by webpack.config.js's Dotenv
 // plugin). See README.md's "Environment & secrets" section before adding a key.
-export type EnvKey = 'API_URL';
+export type EnvKey = 'API_URL' | 'SSO_URL' | 'SSO_APP_ID';

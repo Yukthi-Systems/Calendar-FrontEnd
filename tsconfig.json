@@ -9,6 +9,6 @@
     "lib": ["esnext", "dom", "dom.iterable"],
     "types": ["jest", "node"]
   },
-  "include": ["**/*.ts", "**/*.tsx"],
+  "include": ["**/*.ts", "**/*.tsx", "nativewind-env.d.ts"],
   "exclude": ["**/node_modules", "**/Pods", "web-build"]
 }

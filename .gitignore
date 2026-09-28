@@ -88,3 +88,7 @@ GoogleService-Info.plist
 # Web build output
 /web-build/
 /dist/
+
+# Tests and Jest mocks (kept local)
+__tests__/
+__mocks__/
