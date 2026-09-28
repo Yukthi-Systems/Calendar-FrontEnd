@@ -1,0 +1,14 @@
+{
+  "extends": "@react-native/typescript-config",
+  "compilerOptions": {
+    // Adds "dom" (for web/index.tsx and any code using browser globals) and "node"
+    // types (for process.env in env.web.ts) on top of the base RN config, which has
+    // neither — a plain React Native project never needs them, this one does because
+    // of the web target. Doesn't affect what actually runs on any platform, only
+    // what `tsc` accepts.
+    "lib": ["esnext", "dom", "dom.iterable"],
+    "types": ["jest", "node"]
+  },
+  "include": ["**/*.ts", "**/*.tsx"],
+  "exclude": ["**/node_modules", "**/Pods", "web-build"]
+}
