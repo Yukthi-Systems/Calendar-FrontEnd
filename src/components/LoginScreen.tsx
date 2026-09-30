@@ -1,3 +1,4 @@
+import { ShieldCheck } from 'lucide-react-native';
 import { ActivityIndicator, Pressable, Text, View } from 'react-native';
 import { useAccentColor } from '../hooks/useAccentColor';
 
@@ -19,7 +20,7 @@ export function LoginScreen({
     <View className="flex-1 items-center justify-center bg-bg-main p-6">
       <View className="w-full max-w-md items-center rounded-3xl border border-border-main bg-bg-card p-10 shadow-lg">
         <View className="mb-6 h-[60px] w-[60px] items-center justify-center rounded-2xl border border-accent/50 bg-accent/10">
-          <Text className="text-3xl">🛡️</Text>
+          <ShieldCheck size={30} color={accent} />
         </View>
         <Text className="mb-2 text-3xl font-bold tracking-tight text-text-heading">
           YTC

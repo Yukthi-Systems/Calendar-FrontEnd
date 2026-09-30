@@ -1,0 +1,38 @@
+/* Web-only interaction states. Kept out of global.css because NativeWind also compiles
+   that file for iOS/Android, where these selectors don't apply. */
+
+[role='button'],
+[role='tab'],
+[role='radio'] {
+  cursor: pointer;
+  transition: filter 120ms ease-out;
+  /* Clicking tabs/buttons shouldn't select their label text. */
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+@media (hover: hover) {
+  [role='button']:not([aria-disabled='true']):hover,
+  [role='tab']:hover,
+  [role='radio']:hover {
+    filter: brightness(0.95);
+  }
+}
+
+/* Keyboard focus ring (mouse clicks don't trigger :focus-visible). */
+[tabindex]:focus-visible {
+  outline: 2px solid rgb(var(--accent));
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+
+[aria-disabled='true'] {
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}

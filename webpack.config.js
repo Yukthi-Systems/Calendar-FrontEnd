@@ -1,4 +1,5 @@
 const path = require('path');
+const webpack = require('webpack');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
 const Dotenv = require('dotenv-webpack');
 
@@ -36,10 +37,25 @@ module.exports = (_env, argv) => {
       ],
       alias: {
         'react-native$': 'react-native-web',
+        // react-native-svg (used by the lucide icons) resolves images through RN's registry.
+        '@react-native/assets-registry/registry':
+          'react-native-web/dist/modules/AssetRegistry',
       },
     },
     module: {
       rules: [
+        {
+          // react-native-reanimated and react-native-worklets ship ESM-only —
+          // lib/module/package.json marks that whole directory `"type": "module"`,
+          // which webpack trusts for module *type* regardless of what any loader
+          // returns. babel-loader below still compiles their import/export syntax
+          // to CommonJS (needed since react-native-web etc. expect that), so
+          // without this override webpack wraps the loader's CommonJS output in an
+          // ESM module shell anyway, and the code — written expecting a real
+          // `exports` binding — throws "exports is not defined" at runtime.
+          test: /node_modules\/(react-native-reanimated|react-native-worklets)\/.*\.js$/,
+          type: 'javascript/auto',
+        },
         {
           test: /\.[jt]sx?$/,
           // React Native packages (and NativeWind, which rides on them) ship
@@ -68,6 +84,13 @@ module.exports = (_env, argv) => {
       ],
     },
     plugins: [
+      // React Native's own runtime defines the global __DEV__; Metro injects it,
+      // but webpack has nothing that does, so any package that reads it bare
+      // (react-native-gesture-handler does) throws "__DEV__ is not defined" in
+      // the browser. This defines it the same way Metro does.
+      new webpack.DefinePlugin({
+        __DEV__: JSON.stringify(!isProd),
+      }),
       new HtmlWebpackPlugin({
         template: path.resolve(__dirname, 'web/index.html'),
       }),

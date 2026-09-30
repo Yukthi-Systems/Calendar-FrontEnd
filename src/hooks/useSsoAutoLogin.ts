@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { SSO_ENABLED } from '../config/features';
 import { AUTO_SSO_ATTEMPTED_KEY } from '../services/authStore';
 import { isAfterLogout, sessionFlag } from '../services/runtime';
 
@@ -21,7 +22,7 @@ export function useSsoAutoLogin({
   const isLogoutParam = isAfterLogout();
 
   useEffect(() => {
-    if (isAuthenticated || authLoading || isLogoutParam) {
+    if (!SSO_ENABLED || isAuthenticated || authLoading || isLogoutParam) {
       return;
     }
     if (startedRef.current || sessionFlag.get(AUTO_SSO_ATTEMPTED_KEY)) {
