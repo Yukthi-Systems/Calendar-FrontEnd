@@ -2,7 +2,13 @@ import { useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
 import { useAtom, useSetAtom } from 'jotai';
 import { format, parseISO } from 'date-fns';
-import { ChevronRight, ListTree, Plus } from 'lucide-react-native';
+import {
+  Bell,
+  ChevronRight,
+  ListTree,
+  Plus,
+  Repeat,
+} from 'lucide-react-native';
 import {
   commentsAtom,
   itemFormAtom,
@@ -10,6 +16,9 @@ import {
   selectedItemIdAtom,
 } from '../../atoms/project';
 import { PRIORITY_COLOR, STATUSES } from '../../data/constants';
+import { CURRENT_USER_ID } from '../../data/mockData';
+import { canDelete, canEditFields, roleFor } from '../../data/permissions';
+import { RECURRENCE_LABEL } from '../../data/recurrence';
 import {
   MAX_DEPTH,
   ancestorsOf,
@@ -46,6 +55,11 @@ export function ItemModal() {
   const subtasks = item ? flattenTree(descendantsOf(items, item.id)) : [];
   const progress = item ? subtaskProgress(items, item.id) : null;
   const canAdd = item ? canAddSubtask(items, item) : false;
+  // An assignee who isn't also the creator is limited to status, comments and
+  // subtasks — Edit/Delete simply aren't offered to them.
+  const role = item ? roleFor(item, CURRENT_USER_ID) : 'other';
+  const editable = item ? canEditFields(item, CURRENT_USER_ID) : false;
+  const deletable = item ? canDelete(item, CURRENT_USER_ID) : false;
 
   return (
     <Modal
@@ -92,6 +106,16 @@ export function ItemModal() {
                 {item.description}
               </Text>
 
+              {role === 'assignee' ? (
+                <View className="mb-4 rounded-xl border border-border-main bg-bg-main px-3 py-2">
+                  <Text className="text-xs text-text-main">
+                    You're assigned to this task — you can comment, update its
+                    status, and manage subtasks. Only the creator can edit its
+                    other details or delete it.
+                  </Text>
+                </View>
+              ) : null}
+
               <View className="mb-4 flex-row flex-wrap items-center gap-2">
                 <Pill
                   text={`${item.priority} priority`}
@@ -108,10 +132,38 @@ export function ItemModal() {
                   {assigneeNames(item.assigneeIds)}
                 </Text>
               </View>
-              <Text className="mb-4 text-sm text-text-main">
+              <Text className="mb-1 text-sm text-text-main">
                 {format(parseISO(item.start), 'MMM d')} –{' '}
                 {format(parseISO(item.end), 'MMM d, yyyy')}
               </Text>
+
+              {item.recurrence ? (
+                <View className="mb-1 flex-row items-center gap-1.5">
+                  <Repeat size={13} color={text} />
+                  <Text className="text-xs text-text-main">
+                    {RECURRENCE_LABEL[item.recurrence]}
+                  </Text>
+                </View>
+              ) : null}
+              {(item.reminders ?? []).length > 0 ? (
+                <View className="mb-4 flex-row items-center gap-1.5">
+                  <Bell size={13} color={text} />
+                  <Text className="text-xs text-text-main">
+                    {item.reminders
+                      .map(
+                        r =>
+                          `${
+                            r.offsetDays === 0
+                              ? 'Due date'
+                              : `${r.offsetDays}d before`
+                          } at ${r.time}`,
+                      )
+                      .join(' · ')}
+                  </Text>
+                </View>
+              ) : (
+                <View className="mb-4" />
+              )}
 
               <Text className="mb-2 text-xs font-semibold uppercase text-text-main">
                 Status
@@ -215,41 +267,47 @@ export function ItemModal() {
               <CommentsSection itemId={item.id} />
 
               <View className="flex-row gap-2">
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => {
-                    if (!confirmDelete) {
-                      setConfirmDelete(true);
-                      return;
-                    }
-                    const gone = new Set([
-                      item.id,
-                      ...descendantsOf(items, item.id).map(d => d.id),
-                    ]);
-                    setItems(prev => prev.filter(i => !gone.has(i.id)));
-                    setComments(prev => prev.filter(c => !gone.has(c.itemId)));
-                    close();
-                  }}
-                  className="items-center rounded-2xl border border-red-500/40 px-4 py-3 active:opacity-70"
-                >
-                  <Text className="font-semibold text-red-500">
-                    {confirmDelete
-                      ? progress && progress.total > 0
-                        ? `Delete with ${progress.total} subtasks?`
-                        : 'Tap again to delete'
-                      : 'Delete'}
-                  </Text>
-                </Pressable>
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={() => {
-                    setForm({ mode: 'edit', id: item.id });
-                    close();
-                  }}
-                  className="flex-1 items-center rounded-2xl border border-border-main py-3 active:opacity-70"
-                >
-                  <Text className="text-text-heading">Edit</Text>
-                </Pressable>
+                {deletable ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      if (!confirmDelete) {
+                        setConfirmDelete(true);
+                        return;
+                      }
+                      const gone = new Set([
+                        item.id,
+                        ...descendantsOf(items, item.id).map(d => d.id),
+                      ]);
+                      setItems(prev => prev.filter(i => !gone.has(i.id)));
+                      setComments(prev =>
+                        prev.filter(c => !gone.has(c.itemId)),
+                      );
+                      close();
+                    }}
+                    className="items-center rounded-2xl border border-red-500/40 px-4 py-3 active:opacity-70"
+                  >
+                    <Text className="font-semibold text-red-500">
+                      {confirmDelete
+                        ? progress && progress.total > 0
+                          ? `Delete with ${progress.total} subtasks?`
+                          : 'Tap again to delete'
+                        : 'Delete'}
+                    </Text>
+                  </Pressable>
+                ) : null}
+                {editable ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => {
+                      setForm({ mode: 'edit', id: item.id });
+                      close();
+                    }}
+                    className="flex-1 items-center rounded-2xl border border-border-main py-3 active:opacity-70"
+                  >
+                    <Text className="text-text-heading">Edit</Text>
+                  </Pressable>
+                ) : null}
                 <Pressable
                   accessibilityRole="button"
                   onPress={close}

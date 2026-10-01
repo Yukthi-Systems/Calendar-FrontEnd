@@ -11,17 +11,20 @@ import {
   Check,
   ChevronDown,
   ListTree,
+  Lock,
+  Repeat,
   Search,
   X,
   type LucideIcon,
 } from 'lucide-react-native';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { itemsAtom, selectedItemIdAtom } from '../../atoms/project';
-import { PRIORITY_COLOR, STATUS_BY_KEY } from '../../data/constants';
+import { PRIORITY_COLOR, statusInfo } from '../../data/constants';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { MEMBERS } from '../../data/mockData';
+import { RECURRENCE_LABEL } from '../../data/recurrence';
 import { subtaskProgress } from '../../data/tree';
-import type { WorkItem } from '../../data/types';
+import type { RecurrenceFreq, WorkItem } from '../../data/types';
 import { Tooltip } from './Tooltip';
 
 export const memberById = (id: string | null) =>
@@ -150,10 +153,28 @@ export const assigneeNames = (ids: string[]) =>
     ? 'Unassigned'
     : ids.map(id => memberById(id)?.name ?? '?').join(', ');
 
+// Small badge marking a task as recurring — used anywhere a title shows
+// (ItemRow, Table, Kanban). Wrapped in a Tooltip naming the frequency, since
+// the icon alone doesn't say which.
+export function RecurrenceIcon({
+  freq,
+  size = 12,
+}: {
+  freq: RecurrenceFreq;
+  size?: number;
+}) {
+  const { text } = useThemeColors();
+  return (
+    <Tooltip label={`Repeats ${RECURRENCE_LABEL[freq].toLowerCase()}`}>
+      <Repeat size={size} color={text} />
+    </Tooltip>
+  );
+}
+
 export function StatusDot({ status }: { status: WorkItem['status'] }) {
   return (
     <View
-      style={{ backgroundColor: STATUS_BY_KEY[status].color }}
+      style={{ backgroundColor: statusInfo(status).color }}
       className="h-2.5 w-2.5 rounded-full"
     />
   );
@@ -192,12 +213,17 @@ export function ItemRow({
     >
       <StatusDot status={item.status} />
       <View className="flex-1">
-        <Text
-          numberOfLines={1}
-          className="text-sm font-medium text-text-heading"
-        >
-          {item.title}
-        </Text>
+        <View className="flex-row items-center gap-1">
+          <Text
+            numberOfLines={1}
+            className="shrink text-sm font-medium text-text-heading"
+          >
+            {item.title}
+          </Text>
+          {item.recurrence ? (
+            <RecurrenceIcon freq={item.recurrence} size={11} />
+          ) : null}
+        </View>
         <View className="flex-row items-center gap-2">
           <Text className="text-[11px] text-text-main">{item.id}</Text>
           <SubtaskBadge id={item.id} />
@@ -302,7 +328,9 @@ export function MultiSelectDropdown({
 }: {
   // Sheet title, shown while the picker is open. Falls back to `placeholder`.
   label?: string;
-  options: { id: string; label: string; color?: string }[];
+  // `locked`: shown checked (if it is) but can't be toggled off — e.g. you
+  // can never remove yourself as an assignee, only add yourself.
+  options: { id: string; label: string; color?: string; locked?: boolean }[];
   selectedIds: string[];
   onToggle: (id: string) => void;
   placeholder: string;
@@ -397,7 +425,8 @@ export function MultiSelectDropdown({
                   <Pressable
                     key={o.id}
                     accessibilityRole="checkbox"
-                    accessibilityState={{ checked }}
+                    accessibilityState={{ checked, disabled: o.locked }}
+                    disabled={o.locked}
                     onPress={() => onToggle(o.id)}
                     className={`flex-row items-center gap-2.5 rounded-lg px-2 py-2.5 active:opacity-70 ${
                       i > 0 ? 'border-t border-border-main' : ''
@@ -412,9 +441,16 @@ export function MultiSelectDropdown({
                       }}
                       className="h-5 w-5 items-center justify-center rounded-md border border-border-main"
                     >
-                      {checked ? <Check size={13} color="#ffffff" /> : null}
+                      {o.locked ? (
+                        <Lock size={10} color="#ffffff" />
+                      ) : checked ? (
+                        <Check size={13} color="#ffffff" />
+                      ) : null}
                     </View>
                     <Text className="flex-1 text-text-heading">{o.label}</Text>
+                    {o.locked ? (
+                      <Text className="text-[11px] text-text-main">You</Text>
+                    ) : null}
                   </Pressable>
                 );
               })}

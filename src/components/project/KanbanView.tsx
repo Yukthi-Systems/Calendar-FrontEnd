@@ -14,7 +14,7 @@ import { PRIORITY_COLOR, STATUSES } from '../../data/constants';
 import { depthOf } from '../../data/tree';
 import type { Status, WorkItem } from '../../data/types';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { AssigneeAvatars, Pill, SubtaskBadge } from './shared';
+import { AssigneeAvatars, Pill, RecurrenceIcon, SubtaskBadge } from './shared';
 
 // Dragging (long-press a card) reorders it within its own column — real,
 // spring-animated drag-and-drop via react-native-draggable-flatlist, which
@@ -166,9 +166,12 @@ function KanbanCard({
           <Text className="text-[10px] text-text-main">Level {depth}</Text>
         ) : null}
       </View>
-      <Text className="mb-2 text-sm font-medium text-text-heading">
-        {item.title}
-      </Text>
+      <View className="mb-2 flex-row items-center gap-1">
+        <Text className="shrink text-sm font-medium text-text-heading">
+          {item.title}
+        </Text>
+        {item.recurrence ? <RecurrenceIcon freq={item.recurrence} /> : null}
+      </View>
       {parent ? (
         <Text numberOfLines={1} className="mb-2 text-[11px] text-accent">
           ↳ {parent.title}

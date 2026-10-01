@@ -61,7 +61,7 @@ export function flattenTree(
 export const subtaskProgress = (items: WorkItem[], id: string) => {
   const all = descendantsOf(items, id);
   return {
-    done: all.filter(i => i.status === 'done').length,
+    done: all.filter(i => i.status === 'completed').length,
     total: all.length,
   };
 };

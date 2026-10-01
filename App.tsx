@@ -21,6 +21,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { bootAuth } from './src/services/authStore';
 import { bootProject } from './src/services/projectStore';
+import { bootNotifications } from './src/services/notificationStore';
 import { useAuth } from './src/hooks/useAuth';
 import { useSsoAutoLogin } from './src/hooks/useSsoAutoLogin';
 import { useAccentColor } from './src/hooks/useAccentColor';
@@ -36,6 +37,7 @@ function App() {
     const signal = { cancelled: false };
     bootAuth(signal);
     bootProject();
+    bootNotifications();
     return () => {
       signal.cancelled = true;
     };

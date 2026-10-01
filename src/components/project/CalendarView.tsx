@@ -35,10 +35,17 @@ import {
   startOfYear,
 } from 'date-fns';
 import { itemsAtom, selectedItemIdAtom } from '../../atoms/project';
-import { STATUS_BY_KEY } from '../../data/constants';
+import { statusInfo } from '../../data/constants';
+import { occurrencesInRange } from '../../data/recurrence';
 import type { WorkItem } from '../../data/types';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { AssigneeAvatars, IconButton, ItemRow, SubtaskBadge } from './shared';
+import {
+  AssigneeAvatars,
+  IconButton,
+  ItemRow,
+  RecurrenceIcon,
+  SubtaskBadge,
+} from './shared';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const SPLIT = 1000; // width where the day agenda moves beside the grid instead of below it
@@ -63,8 +70,21 @@ interface CalEvent extends ICalendarEventBase {
   workItem: WorkItem;
 }
 
+// Items active on `day`, counting each repeat of a recurring task as if it
+// were present — e.g. a weekly task shows up every week it recurs into, not
+// only in the week it was created. The task itself is still one WorkItem;
+// this only decides what to *display*, same as `occurrencesInRange` it reads.
 const itemsOn = (items: WorkItem[], day: Date) =>
-  items.filter(i => parseISO(i.start) <= day && parseISO(i.end) >= day);
+  items.filter(
+    i =>
+      occurrencesInRange(
+        parseISO(i.start),
+        parseISO(i.end),
+        i.recurrence,
+        day,
+        day,
+      ).length > 0,
+  );
 
 // Splits a flat list of days into weeks of 7, so the Year mini-months render
 // one explicit flex-row per week (each cell `flex: 1`) rather than relying on
@@ -133,13 +153,27 @@ export function CalendarView() {
 
   // Date-only tasks, mapped to react-native-big-calendar's all-day event shape
   // (both start and end at midnight — that's how the library recognises an
-  // event as all-day/multi-day instead of a timed one).
-  const calEvents: CalEvent[] = items.map(i => ({
-    start: startOfDay(parseISO(i.start)),
-    end: addDays(startOfDay(parseISO(i.end)), 1),
-    title: i.title,
-    workItem: i,
-  }));
+  // event as all-day/multi-day instead of a timed one). Only consumed by
+  // Month mode, so expanding recurring tasks just across the padded month
+  // grid (not open-ended) keeps this bounded regardless of how old the task is.
+  const monthRangeStart = startOfWeek(startOfMonth(cursor), {
+    weekStartsOn: 1,
+  });
+  const monthRangeEnd = endOfWeek(endOfMonth(cursor), { weekStartsOn: 1 });
+  const calEvents: CalEvent[] = items.flatMap(i =>
+    occurrencesInRange(
+      parseISO(i.start),
+      parseISO(i.end),
+      i.recurrence,
+      monthRangeStart,
+      monthRangeEnd,
+    ).map(occ => ({
+      start: startOfDay(occ.start),
+      end: addDays(startOfDay(occ.end), 1),
+      title: i.title,
+      workItem: i,
+    })),
+  );
 
   // Month's row height is fixed (the grid divides the box evenly, it doesn't
   // grow to fit taller content), so its cells stay single-line to fit inside
@@ -344,7 +378,7 @@ function EventCell({
 }) {
   const { key, style, onPress, disabled } = touchableOpacityProps;
   const { workItem } = event;
-  const color = STATUS_BY_KEY[workItem.status].color;
+  const color = statusInfo(workItem.status).color;
   return (
     <Pressable
       key={key}
@@ -365,12 +399,17 @@ function EventCell({
         },
       ]}
     >
-      <Text
-        numberOfLines={1}
-        className="text-[11px] font-medium text-text-heading"
-      >
-        {workItem.title}
-      </Text>
+      <View className="flex-row items-center gap-1">
+        <Text
+          numberOfLines={1}
+          className="shrink text-[11px] font-medium text-text-heading"
+        >
+          {workItem.title}
+        </Text>
+        {workItem.recurrence ? (
+          <RecurrenceIcon freq={workItem.recurrence} size={9} />
+        ) : null}
+      </View>
       {!compact ? (
         <View className="mt-0.5 flex-row items-center gap-1">
           <AssigneeAvatars ids={workItem.assigneeIds} size={14} max={2} />

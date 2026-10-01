@@ -9,11 +9,17 @@ import {
   ChevronRight,
 } from 'lucide-react-native';
 import { itemsAtom, selectedItemIdAtom } from '../../atoms/project';
-import { PRIORITY_COLOR, STATUS_BY_KEY } from '../../data/constants';
+import { PRIORITY_COLOR, statusInfo } from '../../data/constants';
 import { childrenOf, flattenTree } from '../../data/tree';
 import type { WorkItem } from '../../data/types';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { AssigneeAvatars, Pill, SubtaskBadge, assigneeNames } from './shared';
+import {
+  AssigneeAvatars,
+  Pill,
+  RecurrenceIcon,
+  SubtaskBadge,
+  assigneeNames,
+} from './shared';
 
 type SortKey =
   | 'id'
@@ -25,7 +31,13 @@ type SortKey =
   | 'end';
 
 const PRIORITY_RANK = { low: 0, medium: 1, high: 2 };
-const STATUS_RANK = { todo: 0, in_progress: 1, in_review: 2, done: 3 };
+const STATUS_RANK = {
+  not_started: 0,
+  in_progress: 1,
+  on_hold: 2,
+  rejected: 3,
+  completed: 4,
+};
 
 // `width` undefined = the flexible column that absorbs spare width.
 const COLUMNS: { key: SortKey; label: string; width?: number }[] = [
@@ -41,7 +53,7 @@ const COLUMNS: { key: SortKey; label: string; width?: number }[] = [
 const sortValue = (i: WorkItem, key: SortKey): string | number => {
   switch (key) {
     case 'status':
-      return STATUS_RANK[i.status];
+      return STATUS_RANK[i.status] ?? 0;
     case 'priority':
       return PRIORITY_RANK[i.priority];
     case 'assignee':
@@ -125,12 +137,13 @@ export function TableView() {
             >
               {i.title}
             </Text>
+            {i.recurrence ? <RecurrenceIcon freq={i.recurrence} /> : null}
             <SubtaskBadge id={i.id} />
           </View>
         );
       }
       case 'status': {
-        const s = STATUS_BY_KEY[i.status];
+        const s = statusInfo(i.status);
         return (
           <View className="flex-row">
             <Pill text={s.label} color={s.color} />

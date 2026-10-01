@@ -22,7 +22,7 @@ import {
   startOfWeek,
 } from 'date-fns';
 import { itemsAtom, selectedItemIdAtom } from '../../atoms/project';
-import { STATUSES, STATUS_BY_KEY } from '../../data/constants';
+import { STATUSES, statusInfo } from '../../data/constants';
 import { flattenTree } from '../../data/tree';
 import { AssigneeAvatars } from './shared';
 
@@ -249,7 +249,7 @@ export function RoadmapView() {
                     ) +
                       1) *
                     dayWidth;
-                  const color = STATUS_BY_KEY[i.status].color;
+                  const color = statusInfo(i.status).color;
                   return (
                     <View
                       key={i.id}

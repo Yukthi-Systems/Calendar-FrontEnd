@@ -9,15 +9,22 @@ import {
 import type { Priority, Status, ViewType } from './types';
 
 export const STATUSES: { key: Status; label: string; color: string }[] = [
-  { key: 'todo', label: 'Todo', color: '#6b7280' },
+  { key: 'not_started', label: 'Not Started', color: '#6b7280' },
   { key: 'in_progress', label: 'In Progress', color: '#f59e0b' },
-  { key: 'in_review', label: 'In Review', color: '#3b82f6' },
-  { key: 'done', label: 'Done', color: '#10b981' },
+  { key: 'completed', label: 'Completed', color: '#10b981' },
+  { key: 'rejected', label: 'Rejected', color: '#ef4444' },
+  { key: 'on_hold', label: 'On Hold', color: '#8b5cf6' },
 ];
 
 export const STATUS_BY_KEY = Object.fromEntries(
   STATUSES.map(s => [s.key, s]),
 ) as Record<Status, (typeof STATUSES)[number]>;
+
+// Safe lookup: a status value that predates a schema change (e.g. stale data
+// in local storage from before this status set changed) falls back to
+// STATUSES[0] instead of crashing whatever's rendering it.
+export const statusInfo = (status: Status) =>
+  STATUS_BY_KEY[status] ?? STATUSES[0];
 
 export const PRIORITY_COLOR: Record<Priority, string> = {
   low: '#6b7280',

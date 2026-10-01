@@ -4,6 +4,8 @@ import type {
   Member,
   ProjectView,
   Priority,
+  RecurrenceFreq,
+  Reminder,
   Status,
   WorkItem,
 } from './types';
@@ -55,6 +57,11 @@ export const MEMBERS: Member[] = [
   },
 ];
 
+// Stand-in for the signed-in account until real auth exists — profile.ts's
+// DEFAULT_PROFILE is deliberately the same person (Aarav Nair). Permission
+// checks (src/data/permissions.ts) compare against this id.
+export const CURRENT_USER_ID = 'm1';
+
 const item = (
   n: number,
   title: string,
@@ -66,6 +73,12 @@ const item = (
   labels: string[],
   description = '',
   parentId: string | null = null,
+  // Who "opened" this task. Defaults to its first assignee (a plausible
+  // owner) or you, if it's unassigned — gives the permission demo (creator
+  // vs. assignee vs. uninvolved) a natural mix without hand-setting every item.
+  createdById: string = assigneeIds[0] ?? CURRENT_USER_ID,
+  recurrence: RecurrenceFreq | null = null,
+  reminders: Reminder[] = [],
 ): WorkItem => ({
   id: `YTC-${n}`,
   title,
@@ -74,17 +87,27 @@ const item = (
   status,
   priority,
   assigneeIds,
+  createdById,
   parentId,
   start: d(start),
   end: d(end),
   labels,
+  recurrence,
+  reminders,
 });
 
 export const MOCK_ITEMS: WorkItem[] = [
-  item(101, 'Design calendar month grid', 'done', 'medium', ['m2'], -9, -5, [
-    'design',
-  ]),
-  item(102, 'Set up project boards API', 'done', 'high', ['m4'], -8, -3, [
+  item(
+    101,
+    'Design calendar month grid',
+    'completed',
+    'medium',
+    ['m2'],
+    -9,
+    -5,
+    ['design'],
+  ),
+  item(102, 'Set up project boards API', 'completed', 'high', ['m4'], -8, -3, [
     'backend',
   ]),
   item(
@@ -117,34 +140,64 @@ export const MOCK_ITEMS: WorkItem[] = [
     5,
     ['backend'],
   ),
-  item(106, 'Roadmap timeline spec', 'in_review', 'medium', ['m1'], -3, 1, [
+  item(106, 'Roadmap timeline spec', 'in_progress', 'medium', ['m1'], -3, 1, [
     'docs',
   ]),
-  item(107, 'Onboarding illustrations', 'in_review', 'low', ['m2'], -2, 2, [
+  item(107, 'Onboarding illustrations', 'on_hold', 'low', ['m2'], -2, 2, [
     'design',
   ]),
-  item(108, 'Push notification service', 'todo', 'high', ['m4', 'm5'], 3, 10, [
-    'backend',
-  ]),
-  item(109, 'Dark mode QA pass', 'todo', 'low', ['m5'], 4, 7, ['qa']),
-  item(110, 'Invite teammates flow', 'todo', 'medium', ['m1', 'm2'], 5, 12, [
-    'frontend',
-    'growth',
-  ]),
-  item(111, 'Timezone edge cases', 'todo', 'high', ['m5'], 1, 8, ['qa', 'bug']),
-  item(112, 'Accessibility audit', 'todo', 'medium', ['m2', 'm5'], 7, 14, [
-    'design',
+  item(
+    108,
+    'Push notification service',
+    'not_started',
+    'high',
+    ['m4', 'm5'],
+    3,
+    10,
+    ['backend'],
+  ),
+  item(109, 'Dark mode QA pass', 'not_started', 'low', ['m5'], 4, 7, ['qa']),
+  item(
+    110,
+    'Invite teammates flow',
+    'not_started',
+    'medium',
+    ['m1', 'm2'],
+    5,
+    12,
+    ['frontend', 'growth'],
+  ),
+  item(111, 'Timezone edge cases', 'rejected', 'high', ['m5'], 1, 8, [
     'qa',
+    'bug',
   ]),
-  item(113, 'Offline sync research', 'todo', 'low', [], 9, 16, ['research']),
-  item(114, 'Public release checklist', 'todo', 'high', ['m1'], 14, 20, [
+  item(
+    112,
+    'Accessibility audit',
+    'not_started',
+    'medium',
+    ['m2', 'm5'],
+    7,
+    14,
+    ['design', 'qa'],
+  ),
+  item(113, 'Offline sync research', 'not_started', 'low', [], 9, 16, [
+    'research',
+  ]),
+  item(114, 'Public release checklist', 'not_started', 'high', ['m1'], 14, 20, [
     'release',
   ]),
-  item(115, 'iOS + Android smoke tests', 'todo', 'medium', ['m5'], 12, 18, [
-    'qa',
-    'mobile',
-  ]),
-  item(116, 'Sprint retro notes', 'done', 'low', ['m1'], -6, -6, ['docs']),
+  item(
+    115,
+    'iOS + Android smoke tests',
+    'not_started',
+    'medium',
+    ['m5'],
+    12,
+    18,
+    ['qa', 'mobile'],
+  ),
+  item(116, 'Sprint retro notes', 'completed', 'low', ['m1'], -6, -6, ['docs']),
 
   // Subtasks. YTC-103 → 122 is a full 7-level chain (the maximum depth).
   item(
@@ -162,7 +215,7 @@ export const MOCK_ITEMS: WorkItem[] = [
   item(
     118,
     'Distribute load by week overlap',
-    'in_review',
+    'in_progress',
     'medium',
     ['m3'],
     -2,
@@ -174,7 +227,7 @@ export const MOCK_ITEMS: WorkItem[] = [
   item(
     119,
     'Handle multi-week items',
-    'todo',
+    'not_started',
     'medium',
     ['m3'],
     0,
@@ -186,7 +239,7 @@ export const MOCK_ITEMS: WorkItem[] = [
   item(
     120,
     'Weekend exclusion rule',
-    'todo',
+    'not_started',
     'low',
     ['m3'],
     1,
@@ -198,7 +251,7 @@ export const MOCK_ITEMS: WorkItem[] = [
   item(
     121,
     'Public holiday calendar',
-    'todo',
+    'not_started',
     'low',
     ['m3'],
     1,
@@ -210,7 +263,7 @@ export const MOCK_ITEMS: WorkItem[] = [
   item(
     122,
     'Regional holiday overrides',
-    'todo',
+    'not_started',
     'low',
     ['m3'],
     2,
@@ -222,7 +275,7 @@ export const MOCK_ITEMS: WorkItem[] = [
   item(
     123,
     'Member workload card UI',
-    'done',
+    'completed',
     'medium',
     ['m3', 'm2'],
     -2,
@@ -246,7 +299,7 @@ export const MOCK_ITEMS: WorkItem[] = [
   item(
     125,
     'Exception dates',
-    'todo',
+    'on_hold',
     'medium',
     ['m4'],
     2,
@@ -258,7 +311,7 @@ export const MOCK_ITEMS: WorkItem[] = [
   item(
     126,
     'APNs integration',
-    'todo',
+    'not_started',
     'high',
     ['m4', 'm5'],
     3,
@@ -270,7 +323,7 @@ export const MOCK_ITEMS: WorkItem[] = [
   item(
     127,
     'FCM integration',
-    'todo',
+    'not_started',
     'high',
     ['m4', 'm5'],
     6,
@@ -279,6 +332,75 @@ export const MOCK_ITEMS: WorkItem[] = [
     '',
     'YTC-108',
   ),
+
+  // Recurring demo items — one per frequency, each with reminders, so the
+  // feature has something to show right away. YTC-131 is anchored on Feb 29
+  // specifically to demonstrate the leap-year rule: 2025/26/27 clamp to Feb
+  // 28, then it lands back on Feb 29 itself in 2028.
+  {
+    id: 'YTC-128',
+    title: 'Weekly team standup',
+    description: 'Recap progress, blockers, and plan for the week.',
+    status: 'not_started',
+    priority: 'low',
+    assigneeIds: ['m1', 'm3', 'm4', 'm5'],
+    createdById: 'm1',
+    parentId: null,
+    start: d(0),
+    end: d(0),
+    labels: ['meeting'],
+    recurrence: 'weekly',
+    reminders: [{ id: 'r1', offsetDays: 0, time: '09:00' }],
+  },
+  {
+    id: 'YTC-129',
+    title: 'Monthly billing reconciliation',
+    description: 'Reconcile invoices and usage for the month.',
+    status: 'not_started',
+    priority: 'medium',
+    assigneeIds: ['m4'],
+    createdById: 'm4',
+    parentId: null,
+    start: d(10),
+    end: d(10),
+    labels: ['finance'],
+    recurrence: 'monthly',
+    reminders: [
+      { id: 'r2', offsetDays: 1, time: '09:00' },
+      { id: 'r3', offsetDays: 0, time: '09:00' },
+    ],
+  },
+  {
+    id: 'YTC-130',
+    title: 'Quarterly investor report',
+    description: 'Prepare and send the quarterly metrics report.',
+    status: 'not_started',
+    priority: 'high',
+    assigneeIds: ['m1'],
+    createdById: 'm1',
+    parentId: null,
+    start: d(7),
+    end: d(8),
+    labels: ['docs'],
+    recurrence: 'quarterly',
+    reminders: [{ id: 'r4', offsetDays: 2, time: '09:00' }],
+  },
+  {
+    id: 'YTC-131',
+    title: 'Domain registration renewal',
+    description:
+      'Anchored on Feb 29 to demo leap-year handling: in non-leap years this recurs on Feb 28 instead of rolling into March.',
+    status: 'not_started',
+    priority: 'high',
+    assigneeIds: ['m1'],
+    createdById: 'm1',
+    parentId: null,
+    start: '2024-02-29',
+    end: '2024-02-29',
+    labels: ['ops'],
+    recurrence: 'yearly',
+    reminders: [{ id: 'r5', offsetDays: 7, time: '09:00' }],
+  },
 ];
 
 const ago = (hours: number) => subHours(new Date(), hours).toISOString();
@@ -294,6 +416,7 @@ const comment = (
   return {
     id: `c${n}`,
     itemId,
+    authorId,
     authorName: author?.name ?? 'Unknown',
     authorInitials: author?.initials ?? '?',
     authorColor: author?.color ?? '#9ca3af',

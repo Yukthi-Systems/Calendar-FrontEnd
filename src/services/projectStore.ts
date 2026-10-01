@@ -21,7 +21,13 @@ import { storage } from './runtime';
 
 const store = getDefaultStore();
 
-const PROJECT_KEY = 'ytc_project_v1';
+// Bump this suffix whenever a stored field's shape changes in a way old data
+// can't satisfy (e.g. Status's values changing, as just happened) — old data
+// under the previous key is simply never read again, falling back to the
+// fresh mock seed, instead of being force-fit into the new shape. The
+// `statusInfo()` fallback (src/data/constants.ts) is the last line of
+// defence for whatever slips through anyway.
+const PROJECT_KEY = 'ytc_project_v3';
 
 const persistedProjectAtom = atom(get => ({
   views: get(viewsAtom),
