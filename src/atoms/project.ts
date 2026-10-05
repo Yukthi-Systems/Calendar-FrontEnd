@@ -10,6 +10,8 @@ export const viewsAtom = atom<ProjectView[]>(DEFAULT_VIEWS);
 export const activeViewIdAtom = atom<string>(DEFAULT_VIEWS[0].id);
 export const itemsAtom = atom<WorkItem[]>(MOCK_ITEMS);
 export const selectedItemIdAtom = atom<string | null>(null);
+export const searchOpenAtom = atom(false);
+export const searchTitleAtom = atom('');
 
 // Every task and subtask has its own thread — comments are just filtered by
 // `itemId`, so no special-casing is needed between a task and a subtask.

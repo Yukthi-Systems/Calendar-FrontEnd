@@ -1,3 +1,11 @@
 <resources>
     <string name="app_name">YTCFronend</string>
+    <string name="widget_title">To do</string>
+    <string name="widget_empty">Nothing active today</string>
+    <string name="widget_capture">Capture</string>
+    <string name="widget_add">New task</string>
+    <string name="widget_refresh">Refresh</string>
+    <string name="widget_settings">Open app</string>
+    <string name="widget_complete">Mark completed</string>
+    <string name="widget_description">Today\'s tasks from YTC. Tick one to mark it completed.</string>
 </resources>

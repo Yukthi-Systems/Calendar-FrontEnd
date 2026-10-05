@@ -57,10 +57,22 @@ export interface WorkItem {
   reminders: Reminder[];
 }
 
+// Optional per-field toggles for the Table and Calendar layouts (the task title
+// is always shown). Undefined means every field for that layout is shown.
+export type ViewField =
+  | 'id'
+  | 'status'
+  | 'assignee'
+  | 'priority'
+  | 'start'
+  | 'end';
+
 export interface ProjectView {
   id: string;
   name: string;
   type: ViewType;
+  description?: string;
+  fields?: ViewField[];
 }
 
 // Author fields are captured at post time rather than referencing a member id —

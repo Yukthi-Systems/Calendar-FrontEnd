@@ -11,7 +11,8 @@ import {
 import { itemsAtom, selectedItemIdAtom } from '../../atoms/project';
 import { PRIORITY_COLOR, statusInfo } from '../../data/constants';
 import { childrenOf, flattenTree } from '../../data/tree';
-import type { WorkItem } from '../../data/types';
+import { showsField } from '../../data/viewFields';
+import type { ProjectView, WorkItem } from '../../data/types';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import {
   AssigneeAvatars,
@@ -65,8 +66,11 @@ const sortValue = (i: WorkItem, key: SortKey): string | number => {
 
 const INDENT = 20;
 
-export function TableView() {
+export function TableView({ view }: { view: ProjectView }) {
   const items = useAtomValue(itemsAtom);
+  const columns = COLUMNS.filter(
+    c => c.key === 'title' || showsField(view.fields, c.key),
+  );
   const select = useSetAtom(selectedItemIdAtom);
   const { text, heading } = useThemeColors();
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({
@@ -206,7 +210,7 @@ export function TableView() {
         >
           <View style={{ flexGrow: 1, minWidth: 940 }}>
             <View className="flex-row border-b border-border-main bg-bg-main">
-              {COLUMNS.map(c => (
+              {columns.map(c => (
                 <Pressable
                   key={c.key}
                   accessibilityRole="button"
@@ -235,7 +239,7 @@ export function TableView() {
                   onPress={() => select(i.id)}
                   className="min-h-[48px] flex-row items-center border-b border-border-main active:bg-accent/10"
                 >
-                  {COLUMNS.map(c => (
+                  {columns.map(c => (
                     <View
                       key={c.key}
                       style={cellStyle(c.width)}

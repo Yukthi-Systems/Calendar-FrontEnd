@@ -24,7 +24,8 @@ import { useThemeColors } from '../../hooks/useThemeColors';
 import { MEMBERS } from '../../data/mockData';
 import { RECURRENCE_LABEL } from '../../data/recurrence';
 import { subtaskProgress } from '../../data/tree';
-import type { RecurrenceFreq, WorkItem } from '../../data/types';
+import { showsField } from '../../data/viewFields';
+import type { RecurrenceFreq, ViewField, WorkItem } from '../../data/types';
 import { Tooltip } from './Tooltip';
 
 export const memberById = (id: string | null) =>
@@ -200,9 +201,11 @@ export function Pill({ text, color }: { text: string; color?: string }) {
 export function ItemRow({
   item,
   showAssignee = true,
+  fields,
 }: {
   item: WorkItem;
   showAssignee?: boolean;
+  fields?: ViewField[];
 }) {
   const select = useSetAtom(selectedItemIdAtom);
   return (
@@ -211,7 +214,7 @@ export function ItemRow({
       onPress={() => select(item.id)}
       className="flex-row items-center gap-2 rounded-xl border border-border-main bg-bg-card px-3 py-2 active:opacity-70"
     >
-      <StatusDot status={item.status} />
+      {showsField(fields, 'status') ? <StatusDot status={item.status} /> : null}
       <View className="flex-1">
         <View className="flex-row items-center gap-1">
           <Text
@@ -225,15 +228,19 @@ export function ItemRow({
           ) : null}
         </View>
         <View className="flex-row items-center gap-2">
-          <Text className="text-[11px] text-text-main">{item.id}</Text>
+          {showsField(fields, 'id') ? (
+            <Text className="text-[11px] text-text-main">{item.id}</Text>
+          ) : null}
           <SubtaskBadge id={item.id} />
         </View>
       </View>
-      <View
-        style={{ backgroundColor: PRIORITY_COLOR[item.priority] }}
-        className="h-2 w-2 rounded-full"
-      />
-      {showAssignee ? (
+      {showsField(fields, 'priority') ? (
+        <View
+          style={{ backgroundColor: PRIORITY_COLOR[item.priority] }}
+          className="h-2 w-2 rounded-full"
+        />
+      ) : null}
+      {showAssignee && showsField(fields, 'assignee') ? (
         <AssigneeAvatars ids={item.assigneeIds} size={22} />
       ) : null}
     </Pressable>

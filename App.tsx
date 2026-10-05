@@ -22,6 +22,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { bootAuth } from './src/services/authStore';
 import { bootProject } from './src/services/projectStore';
 import { bootNotifications } from './src/services/notificationStore';
+import { bootWidgetSync } from './src/services/widgetSync';
 import { useAuth } from './src/hooks/useAuth';
 import { useSsoAutoLogin } from './src/hooks/useSsoAutoLogin';
 import { useAccentColor } from './src/hooks/useAccentColor';
@@ -38,6 +39,7 @@ function App() {
     bootAuth(signal);
     bootProject();
     bootNotifications();
+    bootWidgetSync();
     return () => {
       signal.cancelled = true;
     };

@@ -3,13 +3,20 @@ import {
   Pressable,
   ScrollView,
   Text,
+  TextInput,
   useWindowDimensions,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { MoreHorizontal, Plus } from 'lucide-react-native';
+import { ChevronLeft, MoreHorizontal, Plus, Search } from 'lucide-react-native';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import { activeViewIdAtom, itemFormAtom, viewsAtom } from '../../atoms/project';
+import {
+  activeViewIdAtom,
+  itemFormAtom,
+  searchOpenAtom,
+  searchTitleAtom,
+  viewsAtom,
+} from '../../atoms/project';
 import { profileAtom, profileOpenAtom } from '../../atoms/profile';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { useViewUrlSync } from '../../hooks/useViewUrlSync';
@@ -21,17 +28,22 @@ import { ItemModal } from './ItemModal';
 import { KanbanView } from './KanbanView';
 import { ProfileEditModal } from './ProfileEditModal';
 import { ProfileModal } from './ProfileModal';
+import { MobileHome } from './MobileHome';
 import { RoadmapView } from './RoadmapView';
+import { SearchModal } from './SearchModal';
 import { InitialsAvatar } from './shared';
 import { TableView } from './TableView';
 import { TeamPlanningView } from './TeamPlanningView';
 import { UndoToast } from './UndoToast';
-import { ViewModal } from './ViewModal';
+import { ViewModal, type ViewDraft } from './ViewModal';
 
 // Width at which the view tabs become a left rail.
 const WIDE_BREAKPOINT = 1024;
 
-const VIEW_COMPONENTS: Record<ViewType, () => React.JSX.Element> = {
+const VIEW_COMPONENTS: Record<
+  ViewType,
+  (props: { view: ProjectView }) => React.JSX.Element
+> = {
   table: TableView,
   team: TeamPlanningView,
   kanban: KanbanView,
@@ -43,6 +55,9 @@ const VIEW_COMPONENTS: Record<ViewType, () => React.JSX.Element> = {
 // and edit/delete on the active tab.
 export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   const setItemForm = useSetAtom(itemFormAtom);
+  const setSearchOpen = useSetAtom(searchOpenAtom);
+  const [searchTitle, setSearchTitle] = useAtom(searchTitleAtom);
+  const [mobileHome, setMobileHome] = useState(true);
   const setProfileOpen = useSetAtom(profileOpenAtom);
   const profile = useAtomValue(profileAtom);
   const { width } = useWindowDimensions();
@@ -64,14 +79,16 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   const active = views.find(v => v.id === activeId) ?? views[0];
   const ActiveView = active ? VIEW_COMPONENTS[active.type] : null;
 
-  const save = (name: string, type: ViewType) => {
+  const save = ({ name, type, description, fields }: ViewDraft) => {
     if (modalView) {
       setViews(prev =>
-        prev.map(v => (v.id === modalView.id ? { ...v, name, type } : v)),
+        prev.map(v =>
+          v.id === modalView.id ? { ...v, name, type, description, fields } : v,
+        ),
       );
     } else {
       const id = `v-${Date.now()}`;
-      setViews(prev => [...prev, { id, name, type }]);
+      setViews(prev => [...prev, { id, name, type, description, fields }]);
       setActiveId(id);
     }
     setModalView(undefined);
@@ -108,11 +125,48 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
 
   const wide = width >= WIDE_BREAKPOINT;
 
+  const searchBar = (
+    <View className="flex-row items-center gap-2 px-4 pt-3">
+      <View className="flex-1 flex-row items-center gap-2 rounded-xl border border-border-main bg-bg-card px-3">
+        <Search size={16} color={text} />
+        <TextInput
+          accessibilityLabel="Search tasks by title"
+          value={searchTitle}
+          onChangeText={setSearchTitle}
+          onSubmitEditing={() => setSearchOpen(true)}
+          returnKeyType="search"
+          placeholder="Search tasks by title"
+          placeholderTextColor="#9ca3af"
+          className="flex-1 py-2.5 text-text-heading"
+        />
+      </View>
+      <Pressable
+        accessibilityRole="button"
+        onPress={() => setSearchOpen(true)}
+        className="rounded-xl border border-border-main px-3 py-2.5 active:opacity-70"
+      >
+        <Text className="font-medium text-text-heading">Advanced</Text>
+      </Pressable>
+    </View>
+  );
+
   const header = (
     <View className="flex-row items-center justify-between px-4 pb-1 pt-3">
-      <View>
-        <Text className="text-xl font-bold text-text-heading">YTC</Text>
-        <Text className="text-xs text-text-main">Team project</Text>
+      <View className="flex-row items-center gap-2">
+        {!wide && !mobileHome ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Back to home"
+            onPress={() => setMobileHome(true)}
+            className="-ml-1 rounded-md p-1 active:opacity-70"
+          >
+            <ChevronLeft size={22} color={heading} />
+          </Pressable>
+        ) : null}
+        <View>
+          <Text className="text-xl font-bold text-text-heading">YTC</Text>
+          <Text className="text-xs text-text-main">Team project</Text>
+        </View>
       </View>
       {wide ? (
         <Pressable
@@ -221,8 +275,14 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
 
   const content = (
     <View className="flex-1">
-      {ActiveView ? (
-        <ActiveView />
+      {searchBar}
+      {active?.description ? (
+        <Text className="px-4 pt-2 text-xs text-text-main">
+          {active.description}
+        </Text>
+      ) : null}
+      {ActiveView && active ? (
+        <ActiveView view={active} />
       ) : (
         <View className="flex-1 items-center justify-center gap-3 px-6">
           <Text className="text-text-main">No views yet.</Text>
@@ -272,6 +332,17 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
           </View>
           <View className="flex-1">{content}</View>
         </View>
+      ) : mobileHome ? (
+        <MobileHome
+          views={views}
+          activeId={active?.id ?? ''}
+          onOpenView={id => {
+            setActiveId(id);
+            setMobileHome(false);
+          }}
+          onNewView={() => setModalView(null)}
+          onOpenProfile={() => setProfileOpen(true)}
+        />
       ) : (
         <>
           {header}
@@ -305,7 +376,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
       {undo ? (
         <UndoToast message={`Deleted "${undo.view.name}"`} onUndo={restore} />
       ) : null}
-      {ActiveView ? (
+      {ActiveView && (wide || !mobileHome) ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="New item"
@@ -317,6 +388,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
       ) : null}
       <ItemModal />
       <ItemFormModal />
+      <SearchModal />
       <ViewModal
         visible={modalView !== undefined}
         view={modalView ?? null}

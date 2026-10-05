@@ -35,9 +35,10 @@ import {
   startOfYear,
 } from 'date-fns';
 import { itemsAtom, selectedItemIdAtom } from '../../atoms/project';
-import { statusInfo } from '../../data/constants';
+import { PRIORITY_COLOR, statusInfo } from '../../data/constants';
 import { occurrencesInRange } from '../../data/recurrence';
-import type { WorkItem } from '../../data/types';
+import { showsField } from '../../data/viewFields';
+import type { ProjectView, ViewField, WorkItem } from '../../data/types';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import {
   AssigneeAvatars,
@@ -98,8 +99,9 @@ const chunkWeeks = (days: Date[]) => {
   return weeks;
 };
 
-export function CalendarView() {
+export function CalendarView({ view }: { view: ProjectView }) {
   const items = useAtomValue(itemsAtom);
+  const fields = view.fields;
   const select = useSetAtom(selectedItemIdAtom);
   const { text, heading, accent, border } = useThemeColors();
   const { width } = useWindowDimensions();
@@ -187,6 +189,7 @@ export function CalendarView() {
       event={event}
       touchableOpacityProps={touchableOpacityProps}
       compact={mode === 'month'}
+      fields={fields}
     />
   );
 
@@ -271,26 +274,27 @@ export function CalendarView() {
         // height row and visually blocks the hour grid underneath. A list has
         // no such ceiling.
         <ScrollView contentContainerClassName="pb-8">
-          <AgendaPanel day={cursor} items={items} />
+          <AgendaPanel day={cursor} items={items} fields={fields} />
         </ScrollView>
       ) : mode === 'week' ? (
         // Same reasoning as Day, one section per day of the week.
         <WeekAgenda
           weekStart={startOfWeek(cursor, { weekStartsOn: 1 })}
           items={items}
+          fields={fields}
         />
       ) : split ? (
         <View className="flex-1 flex-row items-stretch gap-4">
           {calendarBox}
           <ScrollView className="w-80 grow-0" contentContainerClassName="pb-8">
-            <AgendaPanel day={selected} items={items} />
+            <AgendaPanel day={selected} items={items} fields={fields} />
           </ScrollView>
         </View>
       ) : (
         <View className="flex-1">
           <View style={{ height: MONTH_MOBILE_HEIGHT }}>{calendarBox}</View>
           <ScrollView className="flex-1" contentContainerClassName="pt-4 pb-8">
-            <AgendaPanel day={selected} items={items} />
+            <AgendaPanel day={selected} items={items} fields={fields} />
           </ScrollView>
         </View>
       )}
@@ -301,9 +305,11 @@ export function CalendarView() {
 function WeekAgenda({
   weekStart,
   items,
+  fields,
 }: {
   weekStart: Date;
   items: WorkItem[];
+  fields?: ViewField[];
 }) {
   const days = eachDayOfInterval({
     start: weekStart,
@@ -325,7 +331,7 @@ function WeekAgenda({
             </Text>
             <View className="gap-2">
               {agenda.map(i => (
-                <ItemRow key={i.id} item={i} />
+                <ItemRow key={i.id} item={i} fields={fields} />
               ))}
               {agenda.length === 0 ? (
                 <Text className="text-xs text-text-main">
@@ -340,7 +346,15 @@ function WeekAgenda({
   );
 }
 
-function AgendaPanel({ day, items }: { day: Date; items: WorkItem[] }) {
+function AgendaPanel({
+  day,
+  items,
+  fields,
+}: {
+  day: Date;
+  items: WorkItem[];
+  fields?: ViewField[];
+}) {
   const agenda = itemsOn(items, day);
   return (
     <View>
@@ -352,7 +366,7 @@ function AgendaPanel({ day, items }: { day: Date; items: WorkItem[] }) {
       </Text>
       <View className="gap-2">
         {agenda.map(i => (
-          <ItemRow key={i.id} item={i} />
+          <ItemRow key={i.id} item={i} fields={fields} />
         ))}
         {agenda.length === 0 ? (
           <Text className="text-sm text-text-main">Nothing scheduled.</Text>
@@ -371,14 +385,18 @@ function EventCell({
   event,
   touchableOpacityProps,
   compact,
+  fields,
 }: {
   event: CalEvent;
   touchableOpacityProps: CalendarTouchableOpacityProps;
   compact: boolean;
+  fields?: ViewField[];
 }) {
   const { key, style, onPress, disabled } = touchableOpacityProps;
   const { workItem } = event;
-  const color = statusInfo(workItem.status).color;
+  const color = showsField(fields, 'status')
+    ? statusInfo(workItem.status).color
+    : '#9ca3af';
   return (
     <Pressable
       key={key}
@@ -412,7 +430,18 @@ function EventCell({
       </View>
       {!compact ? (
         <View className="mt-0.5 flex-row items-center gap-1">
-          <AssigneeAvatars ids={workItem.assigneeIds} size={14} max={2} />
+          {showsField(fields, 'id') ? (
+            <Text className="text-[10px] text-text-main">{workItem.id}</Text>
+          ) : null}
+          {showsField(fields, 'priority') ? (
+            <View
+              style={{ backgroundColor: PRIORITY_COLOR[workItem.priority] }}
+              className="h-1.5 w-1.5 rounded-full"
+            />
+          ) : null}
+          {showsField(fields, 'assignee') ? (
+            <AssigneeAvatars ids={workItem.assigneeIds} size={14} max={2} />
+          ) : null}
           <SubtaskBadge id={workItem.id} />
         </View>
       ) : null}
