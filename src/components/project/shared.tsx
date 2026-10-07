@@ -303,7 +303,7 @@ export function Field({
       </Text>
       {children}
       {error ? (
-        <Text className="mt-1 text-xs text-red-500">{error}</Text>
+        <Text className="mt-1 text-xs text-destructive">{error}</Text>
       ) : null}
     </View>
   );
@@ -473,7 +473,7 @@ export function MultiSelectDropdown({
               onPress={close}
               className="mt-3 items-center rounded-2xl bg-accent py-3 active:opacity-80"
             >
-              <Text className="font-semibold text-white">
+              <Text className="font-semibold text-accent-foreground">
                 Done{selected.length ? ` (${selected.length})` : ''}
               </Text>
             </Pressable>

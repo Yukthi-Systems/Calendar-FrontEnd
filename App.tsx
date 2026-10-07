@@ -10,13 +10,7 @@
 
 import './global.css';
 import { useEffect } from 'react';
-import {
-  ActivityIndicator,
-  StatusBar,
-  Text,
-  useColorScheme,
-  View,
-} from 'react-native';
+import { ActivityIndicator, StatusBar, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { bootAuth } from './src/services/authStore';
@@ -26,14 +20,14 @@ import { bootWidgetSync } from './src/services/widgetSync';
 import { useAuth } from './src/hooks/useAuth';
 import { useSsoAutoLogin } from './src/hooks/useSsoAutoLogin';
 import { useAccentColor } from './src/hooks/useAccentColor';
+import { useResolvedTheme } from './src/hooks/useResolvedTheme';
 import { LoginScreen } from './src/components/LoginScreen';
 import { SsoLoginModal } from './src/components/SsoLoginModal';
+import { ThemeRoot } from './src/components/ThemeRoot';
 import { ProjectScreen } from './src/components/project/ProjectScreen';
 import { SSO_ENABLED } from './src/config/features';
 
 function App() {
-  const isDarkMode = useColorScheme() === 'dark';
-
   useEffect(() => {
     const signal = { cancelled: false };
     bootAuth(signal);
@@ -50,12 +44,21 @@ function App() {
     // drag-and-drop) — must wrap the whole app, on every platform.
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
-        <AppContent />
-        {SSO_ENABLED ? <SsoLoginModal /> : null}
+        <ThemeRoot>
+          <StatusBarForTheme />
+          <AppContent />
+          {SSO_ENABLED ? <SsoLoginModal /> : null}
+        </ThemeRoot>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
+}
+
+// Follows the resolved theme (the user's light/dark/system choice), not the
+// raw OS scheme directly — those only differ when the user overrides it.
+function StatusBarForTheme() {
+  const { dark } = useResolvedTheme();
+  return <StatusBar barStyle={dark ? 'light-content' : 'dark-content'} />;
 }
 
 function AppContent() {

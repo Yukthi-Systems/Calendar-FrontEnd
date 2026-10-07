@@ -471,7 +471,7 @@ export function ItemFormModal() {
                   valid ? '' : 'opacity-40'
                 }`}
               >
-                <Text className="font-semibold text-white">
+                <Text className="font-semibold text-accent-foreground">
                   {editing ? 'Save' : 'Create'}
                 </Text>
               </Pressable>

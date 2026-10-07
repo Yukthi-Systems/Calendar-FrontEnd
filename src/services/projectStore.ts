@@ -7,6 +7,7 @@ import {
   viewsAtom,
 } from '../atoms/project';
 import { profileAtom } from '../atoms/profile';
+import { themeAtom } from '../atoms/theme';
 import { storage } from './runtime';
 
 // Local persistence for the project workspace (views, items, active tab, profile),
@@ -35,6 +36,7 @@ const persistedProjectAtom = atom(get => ({
   items: get(itemsAtom),
   comments: get(commentsAtom),
   profile: get(profileAtom),
+  theme: get(themeAtom),
 }));
 
 let persisting = false;
@@ -83,6 +85,10 @@ function applySaved(saved: unknown) {
   if (s.profile && typeof s.profile === 'object') {
     const savedProfile = s.profile;
     store.set(profileAtom, prev => ({ ...prev, ...savedProfile }));
+  }
+  if (s.theme && typeof s.theme === 'object') {
+    const savedTheme = s.theme;
+    store.set(themeAtom, prev => ({ ...prev, ...savedTheme }));
   }
 }
 

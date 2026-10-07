@@ -121,7 +121,7 @@ export function TeamPlanningView() {
                     <View className="items-end">
                       <Text
                         className={`text-sm font-semibold ${
-                          over ? 'text-red-500' : 'text-text-heading'
+                          over ? 'text-destructive' : 'text-text-heading'
                         }`}
                       >
                         {member ? `${load} / ${member.capacity}` : load} items
@@ -129,7 +129,7 @@ export function TeamPlanningView() {
                       {member ? (
                         <Text
                           className={`text-[11px] ${
-                            over ? 'text-red-500' : 'text-text-main'
+                            over ? 'text-destructive' : 'text-text-main'
                           }`}
                         >
                           {over

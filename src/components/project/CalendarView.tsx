@@ -472,7 +472,7 @@ function ModeSwitch({
           >
             <Text
               className={`text-xs font-medium ${
-                active ? 'text-white' : 'text-text-main'
+                active ? 'text-accent-foreground' : 'text-text-main'
               }`}
             >
               {m.label}
@@ -568,7 +568,7 @@ function MiniMonth({
                     <Text
                       className={`text-[10px] ${
                         isToday(day)
-                          ? 'font-bold text-white'
+                          ? 'font-bold text-accent-foreground'
                           : inMonth
                           ? 'text-text-heading'
                           : 'text-text-main opacity-30'

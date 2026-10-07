@@ -196,7 +196,7 @@ export function CommentsSection({ itemId }: { itemId: string }) {
             text.trim() ? '' : 'opacity-40'
           }`}
         >
-          <Text className="font-semibold text-white">Post</Text>
+          <Text className="font-semibold text-accent-foreground">Post</Text>
         </Pressable>
       </View>
     </View>

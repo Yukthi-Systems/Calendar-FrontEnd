@@ -153,7 +153,7 @@ export function ProfileEditModal() {
                   valid ? '' : 'opacity-40'
                 }`}
               >
-                <Text className="font-semibold text-white">Save</Text>
+                <Text className="font-semibold text-accent-foreground">Save</Text>
               </Pressable>
             </View>
           </Pressable>

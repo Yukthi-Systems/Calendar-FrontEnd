@@ -92,7 +92,7 @@ export function MobileHome({
           </Text>
           <Text
             className={`text-3xl font-bold ${
-              summary.overdue > 0 ? 'text-red-500' : 'text-text-heading'
+              summary.overdue > 0 ? 'text-destructive' : 'text-text-heading'
             }`}
           >
             {summary.overdue}

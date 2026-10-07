@@ -285,9 +285,9 @@ export function ItemModal() {
                       );
                       close();
                     }}
-                    className="items-center rounded-2xl border border-red-500/40 px-4 py-3 active:opacity-70"
+                    className="items-center rounded-2xl border border-destructive/40 px-4 py-3 active:opacity-70"
                   >
-                    <Text className="font-semibold text-red-500">
+                    <Text className="font-semibold text-destructive">
                       {confirmDelete
                         ? progress && progress.total > 0
                           ? `Delete with ${progress.total} subtasks?`
@@ -313,7 +313,7 @@ export function ItemModal() {
                   onPress={close}
                   className="flex-1 items-center rounded-2xl bg-accent py-3 active:opacity-80"
                 >
-                  <Text className="font-semibold text-white">Done</Text>
+                  <Text className="font-semibold text-accent-foreground">Done</Text>
                 </Pressable>
               </View>
             </ScrollView>

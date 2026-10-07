@@ -177,9 +177,9 @@ export function ViewModal({
               <Pressable
                 accessibilityRole="button"
                 onPress={onDelete}
-                className="items-center rounded-2xl border border-red-500/40 px-4 py-3 active:opacity-70"
+                className="items-center rounded-2xl border border-destructive/40 px-4 py-3 active:opacity-70"
               >
-                <Text className="font-semibold text-red-500">Delete</Text>
+                <Text className="font-semibold text-destructive">Delete</Text>
               </Pressable>
             ) : null}
             <Pressable
@@ -197,7 +197,7 @@ export function ViewModal({
                 trimmed ? '' : 'opacity-40'
               }`}
             >
-              <Text className="font-semibold text-white">
+              <Text className="font-semibold text-accent-foreground">
                 {view ? 'Save' : 'Create'}
               </Text>
             </Pressable>

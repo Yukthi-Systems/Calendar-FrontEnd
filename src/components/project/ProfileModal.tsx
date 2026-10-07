@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { useAtom, useSetAtom } from 'jotai';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
-import { Building2, Mail, Phone, Pencil } from 'lucide-react-native';
+import { Building2, Mail, Palette, Phone, Pencil } from 'lucide-react-native';
 import {
   profileAtom,
   profileEditOpenAtom,
@@ -8,6 +9,7 @@ import {
 } from '../../atoms/profile';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { InitialsAvatar } from './shared';
+import { ThemeModal } from './ThemeModal';
 
 // Read-only account sheet, opened from the header avatar. "Edit profile" hands
 // off to ProfileEditModal; "Sign out" only appears once SSO is wired in (see
@@ -17,6 +19,7 @@ export function ProfileModal({ onSignOut }: { onSignOut?: () => void }) {
   const setEditOpen = useSetAtom(profileEditOpenAtom);
   const [profile] = useAtom(profileAtom);
   const { text } = useThemeColors();
+  const [themeOpen, setThemeOpen] = useState(false);
   const close = () => setOpen(false);
 
   return (
@@ -79,6 +82,17 @@ export function ProfileModal({ onSignOut }: { onSignOut?: () => void }) {
               </Text>
             </Pressable>
 
+            <Pressable
+              accessibilityRole="button"
+              onPress={() => setThemeOpen(true)}
+              className="mb-3 flex-row items-center justify-center gap-2 rounded-2xl border border-border-main py-3 active:opacity-70"
+            >
+              <Palette size={16} color={text} />
+              <Text className="font-medium text-text-heading">
+                Appearance
+              </Text>
+            </Pressable>
+
             {onSignOut ? (
               <Pressable
                 accessibilityRole="button"
@@ -86,9 +100,9 @@ export function ProfileModal({ onSignOut }: { onSignOut?: () => void }) {
                   close();
                   onSignOut();
                 }}
-                className="mb-3 items-center rounded-2xl border border-red-500/40 py-3 active:opacity-70"
+                className="mb-3 items-center rounded-2xl border border-destructive/40 py-3 active:opacity-70"
               >
-                <Text className="font-semibold text-red-500">Sign out</Text>
+                <Text className="font-semibold text-destructive">Sign out</Text>
               </Pressable>
             ) : null}
 
@@ -97,11 +111,14 @@ export function ProfileModal({ onSignOut }: { onSignOut?: () => void }) {
               onPress={close}
               className="items-center rounded-2xl bg-accent py-3 active:opacity-80"
             >
-              <Text className="font-semibold text-white">Done</Text>
+              <Text className="font-semibold text-accent-foreground">
+                Done
+              </Text>
             </Pressable>
           </ScrollView>
         </Pressable>
       </Pressable>
+      <ThemeModal visible={themeOpen} onClose={() => setThemeOpen(false)} />
     </Modal>
   );
 }

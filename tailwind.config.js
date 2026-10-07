@@ -10,11 +10,14 @@ module.exports = {
       // values are RGB channels in global.css so opacity modifiers (bg-accent/10) work.
       colors: {
         accent: 'rgb(var(--accent) / <alpha-value>)',
+        'accent-foreground': 'rgb(var(--accent-fg) / <alpha-value>)',
         'border-main': 'rgb(var(--border) / <alpha-value>)',
         'bg-main': 'rgb(var(--bg) / <alpha-value>)',
         'bg-card': 'rgb(var(--card) / <alpha-value>)',
         'text-main': 'rgb(var(--text) / <alpha-value>)',
         'text-heading': 'rgb(var(--text-h) / <alpha-value>)',
+        destructive: 'rgb(var(--destructive) / <alpha-value>)',
+        'destructive-foreground': 'rgb(var(--destructive-fg) / <alpha-value>)',
       },
     },
   },

@@ -291,7 +291,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
             onPress={() => setModalView(null)}
             className="rounded-2xl bg-accent px-5 py-3 active:opacity-80"
           >
-            <Text className="font-semibold text-white">Create a view</Text>
+            <Text className="font-semibold text-accent-foreground">Create a view</Text>
           </Pressable>
         </View>
       )}

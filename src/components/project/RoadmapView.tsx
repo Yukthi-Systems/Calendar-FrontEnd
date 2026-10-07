@@ -327,7 +327,7 @@ function ZoomSwitch({
           >
             <Text
               className={`text-xs font-medium ${
-                active ? 'text-white' : 'text-text-main'
+                active ? 'text-accent-foreground' : 'text-text-main'
               }`}
             >
               {z.label}

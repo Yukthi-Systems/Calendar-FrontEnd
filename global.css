@@ -2,7 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Palette from YFS-FrontEnd's index.css, as RGB channels for Tailwind's <alpha-value>. */
+/* Static fallback only — matches the "default" entry in src/data/palettes.ts,
+   for the first paint on web before React mounts. Once mounted, ThemeRoot.tsx
+   overrides every one of these variables at runtime via NativeWind's vars(),
+   per the user's chosen palette and light/dark/system setting (see
+   src/hooks/useResolvedTheme.ts) — this media query never runs on native and
+   stops mattering on web the instant the app renders. */
 :root {
   --text: 107 99 117; /* #6b6375 */
   --text-h: 8 6 13; /* #08060d */
@@ -10,6 +15,9 @@
   --card: 255 255 255;
   --border: 229 228 231; /* #e5e4e7 */
   --accent: 170 59 255; /* #aa3bff */
+  --accent-fg: 255 255 255; /* #ffffff */
+  --destructive: 239 68 68; /* #ef4444 */
+  --destructive-fg: 255 255 255; /* #ffffff */
 }
 
 @media (prefers-color-scheme: dark) {
@@ -20,5 +28,8 @@
     --card: 31 32 40; /* #1f2028 */
     --border: 46 48 58; /* #2e303a */
     --accent: 192 132 252; /* #c084fc */
+    --accent-fg: 22 23 29; /* #16171d */
+    --destructive: 239 68 68; /* #ef4444 */
+    --destructive-fg: 255 255 255; /* #ffffff */
   }
 }

@@ -31,11 +31,11 @@ export function LoginScreen({
         </Text>
 
         {errorMsg ? (
-          <View className="mb-6 self-stretch rounded-2xl border border-red-500/20 bg-red-500/5 p-4">
+          <View className="mb-6 self-stretch rounded-2xl border border-destructive/20 bg-destructive/5 p-4">
             <Text className="mb-0.5 text-xs font-semibold text-red-600">
               Authentication Notice
             </Text>
-            <Text className="text-xs text-red-500">{errorMsg}</Text>
+            <Text className="text-xs text-destructive">{errorMsg}</Text>
           </View>
         ) : ssoPending ? (
           <View className="mb-6 self-stretch rounded-2xl border border-accent/50 bg-accent/10 p-4">
@@ -62,7 +62,7 @@ export function LoginScreen({
         >
           <Text
             className={`font-semibold ${
-              ssoPending ? 'text-text-main' : 'text-white'
+              ssoPending ? 'text-text-main' : 'text-accent-foreground'
             }`}
           >
             {ssoPending
