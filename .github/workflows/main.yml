@@ -1,0 +1,114 @@
+name: CI/CD
+
+on:
+  push:
+    branches:
+      - 'main'
+    tags:
+      - '*'
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Build web
+        run: npm run build:web
+
+  # Runs on every push and pull request — just verifies the Dockerfile still builds.
+  # Never touches Docker Hub credentials, so it's safe to run on PRs from any branch.
+  docker-build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          push: false
+
+  # Only runs on an actual push (merge to main, or a tag) — never on pull_request —
+  # so Docker Hub credentials are never exposed to a PR build.
+  docker-publish:
+    if: github.event_name == 'push'
+    needs: [checks, docker-build]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Determine Docker tag
+        id: tag
+        run: echo "TAG=$(echo $GITHUB_REF | cut -d'/' -f3)" >> $GITHUB_OUTPUT
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          tags: |
+            rjyspl/tasks-webui:latest
+            rjyspl/tasks-webui:${{ steps.tag.outputs.TAG }}
+
+  # CD: pulls the freshly pushed :latest image on the server and restarts it.
+  # /srv/tasks-webui holds docker-compose.yml + .env (copy from tasks-webui/ in this repo).
+  deploy:
+    if: github.event_name == 'push'
+    needs: docker-publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Deploy to Server
+        env:
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+        run: |
+          ssh -o StrictHostKeyChecking=no root@$SERVER_IP << 'EOF'
+            set -e
+            cd /srv/tasks-webui
+            # The image has no URLs baked in; without runtime config the app can't reach the API.
+            test -f .env || { echo "Missing /srv/tasks-webui/.env"; exit 1; }
+            grep -q "env_file" docker-compose.y*ml || { echo "docker-compose on the server has no env_file: .env"; exit 1; }
+            docker compose pull
+            docker compose up -d
+            docker ps
+          EOF

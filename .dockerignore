@@ -1,0 +1,13 @@
+node_modules
+web-build
+dist
+android
+ios
+testdata
+__tests__
+tasks-webui
+.git
+.github
+.env
+.env.*
+!.env.example

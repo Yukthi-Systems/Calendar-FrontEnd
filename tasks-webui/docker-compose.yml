@@ -1,0 +1,12 @@
+services:
+  tasks-webui:
+    image: rjyspl/tasks-webui:latest
+    container_name: tasks-webui
+    
+    env_file:
+      - .env
+    environment:
+      - TZ=Asia/Kolkata
+    ports:
+      - '127.0.0.1:3001:3000'
+    restart: always

@@ -10,10 +10,20 @@ import type { EnvKey } from './keys';
 // Dotenv only substitutes literal `process.env.KEY` expressions — a dynamic
 // `process.env[key]` lookup is left alone and reads as empty in the browser — so every
 // key must be spelled out here. Add new keys here too (the Record type enforces it).
-const values: Record<EnvKey, string | undefined> = {
+const buildValues: Record<EnvKey, string | undefined> = {
   API_URL: process.env.API_URL,
   SSO_URL: process.env.SSO_URL,
   SSO_APP_ID: process.env.SSO_APP_ID,
 };
 
-export const getEnv = (key: EnvKey): string => values[key] ?? '';
+// Docker deploys: env.sh writes /env-config.js (loaded by web/index.html) from the
+// container's env at startup, so one image works for every environment. A non-empty
+// runtime value wins over the build-time one.
+declare global {
+  interface Window {
+    _env_?: Partial<Record<EnvKey, string>>;
+  }
+}
+
+export const getEnv = (key: EnvKey): string =>
+  window._env_?.[key] || buildValues[key] || '';
