@@ -21,13 +21,18 @@ import { currentUserIdAtom, membersAtom } from '../../atoms/members';
 import { tokenAtom } from '../../atoms/auth';
 import { directoryAtom } from '../../atoms/userInfo';
 import { searchUsersByEmail } from '../../services/users';
+import { yearlyRecurrenceNeedsLeapWarning } from '../../data/recurrence';
 import {
-  RECURRENCE_LABEL,
-  yearlyRecurrenceNeedsLeapWarning,
-} from '../../data/recurrence';
+  RRULE_PRESETS,
+  RRuleError,
+  describeRRule,
+  expandRRule,
+  migrateRecurrence,
+  normalizeRRule,
+  parseRRule,
+} from '../../data/rrule';
 import type {
   Priority,
-  RecurrenceFreq,
   Reminder,
   Status,
   WorkItem,
@@ -37,12 +42,6 @@ import { Field, FormInput as Input, MultiSelectDropdown } from './shared';
 
 const DATE_FMT = 'yyyy-MM-dd';
 const PRIORITIES: Priority[] = ['low', 'medium', 'high'];
-const RECURRENCES: RecurrenceFreq[] = [
-  'weekly',
-  'monthly',
-  'quarterly',
-  'yearly',
-];
 const REMINDER_OFFSETS = [
   { days: 0, label: 'On due date' },
   { days: 1, label: '1 day before' },
@@ -108,7 +107,10 @@ export function ItemFormModal() {
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
   const [labels, setLabels] = useState('');
-  const [recurrence, setRecurrence] = useState<RecurrenceFreq | null>(null);
+  // Stored as an RRULE string. Presets set it directly; "Custom" edits the raw text.
+  const [recurrence, setRecurrence] = useState<string | null>(null);
+  const [customRule, setCustomRule] = useState(false);
+  const [customText, setCustomText] = useState('');
   const [reminders, setReminders] = useState<Reminder[]>([]);
   // Must be explicitly ticked before saving a yearly recurrence anchored on
   // Feb 29 — see the warning banner below.
@@ -143,7 +145,12 @@ export function ItemFormModal() {
     setStart(editing?.start ?? parent?.start ?? format(today, DATE_FMT));
     setEnd(editing?.end ?? parent?.end ?? format(addDays(today, 2), DATE_FMT));
     setLabels(editing?.labels.join(', ') ?? '');
-    setRecurrence(editing?.recurrence ?? null);
+    const savedRule = migrateRecurrence(editing?.recurrence);
+    setRecurrence(savedRule);
+    setCustomRule(
+      !!savedRule && !RRULE_PRESETS.some(p => p.rule === safeNormalize(savedRule)),
+    );
+    setCustomText(savedRule ?? '');
     setReminders(editing?.reminders ?? []);
     setLeapAck(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -152,8 +159,32 @@ export function ItemFormModal() {
   // A yearly recurrence anchored on Feb 29 needs an explicit confirmation
   // that non-leap years will land on Feb 28 instead — see the brief: "give a
   // warning... confirm that we do... before" (i.e. before saving, not after).
+  const parsedRule = (() => {
+    if (!recurrence) {
+      return null;
+    }
+    try {
+      return parseRRule(recurrence);
+    } catch {
+      return null;
+    }
+  })();
+  // Free-typed rule text is validated as you type; the saved value only follows once valid.
+  const customError = (() => {
+    if (!customRule || !customText.trim()) {
+      return customRule ? 'Enter an RRULE, e.g. FREQ=WEEKLY;BYDAY=MO,FR' : null;
+    }
+    try {
+      parseRRule(customText);
+      return null;
+    } catch (err) {
+      return err instanceof RRuleError ? err.message : 'Invalid rule';
+    }
+  })();
   const needsLeapWarning =
-    recurrence === 'yearly' &&
+    parsedRule?.freq === 'YEARLY' &&
+    !parsedRule.byMonthDay &&
+    !parsedRule.byDay &&
     validDate(start) &&
     yearlyRecurrenceNeedsLeapWarning(parseDate(start));
 
@@ -186,6 +217,7 @@ export function ItemFormModal() {
       ? 'End is before start'
       : null,
     reminders: reminders.some(r => !validTime(r.time)) ? 'Use HH:mm' : null,
+    recurrence: customError,
   };
   const valid =
     !Object.values(errors).some(Boolean) && (!needsLeapWarning || leapAck);
@@ -362,35 +394,64 @@ export function ItemFormModal() {
                 />
               </Field>
 
-              <Field label="Repeats">
+              <Field label="Repeats" error={errors.recurrence}>
                 <View className="flex-row flex-wrap gap-2">
                   <Chip
                     label="Doesn't repeat"
-                    active={recurrence === null}
-                    onPress={() => setRecurrence(null)}
+                    active={recurrence === null && !customRule}
+                    onPress={() => {
+                      setRecurrence(null);
+                      setCustomRule(false);
+                    }}
                   />
-                  {RECURRENCES.map(r => (
+                  {RRULE_PRESETS.map(p => (
                     <Chip
-                      key={r}
-                      label={RECURRENCE_LABEL[r]}
-                      active={recurrence === r}
-                      onPress={() => setRecurrence(r)}
+                      key={p.rule}
+                      label={p.label}
+                      active={!customRule && recurrence === p.rule}
+                      onPress={() => {
+                        setRecurrence(p.rule);
+                        setCustomRule(false);
+                        setCustomText(p.rule);
+                      }}
                     />
                   ))}
+                  <Chip
+                    label="Custom"
+                    active={customRule}
+                    onPress={() => {
+                      setCustomRule(true);
+                      setCustomText(recurrence ?? 'FREQ=WEEKLY;BYDAY=MO');
+                      setRecurrence(
+                        safeNormalize(recurrence ?? 'FREQ=WEEKLY;BYDAY=MO'),
+                      );
+                    }}
+                  />
                 </View>
-                {recurrence ? (
+                {customRule ? (
+                  <View className="mt-2">
+                    <Input
+                      value={customText}
+                      onChangeText={text => {
+                        setCustomText(text);
+                        setRecurrence(safeNormalize(text));
+                      }}
+                      placeholder="FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,FR"
+                      autoCapitalize="characters"
+                      autoCorrect={false}
+                    />
+                    <Text className="mt-1 text-xs text-text-main">
+                      RFC 5545 RRULE: FREQ, INTERVAL, COUNT or UNTIL, BYDAY,
+                      BYMONTHDAY, BYMONTH, BYSETPOS, WKST.
+                    </Text>
+                  </View>
+                ) : null}
+                {parsedRule ? (
                   <Text className="mt-1.5 text-xs text-text-main">
-                    {recurrence === 'weekly'
-                      ? `Repeats every ${
-                          validDate(start)
-                            ? format(parseDate(start), 'EEEE')
-                            : 'week'
-                        }.`
-                      : recurrence === 'monthly'
-                      ? 'Repeats monthly, on this same date.'
-                      : recurrence === 'quarterly'
-                      ? 'Repeats every 3 months, on this same date.'
-                      : 'Repeats yearly, on this same date.'}
+                    {describeRRule(parsedRule)}
+                    {validDate(start)
+                      ? ` · next: ${nextDates(parsedRule, start)}`
+                      : ''}
                   </Text>
                 ) : null}
                 {needsLeapWarning ? (
@@ -511,6 +572,30 @@ export function ItemFormModal() {
         </Pressable>
       </KeyboardAvoidingView>
     </Modal>
+  );
+}
+
+// Canonical text for a rule, or null when it doesn't parse yet (mid-typing).
+function safeNormalize(text: string | null): string | null {
+  if (!text) {
+    return null;
+  }
+  try {
+    return normalizeRRule(text);
+  } catch {
+    return null;
+  }
+}
+
+// First few upcoming occurrence dates, for the form's preview line.
+function nextDates(rule: ReturnType<typeof parseRRule>, start: string): string {
+  const anchor = parse(start, DATE_FMT, new Date());
+  const hits = expandRRule(rule, anchor, anchor, addDays(anchor, 366 * 3));
+  return (
+    hits
+      .slice(0, 3)
+      .map(h => format(h.date, 'MMM d'))
+      .join(', ') || '—'
   );
 }
 

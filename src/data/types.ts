@@ -7,14 +7,12 @@ export type Status =
 export type Priority = 'low' | 'medium' | 'high';
 export type ViewType = 'table' | 'team' | 'kanban' | 'roadmap' | 'calendar';
 
-// How a task repeats, anchored on its own `start` date — see
-// src/data/recurrence.ts for what each one actually computes:
-//   - weekly: same day of the week
-//   - monthly: same date of the month
-//   - quarterly: same date, every 3 months (so once per quarter)
-//   - yearly: same date of the year — a Feb 29 anchor lands on Feb 28 in a
-//     non-leap target year, never rolling into March
-export type RecurrenceFreq = 'weekly' | 'monthly' | 'quarterly' | 'yearly';
+// How a task repeats: an RFC 5545 RRULE value (e.g. "FREQ=WEEKLY;BYDAY=MO,FR"),
+// anchored on the task's own `start` date. See src/data/rrule.ts for the parser,
+// writer and expander. Tasks saved before RRULE support held 'weekly' | 'monthly'
+// | 'quarterly' | 'yearly'; those are migrated on load (migrateRecurrence).
+// Feb 29 / day-31 anchors without an explicit BYMONTHDAY clamp to the month's last
+// day rather than rolling over or being skipped.
 
 // A reminder fires at `time` on the day `offsetDays` before the task's start
 // (0 = the start date itself). Up to 2 per task/calendar event.
@@ -53,7 +51,7 @@ export interface WorkItem {
   end: string;
   labels: string[];
   // null/[] are the common case — most tasks don't repeat or have reminders.
-  recurrence: RecurrenceFreq | null;
+  recurrence: string | null;
   reminders: Reminder[];
 }
 

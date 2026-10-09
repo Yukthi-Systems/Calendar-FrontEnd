@@ -22,10 +22,10 @@ import { itemsAtom, selectedItemIdAtom } from '../../atoms/project';
 import { PRIORITY_COLOR, statusInfo } from '../../data/constants';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { memberById } from '../../atoms/members';
-import { RECURRENCE_LABEL } from '../../data/recurrence';
+import { describeRecurrence } from '../../data/rrule';
 import { subtaskProgress } from '../../data/tree';
 import { showsField } from '../../data/viewFields';
-import type { RecurrenceFreq, ViewField, WorkItem } from '../../data/types';
+import type { ViewField, WorkItem } from '../../data/types';
 import { Tooltip } from './Tooltip';
 
 // A colour + initials circle, decoupled from the team-member lookup below —
@@ -158,12 +158,12 @@ export function RecurrenceIcon({
   freq,
   size = 12,
 }: {
-  freq: RecurrenceFreq;
+  freq: string;
   size?: number;
 }) {
   const { text } = useThemeColors();
   return (
-    <Tooltip label={`Repeats ${RECURRENCE_LABEL[freq].toLowerCase()}`}>
+    <Tooltip label={describeRecurrence(freq) || 'Repeats'}>
       <Repeat size={size} color={text} />
     </Tooltip>
   );

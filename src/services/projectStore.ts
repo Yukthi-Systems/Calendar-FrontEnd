@@ -9,6 +9,8 @@ import {
 import { profileOverridesAtom } from '../atoms/profile';
 import { themeAtom } from '../atoms/theme';
 import { storage } from './runtime';
+import { migrateRecurrence } from '../data/rrule';
+import type { WorkItem } from '../data/types';
 
 // Local persistence for the project workspace (views, items, active tab, profile),
 // ported from authStore.ts's session pattern: hydrate the atoms from storage once
@@ -66,7 +68,14 @@ function applySaved(saved: unknown) {
     store.set(viewsAtom, s.views);
   }
   if (Array.isArray(s.items)) {
-    store.set(itemsAtom, s.items);
+    // Recurrence used to be a keyword ('weekly'…); it's an RRULE string now.
+    store.set(
+      itemsAtom,
+      (s.items as WorkItem[]).map(i => ({
+        ...i,
+        recurrence: migrateRecurrence(i.recurrence),
+      })),
+    );
   }
   if (Array.isArray(s.comments)) {
     store.set(commentsAtom, s.comments);

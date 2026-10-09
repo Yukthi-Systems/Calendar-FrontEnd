@@ -18,7 +18,7 @@ import {
 import { PRIORITY_COLOR, STATUSES } from '../../data/constants';
 import { currentUserIdAtom } from '../../atoms/members';
 import { canDelete, canEditFields, roleFor } from '../../data/permissions';
-import { RECURRENCE_LABEL } from '../../data/recurrence';
+import { describeRecurrence } from '../../data/rrule';
 import {
   MAX_DEPTH,
   ancestorsOf,
@@ -142,7 +142,7 @@ export function ItemModal() {
                 <View className="mb-1 flex-row items-center gap-1.5">
                   <Repeat size={13} color={text} />
                   <Text className="text-xs text-text-main">
-                    {RECURRENCE_LABEL[item.recurrence]}
+                    {describeRecurrence(item.recurrence) || item.recurrence}
                   </Text>
                 </View>
               ) : null}

@@ -1,7 +1,5 @@
 import {
   addDays,
-  addMonths,
-  addWeeks,
   addYears,
   differenceInCalendarDays,
   isLeapYear,
@@ -11,14 +9,8 @@ import {
   setSeconds,
   startOfDay,
 } from 'date-fns';
-import type { Reminder, RecurrenceFreq, WorkItem } from './types';
-
-export const RECURRENCE_LABEL: Record<RecurrenceFreq, string> = {
-  weekly: 'Weekly',
-  monthly: 'Monthly',
-  quarterly: 'Quarterly',
-  yearly: 'Yearly',
-};
+import { expandRRule, migrateRecurrence, tryParseRRule } from './rrule';
+import type { Reminder, WorkItem } from './types';
 
 // Feb 29 is the only start date a recurrence rule can't always land on again.
 export const isLeapDayAnchor = (date: Date) =>
@@ -30,29 +22,6 @@ export const isLeapDayAnchor = (date: Date) =>
 export const yearlyRecurrenceNeedsLeapWarning = (date: Date) =>
   isLeapDayAnchor(date) && !isLeapYear(addYears(date, 1));
 
-// Occurrence number `n` (0 = the anchor itself), computed fresh from the
-// original anchor every time — never from the previous occurrence. That
-// matters: date-fns clamps a day that doesn't exist in the target month to
-// that month's last day (e.g. Jan 31 -> Feb 28, or Feb 29 -> Feb 28 in a
-// non-leap year, per the brief's "do -1 of that"). Advancing from the
-// *previous* occurrence instead of the anchor would make that clamp
-// permanent — a Feb 29 task would drift to Feb 28 forever and never land on
-// Feb 29 again, even the next time the target year is a leap year. Anchoring
-// every step on the original date instead gives each occurrence an
-// independent chance to land on the real date.
-function occurrenceAt(anchor: Date, freq: RecurrenceFreq, n: number): Date {
-  switch (freq) {
-    case 'weekly':
-      return addWeeks(anchor, n);
-    case 'monthly':
-      return addMonths(anchor, n);
-    case 'quarterly':
-      return addMonths(anchor, n * 3);
-    case 'yearly':
-      return addYears(anchor, n);
-  }
-}
-
 export interface Occurrence {
   start: Date;
   end: Date;
@@ -60,49 +29,42 @@ export interface Occurrence {
   index: number;
 }
 
-const MAX_OCCURRENCES = 1000; // safety cap against a runaway loop, not a real limit
-
 // Every occurrence (including the original) whose span overlaps
 // [rangeStart, rangeEnd], preserving the task's original duration. Used only
 // to decide what to *display* on the calendar for a given visible range —
 // the stored task is still just the one WorkItem; nothing here is persisted.
+// `recurrence` is an RRULE string (or a legacy word); an unparseable one is
+// treated as "doesn't repeat".
 export function occurrencesInRange(
   start: Date,
   end: Date,
-  freq: RecurrenceFreq | null,
+  recurrence: string | null,
   rangeStart: Date,
   rangeEnd: Date,
 ): Occurrence[] {
   const overlaps = (s: Date, e: Date) => s <= rangeEnd && e >= rangeStart;
+  const rule = tryParseRRule(migrateRecurrence(recurrence));
 
-  if (!freq) {
+  if (!rule) {
     return overlaps(start, end) ? [{ start, end, index: 0 }] : [];
   }
 
   const durationDays = differenceInCalendarDays(end, start);
-  const out: Occurrence[] = [];
-  let n = 0;
-  let curStart = occurrenceAt(start, freq, n);
-  let curEnd = addDays(curStart, durationDays);
-
-  // Skip past occurrences that end before the range even starts — e.g. a
-  // weekly task from years ago, viewed on this month's calendar.
-  while (curEnd < rangeStart && n < MAX_OCCURRENCES) {
-    n++;
-    curStart = occurrenceAt(start, freq, n);
-    curEnd = addDays(curStart, durationDays);
-  }
-
-  while (curStart <= rangeEnd && n < MAX_OCCURRENCES) {
-    if (overlaps(curStart, curEnd)) {
-      out.push({ start: curStart, end: curEnd, index: n });
-    }
-    n++;
-    curStart = occurrenceAt(start, freq, n);
-    curEnd = addDays(curStart, durationDays);
-  }
-
-  return out;
+  // A long task can start before the range and still overlap it, so look back
+  // by its duration when asking for starts.
+  const hits = expandRRule(
+    rule,
+    start,
+    addDays(rangeStart, -durationDays),
+    rangeEnd,
+  );
+  return hits
+    .map(h => ({
+      start: h.date,
+      end: addDays(h.date, durationDays),
+      index: h.index,
+    }))
+    .filter(o => overlaps(o.start, o.end));
 }
 
 // The next not-yet-passed moment this reminder should fire, across however
