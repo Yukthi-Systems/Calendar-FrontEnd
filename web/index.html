@@ -14,7 +14,12 @@
         margin: 0;
         padding: 0;
       }
+      html {
+        overscroll-behavior: none;
+      }
       body {
+        height: 100vh;
+        height: 100dvh; /* mobile browsers: don't let the URL bar hide the bottom */
         overflow: hidden; /* react-native-web owns scrolling inside the app */
       }
       #app-root {

@@ -36,3 +36,41 @@
     animation: none !important;
   }
 }
+
+/* Scrolling: slim, theme-coloured scrollbars instead of the chunky OS default, and no
+   scroll chaining/rubber-banding from an inner list into the page behind it. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--border)) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: rgb(var(--border));
+  border-radius: 8px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(var(--text));
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* RNW ScrollViews (`overflow: auto/scroll`). */
+[style*='overflow-y: auto'],
+[style*='overflow-y: scroll'],
+[style*='overflow-x: auto'],
+[style*='overflow-x: scroll'] {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}

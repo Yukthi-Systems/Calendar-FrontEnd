@@ -2,6 +2,10 @@
 // /auth/session return a subset, so callers merge onto the previous value.
 export interface BackendUserInfo {
   email: string;
+  user_id?: string;
+  first_name?: string;
+  last_name?: string;
+  is_external_sharing_enabled?: boolean;
   domain_name?: string;
   organization_id?: string;
   organization_name?: string;
@@ -32,4 +36,34 @@ export interface AuthPayload {
 
 export interface SsoAuthResponse {
   data: AuthPayload;
+}
+
+// Tasks-Main-API /sample_db/* — `id` is omitted when creating.
+export interface Note {
+  id?: number | null;
+  title: string;
+  content: string;
+}
+
+// Tasks-Main-API GET /user/info/{user_id}. `private_info` is present only when the
+// requested user is the caller; other users in the same organization get the public subset.
+export interface UserInfoResponse {
+  user_id: string;
+  email: string;
+  domain: string;
+  organization_id: string;
+  organization_name: string;
+  public_info: Record<string, unknown>;
+  private_info?: Record<string, unknown>;
+  is_external_sharing_enabled: boolean;
+  created_at: string;
+}
+
+// Tasks-Main-API GET /user/search result row.
+export interface UserSearchResult {
+  user_id: string;
+  email: string;
+  domain: string;
+  public_info: Record<string, unknown>;
+  created_at: string;
 }

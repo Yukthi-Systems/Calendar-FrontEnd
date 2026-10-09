@@ -21,18 +21,15 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import { itemsAtom, selectedItemIdAtom } from '../../atoms/project';
 import { PRIORITY_COLOR, statusInfo } from '../../data/constants';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { MEMBERS } from '../../data/mockData';
+import { memberById } from '../../atoms/members';
 import { RECURRENCE_LABEL } from '../../data/recurrence';
 import { subtaskProgress } from '../../data/tree';
 import { showsField } from '../../data/viewFields';
 import type { RecurrenceFreq, ViewField, WorkItem } from '../../data/types';
 import { Tooltip } from './Tooltip';
 
-export const memberById = (id: string | null) =>
-  MEMBERS.find(m => m.id === id) ?? null;
-
 // A colour + initials circle, decoupled from the team-member lookup below —
-// also used for the account profile avatar, which isn't one of MEMBERS.
+// also used for the account profile avatar, which isn't necessarily a member.
 export function InitialsAvatar({
   color,
   initials,
@@ -332,7 +329,10 @@ export function MultiSelectDropdown({
   selectedIds,
   onToggle,
   placeholder,
+  onQueryChange,
 }: {
+  // Called as the search box changes, for pickers that also search remotely.
+  onQueryChange?: (query: string) => void;
   // Sheet title, shown while the picker is open. Falls back to `placeholder`.
   label?: string;
   // `locked`: shown checked (if it is) but can't be toggled off — e.g. you
@@ -349,7 +349,10 @@ export function MultiSelectDropdown({
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q ? options.filter(o => o.label.toLowerCase().includes(q)) : options;
+    return q ? options.filter(
+          o =>
+            o.label.toLowerCase().includes(q) || o.id.toLowerCase().includes(q),
+        ) : options;
   }, [options, query]);
 
   const close = () => {
@@ -414,7 +417,10 @@ export function MultiSelectDropdown({
               <Search size={16} color={text} />
               <TextInput
                 value={query}
-                onChangeText={setQuery}
+                onChangeText={q => {
+                  setQuery(q);
+                  onQueryChange?.(q);
+                }}
                 placeholder="Search…"
                 placeholderTextColor="#9ca3af"
                 className="flex-1 text-text-heading"

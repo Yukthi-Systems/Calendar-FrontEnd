@@ -11,12 +11,13 @@ import {
   startOfWeek,
 } from 'date-fns';
 import { itemsAtom } from '../../atoms/project';
-import { MEMBERS } from '../../data/mockData';
+import { membersAtom } from '../../atoms/members';
 import type { Member } from '../../data/types';
 import { IconButton, ItemRow, PAGE_STYLE } from './shared';
 
 export function TeamPlanningView() {
   const items = useAtomValue(itemsAtom);
+  const members = useAtomValue(membersAtom);
   const [weekStart, setWeekStart] = useState(() =>
     startOfWeek(new Date(), { weekStartsOn: 1 }),
   );
@@ -27,10 +28,10 @@ export function TeamPlanningView() {
     i => parseISO(i.start) <= weekEnd && parseISO(i.end) >= weekStart,
   );
 
-  const rows: (Member | null)[] = [...MEMBERS, null];
+  const rows: (Member | null)[] = [...members, null];
   // Counted per assignee, so a shared item adds one to each of its assignees' load.
   const teamLoad = weekItems.reduce((s, i) => s + i.assigneeIds.length, 0);
-  const teamCapacity = MEMBERS.reduce((s, m) => s + m.capacity, 0);
+  const teamCapacity = members.reduce((s, m) => s + m.capacity, 0);
 
   return (
     <View className="flex-1">

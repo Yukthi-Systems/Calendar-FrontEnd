@@ -29,11 +29,10 @@ export const fetchSession = async (
   return data;
 };
 
-// POST /auth/refresh — also needs the SSO cookie. Keyed by email (YFS uses user_id).
+// POST /auth/refresh — also needs the SSO cookie. The API reads only the two tokens.
 export const refreshSession = async (params: {
   refreshToken: string;
   accessToken: string;
-  userEmail: string;
 }): Promise<AuthPayload> => {
   const { data, headers } = await apiRequest<{
     access_token: string;
@@ -43,7 +42,6 @@ export const refreshSession = async (params: {
     body: JSON.stringify({
       refresh_token: params.refreshToken,
       access_token: params.accessToken,
-      user_email: params.userEmail,
     }),
   });
 
@@ -60,6 +58,19 @@ export const apiLogout = async (accessToken: string): Promise<void> => {
   await apiRequest('/auth/logout', {
     method: 'DELETE',
     accessToken,
+    parseJson: false,
+  });
+};
+
+// PATCH /auth/update-fcm-token — registers this device's push token on the session.
+export const updateFcmToken = async (
+  accessToken: string,
+  fcmToken: string,
+): Promise<void> => {
+  await apiRequest('/auth/update-fcm-token', {
+    method: 'PATCH',
+    accessToken,
+    body: JSON.stringify(fcmToken),
     parseJson: false,
   });
 };

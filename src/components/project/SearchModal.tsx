@@ -10,7 +10,7 @@ import {
   selectedItemIdAtom,
 } from '../../atoms/project';
 import { STATUSES } from '../../data/constants';
-import { CURRENT_USER_ID, MEMBERS } from '../../data/mockData';
+import { currentUserIdAtom, membersAtom } from '../../atoms/members';
 import type { SearchCriteria } from '../../data/search';
 import { searchItems } from '../../data/search';
 import type { WorkItem } from '../../data/types';
@@ -32,6 +32,8 @@ const isIsoDate = (s: string) =>
 export function SearchModal() {
   const [open, setOpen] = useAtom(searchOpenAtom);
   const items = useAtomValue(itemsAtom);
+  const CURRENT_USER_ID = useAtomValue(currentUserIdAtom);
+  const MEMBERS = useAtomValue(membersAtom);
   const setSelectedId = useSetAtom(selectedItemIdAtom);
   const { text, accent } = useThemeColors();
 

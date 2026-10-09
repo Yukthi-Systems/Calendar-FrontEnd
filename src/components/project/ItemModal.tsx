@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
-import { useAtom, useSetAtom } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { format, parseISO } from 'date-fns';
 import {
   Bell,
@@ -16,7 +16,7 @@ import {
   selectedItemIdAtom,
 } from '../../atoms/project';
 import { PRIORITY_COLOR, STATUSES } from '../../data/constants';
-import { CURRENT_USER_ID } from '../../data/mockData';
+import { currentUserIdAtom } from '../../atoms/members';
 import { canDelete, canEditFields, roleFor } from '../../data/permissions';
 import { RECURRENCE_LABEL } from '../../data/recurrence';
 import {
@@ -36,6 +36,7 @@ import { AssigneeAvatars, Pill, StatusDot, assigneeNames } from './shared';
 export function ItemModal() {
   const [selectedId, setSelectedId] = useAtom(selectedItemIdAtom);
   const [items, setItems] = useAtom(itemsAtom);
+  const CURRENT_USER_ID = useAtomValue(currentUserIdAtom);
   const setComments = useSetAtom(commentsAtom);
   const setForm = useSetAtom(itemFormAtom);
   const { heading, text, accent } = useThemeColors();

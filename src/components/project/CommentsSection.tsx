@@ -5,7 +5,7 @@ import { formatDistanceToNow, parseISO } from 'date-fns';
 import { Pencil, Trash2 } from 'lucide-react-native';
 import { commentsAtom } from '../../atoms/project';
 import { profileAtom } from '../../atoms/profile';
-import { CURRENT_USER_ID } from '../../data/mockData';
+import { currentUserIdAtom } from '../../atoms/members';
 import { canDeleteComment, canEditComment } from '../../data/permissions';
 import type { Comment } from '../../data/types';
 import { useThemeColors } from '../../hooks/useThemeColors';
@@ -18,6 +18,7 @@ import { InitialsAvatar } from './shared';
 export function CommentsSection({ itemId }: { itemId: string }) {
   const [comments, setComments] = useAtom(commentsAtom);
   const profile = useAtomValue(profileAtom);
+  const CURRENT_USER_ID = useAtomValue(currentUserIdAtom);
   const { text: textColor } = useThemeColors();
   const [text, setText] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);

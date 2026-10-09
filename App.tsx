@@ -19,6 +19,8 @@ import { bootNotifications } from './src/services/notificationStore';
 import { bootWidgetSync } from './src/services/widgetSync';
 import { useAuth } from './src/hooks/useAuth';
 import { useSsoAutoLogin } from './src/hooks/useSsoAutoLogin';
+import { useUserInfo } from './src/hooks/useUserInfo';
+import { useSettingsSync } from './src/hooks/useSettingsSync';
 import { useAccentColor } from './src/hooks/useAccentColor';
 import { useResolvedTheme } from './src/hooks/useResolvedTheme';
 import { LoginScreen } from './src/components/LoginScreen';
@@ -77,6 +79,8 @@ function AppContent() {
     clearError,
   });
   const accent = useAccentColor();
+  useUserInfo();
+  useSettingsSync();
 
   // While a sign-in window is open, keep the login screen (and its status) up.
   if (SSO_ENABLED && authLoading && !sso.ssoPending) {

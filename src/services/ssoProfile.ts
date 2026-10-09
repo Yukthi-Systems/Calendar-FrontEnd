@@ -3,7 +3,15 @@ import type { SsoProfile } from './types';
 
 // App identifier registered with the Yukthi SSO service.
 export const getSsoAppId = () => getEnv('SSO_APP_ID');
-export const getSsoUrl = () => getEnv('SSO_URL').replace(/\/$/, '');
+export const getSsoUrl = () => {
+  const url = getEnv('SSO_URL').trim().replace(/\/$/, '');
+  if (!/^https?:\/\/[^/]/.test(url)) {
+    throw new Error(
+      'SSO_URL is missing or not a full URL (e.g. https://sso.example.com). Set it in .env and restart the app, or pass it as a container env var.',
+    );
+  }
+  return url;
+};
 
 // Field names vary, so read snake_case and camelCase, one level deep.
 export const extractSsoProfile = (message: unknown): SsoProfile => {

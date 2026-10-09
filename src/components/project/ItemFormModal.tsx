@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -8,7 +8,7 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useAtom, useSetAtom } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { addDays, format, isValid, parse } from 'date-fns';
 import { Plus, X } from 'lucide-react-native';
 import {
@@ -17,7 +17,10 @@ import {
   selectedItemIdAtom,
 } from '../../atoms/project';
 import { PRIORITY_COLOR, STATUSES } from '../../data/constants';
-import { CURRENT_USER_ID, MEMBERS } from '../../data/mockData';
+import { currentUserIdAtom, membersAtom } from '../../atoms/members';
+import { tokenAtom } from '../../atoms/auth';
+import { directoryAtom } from '../../atoms/userInfo';
+import { searchUsersByEmail } from '../../services/users';
 import {
   RECURRENCE_LABEL,
   yearlyRecurrenceNeedsLeapWarning,
@@ -60,6 +63,33 @@ const validTime = (s: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(s);
 export function ItemFormModal() {
   const [form, setForm] = useAtom(itemFormAtom);
   const [items, setItems] = useAtom(itemsAtom);
+  const CURRENT_USER_ID = useAtomValue(currentUserIdAtom);
+  const MEMBERS = useAtomValue(membersAtom);
+  const token = useAtomValue(tokenAtom);
+  const setDirectory = useSetAtom(directoryAtom);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Debounced org-wide email search; hits join the assignee options.
+  const searchColleagues = (q: string) => {
+    if (searchTimer.current) {
+      clearTimeout(searchTimer.current);
+    }
+    const query = q.trim();
+    if (!token || query.length < 2) {
+      return;
+    }
+    searchTimer.current = setTimeout(async () => {
+      try {
+        const found = await searchUsersByEmail(token, query);
+        setDirectory(prev => [
+          ...prev,
+          ...found.filter(f => !prev.some(p => p.email === f.email)),
+        ]);
+      } catch (err) {
+        console.warn('User search failed:', err);
+      }
+    }, 300);
+  };
   const setSelected = useSetAtom(selectedItemIdAtom);
 
   const editing =
@@ -288,6 +318,7 @@ export function ItemFormModal() {
                   }))}
                   selectedIds={assigneeIds}
                   onToggle={toggleAssignee}
+                  onQueryChange={searchColleagues}
                   placeholder="Select assignees"
                 />
                 {assigneeIds.length === 0 ? (

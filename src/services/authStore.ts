@@ -153,7 +153,6 @@ export const refreshAccessToken = (): Promise<string | null> => {
       const payload = await refreshSession({
         refreshToken: curRefresh,
         accessToken: curToken,
-        userEmail: curEmail,
       });
       persistPayload(payload);
       return payload.access_token;
