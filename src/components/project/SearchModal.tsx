@@ -78,7 +78,17 @@ export function SearchModal() {
       },
       format(new Date(), 'yyyy-MM-dd'),
     );
-  }, [items, title, assigneeId, status, dueFrom, dueTo, oldUnfinishedOnly, dateError]);
+  }, [
+    items,
+    CURRENT_USER_ID,
+    title,
+    assigneeId,
+    status,
+    dueFrom,
+    dueTo,
+    oldUnfinishedOnly,
+    dateError,
+  ]);
 
   const assigneeOptions = MEMBERS.filter(m =>
     m.name.toLowerCase().includes(assigneeQuery.trim().toLowerCase()),
