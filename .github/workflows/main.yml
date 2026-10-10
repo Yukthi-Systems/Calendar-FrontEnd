@@ -86,30 +86,29 @@ jobs:
             rjyspl/tasks-webui:latest
             rjyspl/tasks-webui:${{ steps.tag.outputs.TAG }}
 
-  # Deploy disabled for now — uncomment to enable CD.
   # CD: pulls the freshly pushed :latest image on the server and restarts it.
   # /srv/tasks-webui holds docker-compose.yml + .env (copy from tasks-webui/ in this repo).
-  # deploy:
-  #   if: github.event_name == 'push'
-  #   needs: docker-publish
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Configure SSH
-  #       uses: webfactory/ssh-agent@v0.9.0
-  #       with:
-  #         ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
-  #
-  #     - name: Deploy to Server
-  #       env:
-  #         SERVER_IP: ${{ secrets.SERVER_IP }}
-  #       run: |
-  #         ssh -o StrictHostKeyChecking=no root@$SERVER_IP << 'EOF'
-  #           set -e
-  #           cd /srv/tasks-webui
-  #           # The image has no URLs baked in; without runtime config the app can't reach the API.
-  #           test -f .env || { echo "Missing /srv/tasks-webui/.env"; exit 1; }
-  #           grep -q "env_file" docker-compose.y*ml || { echo "docker-compose on the server has no env_file: .env"; exit 1; }
-  #           docker compose pull
-  #           docker compose up -d
-  #           docker ps
-  #         EOF
+  deploy:
+    if: github.event_name == 'push'
+    needs: docker-publish
+    runs-on: ubuntu-latest
+    steps:
+      - name: Configure SSH
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Deploy to Server
+        env:
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+        run: |
+          ssh -o StrictHostKeyChecking=no root@$SERVER_IP << 'EOF'
+            set -e
+            cd /srv/tasks-webui
+            # The image has no URLs baked in; without runtime config the app can't reach the API.
+            test -f .env || { echo "Missing /srv/tasks-webui/.env"; exit 1; }
+            grep -q "env_file" docker-compose.y*ml || { echo "docker-compose on the server has no env_file: .env"; exit 1; }
+            docker compose pull
+            docker compose up -d
+            docker ps
+          EOF
