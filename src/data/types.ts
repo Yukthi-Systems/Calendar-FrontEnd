@@ -71,6 +71,14 @@ export interface ProjectView {
   type: ViewType;
   description?: string;
   fields?: ViewField[];
+  // Mirrors Tasks-Main-API's task_views row (status_filter/show_*) so a view is
+  // ready to actually filter once the /tasks API exists — inert until then.
+  // Empty/undefined statusFilter means "every status".
+  statusFilter?: Status[];
+  showRecurring?: boolean;
+  showComments?: boolean;
+  showSubtasks?: boolean;
+  showAssigned?: boolean;
 }
 
 // Author fields are captured at post time rather than referencing a member id —

@@ -1,38 +1,52 @@
 import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { Check } from 'lucide-react-native';
+import { Check, Share2 } from 'lucide-react-native';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { VIEW_TYPES } from '../../data/constants';
+import { STATUSES, VIEW_TYPES } from '../../data/constants';
 import { fieldOptionsFor } from '../../data/viewFields';
-import type { ProjectView, ViewField, ViewType } from '../../data/types';
+import { isServerViewId } from '../../data/viewSync';
+import type { ProjectView, Status, ViewField, ViewType } from '../../data/types';
 
 export interface ViewDraft {
   name: string;
   type: ViewType;
   description: string;
   fields: ViewField[] | undefined;
+  statusFilter: Status[] | undefined;
+  showRecurring: boolean;
+  showComments: boolean;
+  showSubtasks: boolean;
+  showAssigned: boolean;
 }
 
 // Add (view === null) or edit a view: name, description, layout, the fields
-// shown for Table/Calendar layouts, and — when editing — delete.
+// shown for Table/Calendar layouts, the status/content filters this view
+// applies, and — when editing — share and delete.
 export function ViewModal({
   visible,
   view,
   onClose,
   onSave,
   onDelete,
+  onShare,
 }: {
   visible: boolean;
   view: ProjectView | null;
   onClose: () => void;
   onSave: (draft: ViewDraft) => void;
   onDelete: () => void;
+  onShare: (view: ProjectView) => void;
 }) {
   const { heading } = useThemeColors();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [type, setType] = useState<ViewType>('kanban');
   const [fields, setFields] = useState<ViewField[]>([]);
+  const [statusFilter, setStatusFilter] = useState<Status[]>([]);
+  const [showRecurring, setShowRecurring] = useState(false);
+  const [showComments, setShowComments] = useState(false);
+  const [showSubtasks, setShowSubtasks] = useState(false);
+  const [showAssigned, setShowAssigned] = useState(false);
 
   useEffect(() => {
     if (visible) {
@@ -41,6 +55,11 @@ export function ViewModal({
       setDescription(view?.description ?? '');
       setType(nextType);
       setFields(view?.fields ?? allFieldKeys(nextType));
+      setStatusFilter(view?.statusFilter ?? []);
+      setShowRecurring(view?.showRecurring ?? false);
+      setShowComments(view?.showComments ?? false);
+      setShowSubtasks(view?.showSubtasks ?? false);
+      setShowAssigned(view?.showAssigned ?? false);
     }
   }, [visible, view]);
 
@@ -57,6 +76,26 @@ export function ViewModal({
       prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key],
     );
 
+  const toggleStatus = (key: Status) =>
+    setStatusFilter(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key],
+    );
+
+  // Content toggles mirror Tasks-Main-API's task_views columns (show_recurring/
+  // show_comments/show_subtasks/show_assigned) — inert until the /tasks API exists
+  // to actually filter by them, but saved now so nothing is lost once it does.
+  const visibilityToggles: {
+    key: string;
+    label: string;
+    on: boolean;
+    set: (v: boolean) => void;
+  }[] = [
+    { key: 'recurring', label: 'Recurring tasks', on: showRecurring, set: setShowRecurring },
+    { key: 'comments', label: 'Comments', on: showComments, set: setShowComments },
+    { key: 'subtasks', label: 'Subtasks', on: showSubtasks, set: setShowSubtasks },
+    { key: 'assigned', label: 'Assigned to me', on: showAssigned, set: setShowAssigned },
+  ];
+
   const save = () => {
     const allSelected =
       !!options && options.every(o => fields.includes(o.key));
@@ -65,6 +104,11 @@ export function ViewModal({
       type,
       description: description.trim(),
       fields: options && !allSelected ? fields : undefined,
+      statusFilter: statusFilter.length > 0 ? statusFilter : undefined,
+      showRecurring,
+      showComments,
+      showSubtasks,
+      showAssigned,
     });
   };
 
@@ -170,9 +214,66 @@ export function ViewModal({
                 </Text>
               </View>
             ) : null}
+
+            <Text className="mb-2 text-xs font-semibold uppercase text-text-main">
+              Status filter
+            </Text>
+            <View className="mb-1 flex-row flex-wrap gap-2">
+              {STATUSES.map(s => {
+                const on = statusFilter.includes(s.key);
+                return (
+                  <Pressable
+                    key={s.key}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: on }}
+                    onPress={() => toggleStatus(s.key)}
+                    style={on ? { borderColor: s.color, backgroundColor: `${s.color}1a` } : undefined}
+                    className="flex-row items-center gap-1.5 rounded-full border border-border-main px-3 py-1.5"
+                  >
+                    {on ? <Check size={14} color={heading} /> : null}
+                    <Text className="text-sm text-text-heading">{s.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text className="mb-5 text-xs text-text-main">
+              {statusFilter.length === 0
+                ? 'Every status shown.'
+                : 'Only the selected statuses are shown.'}
+            </Text>
+
+            <Text className="mb-2 text-xs font-semibold uppercase text-text-main">
+              Also show
+            </Text>
+            <View className="mb-1 flex-row flex-wrap gap-2">
+              {visibilityToggles.map(t => (
+                <Pressable
+                  key={t.key}
+                  accessibilityRole="checkbox"
+                  accessibilityState={{ checked: t.on }}
+                  onPress={() => t.set(!t.on)}
+                  className={`flex-row items-center gap-1.5 rounded-full border px-3 py-1.5 ${
+                    t.on ? 'border-accent bg-accent/10' : 'border-border-main'
+                  }`}
+                >
+                  {t.on ? <Check size={14} color={heading} /> : null}
+                  <Text className="text-sm text-text-heading">{t.label}</Text>
+                </Pressable>
+              ))}
+            </View>
           </ScrollView>
 
           <View className="mt-2 flex-row gap-2">
+            {view && isServerViewId(view.id) ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Share ${view.name}`}
+                onPress={() => onShare(view)}
+                className="items-center justify-center rounded-2xl border border-border-main px-4 py-3 active:opacity-70"
+              >
+                <Share2 size={18} color={heading} />
+              </Pressable>
+            ) : null}
             {view ? (
               <Pressable
                 accessibilityRole="button"

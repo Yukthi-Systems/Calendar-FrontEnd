@@ -20,6 +20,7 @@ import {
 import { profileAtom, profileOpenAtom } from '../../atoms/profile';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { useViewUrlSync } from '../../hooks/useViewUrlSync';
+import { useViewsSync } from '../../hooks/useViewsSync';
 import { VIEW_TYPES } from '../../data/constants';
 import type { ProjectView, ViewType } from '../../data/types';
 import { CalendarView } from './CalendarView';
@@ -36,6 +37,7 @@ import { TableView } from './TableView';
 import { TeamPlanningView } from './TeamPlanningView';
 import { UndoToast } from './UndoToast';
 import { ViewModal, type ViewDraft } from './ViewModal';
+import { ShareViewModal } from './ShareViewModal';
 
 // Width at which the view tabs become a left rail.
 const WIDE_BREAKPOINT = 1024;
@@ -64,6 +66,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   const { heading, text, accent } = useThemeColors();
   const [views, setViews] = useAtom(viewsAtom);
   const [activeId, setActiveId] = useAtom(activeViewIdAtom);
+  const { addView, editView, removeView, restoreView } = useViewsSync();
   useViewUrlSync();
   // undefined = closed, null = creating, ProjectView = editing.
   const [modalView, setModalView] = useState<ProjectView | null | undefined>(
@@ -75,52 +78,57 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   );
   const undoTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(undoTimer.current), []);
+  const [shareView, setShareView] = useState<ProjectView | null>(null);
 
   const active = views.find(v => v.id === activeId) ?? views[0];
   const ActiveView = active ? VIEW_COMPONENTS[active.type] : null;
 
-  const save = ({ name, type, description, fields }: ViewDraft) => {
+  const save = async (draft: ViewDraft) => {
+    setModalView(undefined);
     if (modalView) {
-      setViews(prev =>
-        prev.map(v =>
-          v.id === modalView.id ? { ...v, name, type, description, fields } : v,
-        ),
-      );
+      await editView({ ...modalView, ...draft });
     } else {
-      const id = `v-${Date.now()}`;
-      setViews(prev => [...prev, { id, name, type, description, fields }]);
+      const id = await addView(draft);
       setActiveId(id);
     }
-    setModalView(undefined);
   };
 
-  const remove = () => {
+  const remove = async () => {
     if (!modalView) {
       return;
     }
-    const rest = views.filter(v => v.id !== modalView.id);
-    setUndo({ view: modalView, index: views.indexOf(modalView) });
+    const removed = modalView;
+    const rest = views.filter(v => v.id !== removed.id);
+    setUndo({ view: removed, index: views.indexOf(removed) });
     clearTimeout(undoTimer.current);
     undoTimer.current = setTimeout(() => setUndo(null), 6000);
     setViews(rest);
-    if (activeId === modalView.id) {
+    if (activeId === removed.id) {
       setActiveId(rest[0]?.id ?? '');
     }
     setModalView(undefined);
+    await removeView(removed);
   };
 
-  const restore = () => {
+  const restore = async () => {
     if (!undo) {
       return;
     }
     clearTimeout(undoTimer.current);
+    const { view, index } = undo;
+    setUndo(null);
+    // The API has no restore — this recreates the view, so it gets a new id and
+    // (server-side) lands at the end rather than back at its original slot.
+    const id = await restoreView(view);
     setViews(prev => {
+      if (prev.some(v => v.id === id)) {
+        return prev;
+      }
       const next = [...prev];
-      next.splice(Math.min(undo.index, next.length), 0, undo.view);
+      next.splice(Math.min(index, next.length), 0, { ...view, id });
       return next;
     });
-    setActiveId(undo.view.id);
-    setUndo(null);
+    setActiveId(id);
   };
 
   const wide = width >= WIDE_BREAKPOINT;
@@ -247,6 +255,11 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
       <MoreHorizontal size={18} color={text} />
     </Pressable>
   );
+
+  const onShareView = (v: ProjectView) => {
+    setModalView(undefined);
+    setShareView(v);
+  };
 
   // `fill`: true in the left rail, where the row is stretched to the rail's
   // width by its parent, so flex-1 has something to grow against. In the
@@ -395,6 +408,12 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
         onClose={() => setModalView(undefined)}
         onSave={save}
         onDelete={remove}
+        onShare={onShareView}
+      />
+      <ShareViewModal
+        visible={!!shareView}
+        view={shareView}
+        onClose={() => setShareView(null)}
       />
       <ProfileModal onSignOut={onSignOut} />
       <ProfileEditModal />

@@ -1,26 +1,40 @@
 import { useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { tokenAtom, userAtom } from '../atoms/auth';
 import { userInfoAtom } from '../atoms/userInfo';
 import { fetchUserInfo } from '../services/users';
 
-// Loads the signed-in user's record once a session exists, clears it on sign-out.
+// GET /user/info/{user_id} for the signed-in user, via TanStack Query. The result
+// is bridged onto userInfoAtom so the rest of the app (profile, members, view sync,
+// settings sync) keeps reading one plain atom rather than each needing its own
+// useQuery — see App.tsx's header comment.
 export function useUserInfo() {
   const token = useAtomValue(tokenAtom);
   const userId = useAtomValue(userAtom)?.user_id;
   const setUserInfo = useSetAtom(userInfoAtom);
 
+  const query = useQuery({
+    queryKey: ['userInfo', userId],
+    queryFn: () => fetchUserInfo(token!, userId!),
+    enabled: !!token && !!userId,
+  });
+
+  useEffect(() => {
+    if (query.data) {
+      setUserInfo(query.data);
+    }
+  }, [query.data, setUserInfo]);
+
   useEffect(() => {
     if (!token || !userId) {
       setUserInfo(null);
-      return;
     }
-    let active = true;
-    fetchUserInfo(token, userId)
-      .then(info => active && setUserInfo(info))
-      .catch(err => console.warn('Could not load user info:', err));
-    return () => {
-      active = false;
-    };
   }, [token, userId, setUserInfo]);
+
+  useEffect(() => {
+    if (query.error) {
+      console.warn('Could not load user info:', query.error);
+    }
+  }, [query.error]);
 }

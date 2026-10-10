@@ -3,7 +3,10 @@
  * react-native-web). Platform differences belong in .native.tsx/.web.tsx file pairs
  * (see src/config/env.* for the pattern), not in branches inside shared components.
  * Styling is Tailwind via NativeWind (`className`, theme in tailwind.config.js +
- * global.css); app state is jotai atoms (src/atoms).
+ * global.css); app state is jotai atoms (src/atoms). Server calls go through
+ * TanStack Query (src/services/queryClient.ts); the hooks under src/hooks that
+ * fetch or mutate bridge their query/mutation results onto the relevant atom, so
+ * existing atom-reading code doesn't need to know a query cache is involved.
  *
  * @format
  */
@@ -13,6 +16,8 @@ import { useEffect } from 'react';
 import { ActivityIndicator, StatusBar, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { QueryClientProvider } from '@tanstack/react-query';
+import { queryClient } from './src/services/queryClient';
 import { bootAuth } from './src/services/authStore';
 import { bootProject } from './src/services/projectStore';
 import { bootNotifications } from './src/services/notificationStore';
@@ -45,13 +50,15 @@ function App() {
     // Required by react-native-gesture-handler (used for the Kanban board's
     // drag-and-drop) — must wrap the whole app, on every platform.
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider>
-        <ThemeRoot>
-          <StatusBarForTheme />
-          <AppContent />
-          {SSO_ENABLED ? <SsoLoginModal /> : null}
-        </ThemeRoot>
-      </SafeAreaProvider>
+      <QueryClientProvider client={queryClient}>
+        <SafeAreaProvider>
+          <ThemeRoot>
+            <StatusBarForTheme />
+            <AppContent />
+            {SSO_ENABLED ? <SsoLoginModal /> : null}
+          </ThemeRoot>
+        </SafeAreaProvider>
+      </QueryClientProvider>
     </GestureHandlerRootView>
   );
 }

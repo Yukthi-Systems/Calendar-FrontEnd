@@ -14,9 +14,8 @@ import {
   profileEditOpenAtom,
   profileOpenAtom,
 } from '../../atoms/profile';
-import { tokenAtom } from '../../atoms/auth';
 import { userInfoAtom } from '../../atoms/userInfo';
-import { updateUserInfo } from '../../services/users';
+import { useUpdateUserInfo } from '../../hooks/useUpdateUserInfo';
 import { Field, FormInput } from './shared';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -27,8 +26,8 @@ export function ProfileEditModal() {
   const [open, setOpen] = useAtom(profileEditOpenAtom);
   const [profile, setProfile] = useAtom(profileAtom);
   const setProfileOpen = useSetAtom(profileOpenAtom);
-  const token = useAtomValue(tokenAtom);
-  const [userInfo, setUserInfo] = useAtom(userInfoAtom);
+  const userInfo = useAtomValue(userInfoAtom);
+  const updateUserInfo = useUpdateUserInfo();
 
   const [name, setName] = useState('');
   const [role, setRole] = useState('');
@@ -75,22 +74,15 @@ export function ProfileEditModal() {
       initials: initialsOf(name.trim()) || prev.initials,
     }));
     // Role is visible to colleagues (public); phone stays private. The API replaces
-    // each whole object, so merge onto what's already stored.
-    if (token && userInfo) {
+    // each whole object, so merge onto what's already stored. useUpdateUserInfo's
+    // own onSuccess keeps userInfoAtom (and its query cache) in step.
+    if (userInfo) {
       const publicInfo = { ...userInfo.public_info, role: role.trim() };
       const privateInfo = { ...userInfo.private_info, phone: phone.trim() };
       Promise.all([
-        updateUserInfo(token, true, publicInfo),
-        updateUserInfo(token, false, privateInfo),
-      ])
-        .then(() =>
-          setUserInfo({
-            ...userInfo,
-            public_info: publicInfo,
-            private_info: privateInfo,
-          }),
-        )
-        .catch(err => console.warn('Could not save profile to server:', err));
+        updateUserInfo.mutateAsync({ isPublic: true, info: publicInfo }),
+        updateUserInfo.mutateAsync({ isPublic: false, info: privateInfo }),
+      ]).catch(err => console.warn('Could not save profile to server:', err));
     }
     backToView();
   };

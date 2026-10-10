@@ -1,29 +1,33 @@
 import { useEffect, useRef } from 'react';
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import { tokenAtom } from '../atoms/auth';
 import { themeAtom } from '../atoms/theme';
-import { viewsAtom } from '../atoms/project';
 import { userInfoAtom } from '../atoms/userInfo';
-import { updateUserInfo } from '../services/users';
+import { useUpdateUserInfo } from './useUpdateUserInfo';
 
-// Keeps the theme and custom views in the user's `private_info.settings` (the API's
-// open-schema JSON), so they follow the account across devices. The server copy is
-// applied once per sign-in; after that local changes are pushed, debounced.
+// Keeps the theme in the user's `private_info.settings` (the API's open-schema
+// JSON, written via POST /user/info/false through useUpdateUserInfo's TanStack
+// mutation), so it follows the account across devices. The server copy is applied
+// once per sign-in; after that local changes are pushed, debounced — a mutation
+// doesn't debounce itself, so that part stays a plain timer around `.mutate`.
 // `private_info` is replaced wholesale by the API, so we always merge onto the latest.
+// Views used to live in this same `settings.views` blob; they now have their own
+// backend rows (src/hooks/useViewsSync.ts) — `settings` keeps a `viewsMigrated`
+// flag for that hook, which this one leaves untouched.
 const PUSH_DELAY_MS = 800;
 
 export function useSettingsSync() {
   const token = useAtomValue(tokenAtom);
-  const [info, setInfo] = useAtom(userInfoAtom);
+  const info = useAtomValue(userInfoAtom);
   const [theme, setTheme] = useAtom(themeAtom);
-  const [views, setViews] = useAtom(viewsAtom);
+  const updateUserInfo = useUpdateUserInfo();
 
   const appliedFor = useRef<string | null>(null);
   const lastSynced = useRef('');
   const infoRef = useRef(info);
   infoRef.current = info;
 
-  // Apply server settings the first time this user's record arrives.
+  // Apply the server theme the first time this user's record arrives.
   useEffect(() => {
     if (!info) {
       appliedFor.current = null;
@@ -34,23 +38,18 @@ export function useSettingsSync() {
     }
     appliedFor.current = info.user_id;
     const saved = info.private_info?.settings as
-      | { theme?: Partial<typeof theme>; views?: typeof views }
+      | { theme?: Partial<typeof theme> }
       | undefined;
-    if (!saved) {
+    if (!saved?.theme) {
       return;
     }
     const nextTheme = { ...theme, ...saved.theme };
-    const nextViews =
-      Array.isArray(saved.views) && saved.views.length > 0
-        ? saved.views
-        : views;
     setTheme(nextTheme);
-    setViews(nextViews);
-    lastSynced.current = JSON.stringify({ theme: nextTheme, views: nextViews });
+    lastSynced.current = JSON.stringify(nextTheme);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- apply once per user
   }, [info?.user_id]);
 
-  const snapshot = JSON.stringify({ theme, views });
+  const snapshot = JSON.stringify(theme);
 
   // Push local changes.
   useEffect(() => {
@@ -60,22 +59,28 @@ export function useSettingsSync() {
     if (snapshot === lastSynced.current) {
       return;
     }
-    const timer = setTimeout(async () => {
+    const timer = setTimeout(() => {
       const current = infoRef.current;
       if (!current) {
         return;
       }
+      const prevSettings = (current.private_info?.settings ?? {}) as Record<
+        string,
+        unknown
+      >;
       const privateInfo = {
         ...current.private_info,
-        settings: JSON.parse(snapshot),
+        settings: { ...prevSettings, theme: JSON.parse(snapshot) },
       };
-      try {
-        await updateUserInfo(token, false, privateInfo);
-        lastSynced.current = snapshot;
-        setInfo(prev => (prev ? { ...prev, private_info: privateInfo } : prev));
-      } catch (err) {
-        console.warn('Could not sync settings to server:', err);
-      }
+      updateUserInfo.mutate(
+        { isPublic: false, info: privateInfo },
+        {
+          onSuccess: () => {
+            lastSynced.current = snapshot;
+          },
+          onError: err => console.warn('Could not sync settings to server:', err),
+        },
+      );
     }, PUSH_DELAY_MS);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- info only gates on user id

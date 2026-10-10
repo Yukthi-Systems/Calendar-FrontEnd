@@ -7,6 +7,7 @@ import {
   type LucideIcon,
 } from 'lucide-react-native';
 import type { Priority, Status, ViewType } from './types';
+import type { BackendTaskStatus } from '../services/types';
 
 export const STATUSES: { key: Status; label: string; color: string }[] = [
   { key: 'not_started', label: 'Not Started', color: '#6b7280' },
@@ -25,6 +26,24 @@ export const STATUS_BY_KEY = Object.fromEntries(
 // STATUSES[0] instead of crashing whatever's rendering it.
 export const statusInfo = (status: Status) =>
   STATUS_BY_KEY[status] ?? STATUSES[0];
+
+// Tasks-Main-API's task_status enum uses different names/values (and merges
+// "rejected" into CANCELLED) — translate at the service boundary only.
+export const BACKEND_STATUS: Record<Status, BackendTaskStatus> = {
+  not_started: 'PENDING',
+  in_progress: 'IN_PROGRESS',
+  completed: 'COMPLETED',
+  rejected: 'CANCELLED',
+  on_hold: 'ON_HOLD',
+};
+
+export const STATUS_FROM_BACKEND: Record<BackendTaskStatus, Status> = {
+  PENDING: 'not_started',
+  IN_PROGRESS: 'in_progress',
+  COMPLETED: 'completed',
+  CANCELLED: 'rejected',
+  ON_HOLD: 'on_hold',
+};
 
 export const PRIORITY_COLOR: Record<Priority, string> = {
   low: '#6b7280',
