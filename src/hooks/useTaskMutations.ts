@@ -3,7 +3,7 @@ import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { tokenAtom } from '../atoms/auth';
 import { activeViewIdAtom, commentsAtom, itemsAtom, viewsAtom } from '../atoms/project';
 import { createTask, deleteTask, updateTask, listTasks } from '../services/tasks';
-import { assignUserToTask } from '../services/taskAssignees';
+import { assignUserToTask, removeUserFromTask } from '../services/taskAssignees';
 import {
   buildTaskFilter,
   isServerTaskId,
@@ -84,6 +84,15 @@ export function useTaskMutations() {
     mutationFn: (args: { viewId: number; taskId: number; assigneeId: string }) =>
       withAuthRetry(token, t =>
         assignUserToTask(t, args.viewId, {
+          task_id: args.taskId,
+          assignee_id: args.assigneeId,
+        }),
+      ),
+  });
+  const unassignMutation = useMutation({
+    mutationFn: (args: { viewId: number; taskId: number; assigneeId: string }) =>
+      withAuthRetry(token, t =>
+        removeUserFromTask(t, args.viewId, {
           task_id: args.taskId,
           assignee_id: args.assigneeId,
         }),
@@ -170,10 +179,14 @@ export function useTaskMutations() {
     patchTaskCache(prev => prev.filter(t => !gone.has(String(t.task_id))));
   };
 
-  // Adds one assignee to an existing task (POST /assignees/create/{view_id} —
-  // there's no bulk form, and no way to remove one once added; see
-  // services/taskAssignees.ts). Throws on self-assignment, on an org mismatch,
-  // or on the usual unavailable-right-now reasons, same as the other writes here.
+  // Adds/removes one assignee on an existing task (POST /assignees/create and
+  // DELETE /assignees/remove — no bulk form for either; see
+  // services/taskAssignees.ts). Assigning is the looser of the two (owner,
+  // creator or an existing assignee can do it); removing needs owner/creator.
+  // Neither accepts your own id — the server 403s a self-assign or
+  // self-remove before checking anything else. Both throw on failure, same as
+  // the other writes here, so a denied removal doesn't silently look like it
+  // worked.
   const assignUser = async (
     taskId: string,
     assigneeId: string,
@@ -202,11 +215,40 @@ export function useTaskMutations() {
     );
   };
 
+  const unassignUser = async (
+    taskId: string,
+    assigneeId: string,
+  ): Promise<void> => {
+    if (!canMutate || viewId === undefined || !isServerTaskId(taskId)) {
+      throw new Error(reasonUnavailable());
+    }
+    await unassignMutation.mutateAsync({
+      viewId,
+      taskId: Number(taskId),
+      assigneeId,
+    });
+    setItems(prev =>
+      prev.map(i =>
+        i.id === taskId
+          ? { ...i, assigneeIds: i.assigneeIds.filter(id => id !== assigneeId) }
+          : i,
+      ),
+    );
+    patchTaskCache(prev =>
+      prev.map(t =>
+        String(t.task_id) === taskId
+          ? { ...t, assignee_ids: t.assignee_ids.filter(id => id !== assigneeId) }
+          : t,
+      ),
+    );
+  };
+
   return {
     addItem,
     editItem,
     removeItem,
     assignUser,
+    unassignUser,
     // Governs the Assignees field's read-only display for a task that can't
     // have assignees changed at all right now (nothing server-backed to assign
     // against) — true whenever this task is, or would be, a server-backed one.
