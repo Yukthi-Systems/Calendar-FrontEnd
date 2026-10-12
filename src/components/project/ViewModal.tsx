@@ -2,10 +2,10 @@ import { useEffect, useState } from 'react';
 import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { Check, Share2 } from 'lucide-react-native';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { STATUSES, VIEW_TYPES } from '../../data/constants';
+import { STATUSES, TAGS, VIEW_TYPES } from '../../data/constants';
 import { fieldOptionsFor } from '../../data/viewFields';
 import { isServerViewId } from '../../data/viewSync';
-import type { ProjectView, Status, ViewField, ViewType } from '../../data/types';
+import type { ProjectView, Status, TaskTag, ViewField, ViewType } from '../../data/types';
 
 export interface ViewDraft {
   name: string;
@@ -13,6 +13,7 @@ export interface ViewDraft {
   description: string;
   fields: ViewField[] | undefined;
   statusFilter: Status[] | undefined;
+  tagFilter: TaskTag[] | undefined;
   showRecurring: boolean;
   showComments: boolean;
   showSubtasks: boolean;
@@ -43,6 +44,7 @@ export function ViewModal({
   const [type, setType] = useState<ViewType>('kanban');
   const [fields, setFields] = useState<ViewField[]>([]);
   const [statusFilter, setStatusFilter] = useState<Status[]>([]);
+  const [tagFilter, setTagFilter] = useState<TaskTag[]>([]);
   const [showRecurring, setShowRecurring] = useState(false);
   const [showComments, setShowComments] = useState(false);
   const [showSubtasks, setShowSubtasks] = useState(false);
@@ -56,6 +58,7 @@ export function ViewModal({
       setType(nextType);
       setFields(view?.fields ?? allFieldKeys(nextType));
       setStatusFilter(view?.statusFilter ?? []);
+      setTagFilter(view?.tagFilter ?? []);
       setShowRecurring(view?.showRecurring ?? false);
       setShowComments(view?.showComments ?? false);
       setShowSubtasks(view?.showSubtasks ?? false);
@@ -78,6 +81,11 @@ export function ViewModal({
 
   const toggleStatus = (key: Status) =>
     setStatusFilter(prev =>
+      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key],
+    );
+
+  const toggleTag = (key: TaskTag) =>
+    setTagFilter(prev =>
       prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key],
     );
 
@@ -105,6 +113,7 @@ export function ViewModal({
       description: description.trim(),
       fields: options && !allSelected ? fields : undefined,
       statusFilter: statusFilter.length > 0 ? statusFilter : undefined,
+      tagFilter: tagFilter.length > 0 ? tagFilter : undefined,
       showRecurring,
       showComments,
       showSubtasks,
@@ -240,6 +249,33 @@ export function ViewModal({
               {statusFilter.length === 0
                 ? 'Every status shown.'
                 : 'Only the selected statuses are shown.'}
+            </Text>
+
+            <Text className="mb-2 text-xs font-semibold uppercase text-text-main">
+              Tag filter
+            </Text>
+            <View className="mb-1 flex-row flex-wrap gap-2">
+              {TAGS.map(t => {
+                const on = tagFilter.includes(t.key);
+                return (
+                  <Pressable
+                    key={t.key}
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: on }}
+                    onPress={() => toggleTag(t.key)}
+                    style={on ? { borderColor: t.color, backgroundColor: `${t.color}1a` } : undefined}
+                    className="flex-row items-center gap-1.5 rounded-full border border-border-main px-3 py-1.5"
+                  >
+                    {on ? <Check size={14} color={heading} /> : null}
+                    <Text className="text-sm text-text-heading">{t.label}</Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+            <Text className="mb-5 text-xs text-text-main">
+              {tagFilter.length === 0
+                ? 'Every tag shown.'
+                : 'Only the selected tags are shown.'}
             </Text>
 
             <Text className="mb-2 text-xs font-semibold uppercase text-text-main">

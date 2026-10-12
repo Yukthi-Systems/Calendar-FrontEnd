@@ -2,23 +2,28 @@ import { atom, getDefaultStore } from 'jotai';
 import {
   activeViewIdAtom,
   commentsAtom,
-  itemsAtom,
   projectHydratedAtom,
   viewsAtom,
 } from '../atoms/project';
 import { profileOverridesAtom } from '../atoms/profile';
 import { themeAtom } from '../atoms/theme';
 import { storage } from './runtime';
-import { migrateRecurrence } from '../data/rrule';
-import type { WorkItem } from '../data/types';
 
-// Local persistence for the project workspace (views, items, active tab, profile),
-// ported from authStore.ts's session pattern: hydrate the atoms from storage once
-// at boot, then keep storage in step with every change.
+// Local persistence for the project workspace (views, comments, active tab,
+// profile, theme), ported from authStore.ts's session pattern: hydrate the atoms
+// from storage once at boot, then keep storage in step with every change.
 //
-// Tasks-Main-API has no task/comment/view endpoints yet, so these stay on-device
-// and a first run starts empty. When those endpoints exist, fetch here (still
-// landing in these same atoms via `store.set`).
+// Tasks are deliberately NOT part of this — they're never written to local
+// storage, not even as an offline cache or a fallback when the server is
+// unreachable. A local copy of a task can silently drift from (or just plain not
+// exist on) the server, and the API has no way to tell a "real" task from a
+// locally-invented one, so this app doesn't keep one at all: tasks only ever come
+// from and go to Tasks-Main-API's /tasks (src/hooks/useTasksSync.ts,
+// useTaskMutations.ts). When the server is unavailable, a task action fails
+// visibly instead of quietly succeeding into a local-only copy.
+//
+// Comments/views still stay on-device — Tasks-Main-API has no /comments endpoint
+// yet, and views are synced but keep a local cache for instant load.
 
 const store = getDefaultStore();
 
@@ -33,7 +38,6 @@ const PROJECT_KEY = 'ytc_project_v4';
 const persistedProjectAtom = atom(get => ({
   views: get(viewsAtom),
   activeViewId: get(activeViewIdAtom),
-  items: get(itemsAtom),
   comments: get(commentsAtom),
   profile: get(profileOverridesAtom),
   theme: get(themeAtom),
@@ -42,10 +46,13 @@ const persistedProjectAtom = atom(get => ({
 let persisting = false;
 
 export const bootProject = async () => {
+  let hadStoredItems = false;
   try {
     const raw = await storage.getItem(PROJECT_KEY);
     if (raw) {
-      applySaved(JSON.parse(raw));
+      const parsed = JSON.parse(raw);
+      hadStoredItems = Array.isArray(parsed?.items);
+      applySaved(parsed);
     }
   } catch {
     /* corrupt or unavailable — start from the mock seed */
@@ -54,6 +61,12 @@ export const bootProject = async () => {
   if (!persisting) {
     persisting = true;
     store.sub(persistedProjectAtom, persistProject);
+  }
+  // A device that had tasks saved locally before this stopped doing that still
+  // has them sitting in storage, unread from here on — overwrite the blob once
+  // so they're actually gone, not just ignored.
+  if (hadStoredItems) {
+    persistProject();
   }
 };
 
@@ -66,16 +79,6 @@ function applySaved(saved: unknown) {
   const s = saved as Record<string, unknown>;
   if (Array.isArray(s.views) && s.views.length > 0) {
     store.set(viewsAtom, s.views);
-  }
-  if (Array.isArray(s.items)) {
-    // Recurrence used to be a keyword ('weekly'…); it's an RRULE string now.
-    store.set(
-      itemsAtom,
-      (s.items as WorkItem[]).map(i => ({
-        ...i,
-        recurrence: migrateRecurrence(i.recurrence),
-      })),
-    );
   }
   if (Array.isArray(s.comments)) {
     store.set(commentsAtom, s.comments);

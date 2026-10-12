@@ -7,6 +7,17 @@ export type Status =
 export type Priority = 'low' | 'medium' | 'high';
 export type ViewType = 'table' | 'team' | 'kanban' | 'roadmap' | 'calendar';
 
+// Mirrors Tasks-Main-API's task_tag enum — every task will need one once /tasks is
+// integrated, and a view can restrict itself to a subset (src/data/constants.ts
+// has the display labels/colors and the BACKEND_TAG mapping).
+export type TaskTag =
+  | 'work'
+  | 'important'
+  | 'urgent'
+  | 'optional'
+  | 'personal'
+  | 'other';
+
 // How a task repeats: an RFC 5545 RRULE value (e.g. "FREQ=WEEKLY;BYDAY=MO,FR"),
 // anchored on the task's own `start` date. See src/data/rrule.ts for the parser,
 // writer and expander. Tasks saved before RRULE support held 'weekly' | 'monthly'
@@ -39,7 +50,11 @@ export interface WorkItem {
   description: string;
   status: Status;
   priority: Priority;
-  // Zero or more members; [] means unassigned.
+  // Required by Tasks-Main-API (task_tag column, NOT NULL) once a task is
+  // server-backed; defaults to 'other' for anything created before this existed.
+  tag: TaskTag;
+  // Zero or more members; [] means unassigned. Read-only once server-backed — the
+  // API has no endpoint yet to set a task's assignees (see ItemFormModal).
   assigneeIds: string[];
   // Whoever opened this task — the only one who can delete it. A member id
   // (see src/data/permissions.ts for how roles/permissions read this).
@@ -73,8 +88,9 @@ export interface ProjectView {
   fields?: ViewField[];
   // Mirrors Tasks-Main-API's task_views row (status_filter/show_*) so a view is
   // ready to actually filter once the /tasks API exists — inert until then.
-  // Empty/undefined statusFilter means "every status".
+  // Empty/undefined statusFilter/tagFilter means "every status"/"every tag".
   statusFilter?: Status[];
+  tagFilter?: TaskTag[];
   showRecurring?: boolean;
   showComments?: boolean;
   showSubtasks?: boolean;

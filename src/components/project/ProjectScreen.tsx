@@ -21,6 +21,7 @@ import { profileAtom, profileOpenAtom } from '../../atoms/profile';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { useViewUrlSync } from '../../hooks/useViewUrlSync';
 import { useViewsSync } from '../../hooks/useViewsSync';
+import { useTasksSync } from '../../hooks/useTasksSync';
 import { VIEW_TYPES } from '../../data/constants';
 import type { ProjectView, ViewType } from '../../data/types';
 import { CalendarView } from './CalendarView';
@@ -38,6 +39,7 @@ import { TeamPlanningView } from './TeamPlanningView';
 import { UndoToast } from './UndoToast';
 import { ViewModal, type ViewDraft } from './ViewModal';
 import { ShareViewModal } from './ShareViewModal';
+import { ViewMenuModal } from './ViewMenuModal';
 
 // Width at which the view tabs become a left rail.
 const WIDE_BREAKPOINT = 1024;
@@ -79,9 +81,12 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   const undoTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(undoTimer.current), []);
   const [shareView, setShareView] = useState<ProjectView | null>(null);
+  // Which view's "⋯" action sheet (Share/Edit/Delete) is open, if any.
+  const [menuView, setMenuView] = useState<ProjectView | null>(null);
 
   const active = views.find(v => v.id === activeId) ?? views[0];
   const ActiveView = active ? VIEW_COMPONENTS[active.type] : null;
+  useTasksSync(active);
 
   const save = async (draft: ViewDraft) => {
     setModalView(undefined);
@@ -93,11 +98,10 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
     }
   };
 
-  const remove = async () => {
-    if (!modalView) {
-      return;
-    }
-    const removed = modalView;
+  // Takes the view explicitly — called from the ViewModal's own Delete button
+  // (editing that view) and from the "⋯" action sheet's Delete row (no modal
+  // open at all) alike.
+  const remove = async (removed: ProjectView) => {
     const rest = views.filter(v => v.id !== removed.id);
     setUndo({ view: removed, index: views.indexOf(removed) });
     clearTimeout(undoTimer.current);
@@ -245,11 +249,11 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
     </Pressable>
   );
 
-  const editButton = (v: ProjectView) => (
+  const moreButton = (v: ProjectView) => (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={`Edit ${v.name}`}
-      onPress={() => setModalView(v)}
+      accessibilityLabel={`More options for ${v.name}`}
+      onPress={() => setMenuView(v)}
       className="rounded-md px-1.5 py-1 active:opacity-70"
     >
       <MoreHorizontal size={18} color={text} />
@@ -258,6 +262,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
 
   const onShareView = (v: ProjectView) => {
     setModalView(undefined);
+    setMenuView(null);
     setShareView(v);
   };
 
@@ -335,7 +340,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
                     }`}
                   >
                     {viewButton(v, isActive, true)}
-                    {isActive ? editButton(v) : null}
+                    {isActive ? moreButton(v) : null}
                   </View>
                 );
               })}
@@ -375,7 +380,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
                     }`}
                   >
                     {viewButton(v, isActive, false)}
-                    {isActive ? editButton(v) : <View className="w-2" />}
+                    {isActive ? moreButton(v) : <View className="w-2" />}
                   </View>
                 );
               })}
@@ -407,13 +412,27 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
         view={modalView ?? null}
         onClose={() => setModalView(undefined)}
         onSave={save}
-        onDelete={remove}
+        onDelete={() => modalView && remove(modalView)}
         onShare={onShareView}
       />
       <ShareViewModal
         visible={!!shareView}
         view={shareView}
         onClose={() => setShareView(null)}
+      />
+      <ViewMenuModal
+        visible={!!menuView}
+        view={menuView}
+        onClose={() => setMenuView(null)}
+        onShare={v => onShareView(v)}
+        onEdit={v => {
+          setMenuView(null);
+          setModalView(v);
+        }}
+        onDelete={v => {
+          setMenuView(null);
+          remove(v);
+        }}
       />
       <ProfileModal onSignOut={onSignOut} />
       <ProfileEditModal />

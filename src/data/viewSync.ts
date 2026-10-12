@@ -1,4 +1,9 @@
-import { BACKEND_STATUS, STATUS_FROM_BACKEND } from './constants';
+import {
+  BACKEND_STATUS,
+  BACKEND_TAG,
+  STATUS_FROM_BACKEND,
+  TAG_FROM_BACKEND,
+} from './constants';
 import type { ProjectView, ViewField, ViewType } from './types';
 import type {
   CreateTaskViewPayload,
@@ -26,6 +31,7 @@ export function viewFromServer(dto: TaskViewDbDto): ProjectView {
     statusFilter: dto.status_filter
       .map(s => STATUS_FROM_BACKEND[s])
       .filter(Boolean),
+    tagFilter: dto.task_tag_filter.map(t => TAG_FROM_BACKEND[t]).filter(Boolean),
     showRecurring: dto.show_recurring,
     showComments: dto.show_comments,
     showSubtasks: dto.show_subtasks,
@@ -41,6 +47,7 @@ export function viewToCreatePayload(
     description: view.description ?? '',
     ui_info: { type: view.type, fields: view.fields ?? null },
     status_filter: (view.statusFilter ?? []).map(s => BACKEND_STATUS[s]),
+    task_tag_filter: (view.tagFilter ?? []).map(t => BACKEND_TAG[t]),
     show_recurring: view.showRecurring ?? false,
     show_comments: view.showComments ?? false,
     show_subtasks: view.showSubtasks ?? false,

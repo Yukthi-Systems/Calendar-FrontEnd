@@ -1,8 +1,19 @@
 import { AppState, Linking } from 'react-native';
 import { getDefaultStore } from 'jotai';
-import { itemFormAtom, itemsAtom, projectHydratedAtom } from '../atoms/project';
+import {
+  activeViewIdAtom,
+  itemFormAtom,
+  itemsAtom,
+  projectHydratedAtom,
+  viewsAtom,
+} from '../atoms/project';
+import { tokenAtom } from '../atoms/auth';
 import { widgetTasks } from '../data/widgetTasks';
 import { pushWidgetTasks, takeWidgetCompletions } from './widget';
+import { updateTask } from './tasks';
+import { isServerTaskId, taskToUpdatePayload } from '../data/taskSync';
+import { isServerViewId } from '../data/viewSync';
+import { TASKS_API_ENABLED } from '../config/features';
 
 // Keeps the home-screen widget in step with the app: today's tasks flow out to
 // it, and checkboxes ticked in it flow back in as completed tasks. The widget
@@ -12,12 +23,42 @@ import { pushWidgetTasks, takeWidgetCompletions } from './widget';
 const store = getDefaultStore();
 let booted = false;
 
+// A checkbox ticked in the widget only "sticks" once the server confirms it —
+// same rule as every other task write in this app (see useTaskMutations' header
+// comment): itemsAtom only ever reflects what Tasks-Main-API has actually saved,
+// never a local guess that could silently drift from it. If the server can't be
+// reached right now (signed out, TASKS_API_ENABLED off, or the active view isn't
+// server-backed), a widget tick is just dropped rather than applied locally —
+// it'll need to be ticked again once saving tasks works.
 const applyWidgetCompletions = async () => {
   const ids = await takeWidgetCompletions();
-  if (ids.length > 0) {
-    store.set(itemsAtom, prev =>
-      prev.map(i => (ids.includes(i.id) ? { ...i, status: 'completed' } : i)),
-    );
+  if (ids.length === 0) {
+    return;
+  }
+  const token = store.get(tokenAtom);
+  const activeView = store
+    .get(viewsAtom)
+    .find(v => v.id === store.get(activeViewIdAtom));
+  const viewId =
+    TASKS_API_ENABLED && token && activeView && isServerViewId(activeView.id)
+      ? Number(activeView.id)
+      : undefined;
+  if (!token || viewId === undefined) {
+    return;
+  }
+
+  for (const id of ids) {
+    const item = store.get(itemsAtom).find(i => i.id === id);
+    if (!item || !isServerTaskId(item.id) || item.status === 'completed') {
+      continue;
+    }
+    const updated = { ...item, status: 'completed' as const };
+    try {
+      await updateTask(token, viewId, taskToUpdatePayload(updated));
+      store.set(itemsAtom, prev => prev.map(i => (i.id === id ? updated : i)));
+    } catch (err) {
+      console.warn('Could not save a widget completion to the server:', err);
+    }
   }
 };
 

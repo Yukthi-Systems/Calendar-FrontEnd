@@ -10,14 +10,14 @@ import {
   Repeat,
 } from 'lucide-react-native';
 import {
-  commentsAtom,
   itemFormAtom,
   itemsAtom,
   selectedItemIdAtom,
 } from '../../atoms/project';
-import { PRIORITY_COLOR, STATUSES } from '../../data/constants';
+import { PRIORITY_COLOR, STATUSES, tagInfo } from '../../data/constants';
 import { currentUserIdAtom } from '../../atoms/members';
 import { canDelete, canEditFields, roleFor } from '../../data/permissions';
+import { useTaskMutations } from '../../hooks/useTaskMutations';
 import { describeRecurrence } from '../../data/rrule';
 import {
   MAX_DEPTH,
@@ -35,19 +35,22 @@ import { AssigneeAvatars, Pill, StatusDot, assigneeNames } from './shared';
 // Detail sheet for any work item, opened from every view.
 export function ItemModal() {
   const [selectedId, setSelectedId] = useAtom(selectedItemIdAtom);
-  const [items, setItems] = useAtom(itemsAtom);
+  const items = useAtomValue(itemsAtom);
   const CURRENT_USER_ID = useAtomValue(currentUserIdAtom);
-  const setComments = useSetAtom(commentsAtom);
   const setForm = useSetAtom(itemFormAtom);
+  const { editItem, removeItem, isServerBacked, unavailableReason } = useTaskMutations();
   const { heading, text, accent } = useThemeColors();
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [actionError, setActionError] = useState<string | null>(null);
   const item = items.find(i => i.id === selectedId);
   const close = () => {
     setConfirmDelete(false);
+    setActionError(null);
     setSelectedId(null);
   };
   const open = (id: string) => {
     setConfirmDelete(false);
+    setActionError(null);
     setSelectedId(id);
   };
 
@@ -107,6 +110,17 @@ export function ItemModal() {
                 {item.description}
               </Text>
 
+              {!isServerBacked && unavailableReason ? (
+                <View className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+                  <Text className="text-xs text-text-heading">{unavailableReason}</Text>
+                </View>
+              ) : null}
+              {actionError ? (
+                <View className="mb-4 rounded-xl border border-destructive/40 bg-destructive/5 px-3 py-2">
+                  <Text className="text-xs text-destructive">{actionError}</Text>
+                </View>
+              ) : null}
+
               {role === 'assignee' ? (
                 <View className="mb-4 rounded-xl border border-border-main bg-bg-main px-3 py-2">
                   <Text className="text-xs text-text-main">
@@ -122,6 +136,7 @@ export function ItemModal() {
                   text={`${item.priority} priority`}
                   color={PRIORITY_COLOR[item.priority]}
                 />
+                <Pill text={tagInfo(item.tag).label} color={tagInfo(item.tag).color} />
                 {item.labels.map(l => (
                   <Pill key={l} text={l} />
                 ))}
@@ -177,9 +192,11 @@ export function ItemModal() {
                       key={s.key}
                       accessibilityRole="button"
                       onPress={() =>
-                        setItems(prev =>
-                          prev.map(i =>
-                            i.id === item.id ? { ...i, status: s.key } : i,
+                        editItem({ ...item, status: s.key }).catch(err =>
+                          setActionError(
+                            err instanceof Error
+                              ? err.message
+                              : 'Could not update the status',
                           ),
                         )
                       }
@@ -276,15 +293,15 @@ export function ItemModal() {
                         setConfirmDelete(true);
                         return;
                       }
-                      const gone = new Set([
-                        item.id,
-                        ...descendantsOf(items, item.id).map(d => d.id),
-                      ]);
-                      setItems(prev => prev.filter(i => !gone.has(i.id)));
-                      setComments(prev =>
-                        prev.filter(c => !gone.has(c.itemId)),
-                      );
-                      close();
+                      removeItem(item)
+                        .then(close)
+                        .catch(err =>
+                          setActionError(
+                            err instanceof Error
+                              ? err.message
+                              : 'Could not delete the task',
+                          ),
+                        );
                     }}
                     className="items-center rounded-2xl border border-destructive/40 px-4 py-3 active:opacity-70"
                   >

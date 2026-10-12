@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -16,9 +17,10 @@ import {
   itemsAtom,
   selectedItemIdAtom,
 } from '../../atoms/project';
-import { PRIORITY_COLOR, STATUSES } from '../../data/constants';
+import { PRIORITY_COLOR, STATUSES, TAGS } from '../../data/constants';
 import { currentUserIdAtom, membersAtom } from '../../atoms/members';
 import { useUserSearch } from '../../hooks/useUserSearch';
+import { useTaskMutations } from '../../hooks/useTaskMutations';
 import { yearlyRecurrenceNeedsLeapWarning } from '../../data/recurrence';
 import {
   RRULE_PRESETS,
@@ -29,12 +31,7 @@ import {
   normalizeRRule,
   parseRRule,
 } from '../../data/rrule';
-import type {
-  Priority,
-  Reminder,
-  Status,
-  WorkItem,
-} from '../../data/types';
+import type { Priority, Reminder, Status, TaskTag } from '../../data/types';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { Field, FormInput as Input, MultiSelectDropdown } from './shared';
 
@@ -59,7 +56,7 @@ const validTime = (s: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(s);
 // columns and the item detail sheet.
 export function ItemFormModal() {
   const [form, setForm] = useAtom(itemFormAtom);
-  const [items, setItems] = useAtom(itemsAtom);
+  const items = useAtomValue(itemsAtom);
   const CURRENT_USER_ID = useAtomValue(currentUserIdAtom);
   const MEMBERS = useAtomValue(membersAtom);
   // Org-wide email search; hits join the assignee options above (membersAtom reads
@@ -67,6 +64,9 @@ export function ItemFormModal() {
   const [assigneeQuery, setAssigneeQuery] = useState('');
   useUserSearch(assigneeQuery);
   const setSelected = useSetAtom(selectedItemIdAtom);
+  const { addItem, editItem, isServerBacked, canCreate, unavailableReason } =
+    useTaskMutations();
+  const [saving, setSaving] = useState(false);
 
   const editing =
     form?.mode === 'edit' ? items.find(i => i.id === form.id) : undefined;
@@ -80,6 +80,7 @@ export function ItemFormModal() {
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState<Status>('not_started');
   const [priority, setPriority] = useState<Priority>('medium');
+  const [tag, setTag] = useState<TaskTag>('other');
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
@@ -118,6 +119,7 @@ export function ItemFormModal() {
         'not_started',
     );
     setPriority(editing?.priority ?? 'medium');
+    setTag(editing?.tag ?? 'other');
     setAssigneeIds(editing ? editing.assigneeIds : parent?.assigneeIds ?? []);
     setStart(editing?.start ?? parent?.start ?? format(today, DATE_FMT));
     setEnd(editing?.end ?? parent?.end ?? format(addDays(today, 2), DATE_FMT));
@@ -198,9 +200,13 @@ export function ItemFormModal() {
   };
   const valid =
     !Object.values(errors).some(Boolean) && (!needsLeapWarning || leapAck);
+  // Creating and editing are gated differently right now — see
+  // useTaskMutations' addItem/editItem — so which one applies depends on which
+  // this form is doing.
+  const canSaveNow = editing ? !unavailableReason : canCreate;
 
-  const save = () => {
-    if (!valid) {
+  const save = async () => {
+    if (!valid || !canSaveNow || saving) {
       return;
     }
     const fields = {
@@ -208,7 +214,10 @@ export function ItemFormModal() {
       description: description.trim(),
       status,
       priority,
-      assigneeIds,
+      tag,
+      // Server-backed tasks can't change assignees here (see the Assignees
+      // field below) — keep whatever the task already had.
+      assigneeIds: editing ? editing.assigneeIds : assigneeIds,
       start,
       end,
       labels: labels
@@ -218,25 +227,28 @@ export function ItemFormModal() {
       recurrence,
       reminders,
     };
-    if (editing) {
-      // createdById never changes via edit — who opened a task is fixed.
-      setItems(prev =>
-        prev.map(i => (i.id === editing.id ? { ...i, ...fields } : i)),
-      );
-    } else {
-      const next =
-        Math.max(100, ...items.map(i => Number(i.id.replace(/\D/g, '')) || 0)) +
-        1;
-      const created: WorkItem = {
-        id: `YTC-${next}`,
-        parentId: parent?.id ?? null,
-        createdById: CURRENT_USER_ID,
-        ...fields,
-      };
-      setItems(prev => [...prev, created]);
-      setSelected(created.id);
+    setSaving(true);
+    try {
+      if (editing) {
+        // createdById never changes via edit — who opened a task is fixed.
+        await editItem({ ...editing, ...fields });
+      } else {
+        const id = await addItem({
+          parentId: parent?.id ?? null,
+          ...fields,
+        });
+        // '' means it was created but can't be confirmed/shown yet (see
+        // addItem's own comment) — nothing to select in that case.
+        if (id) {
+          setSelected(id);
+        }
+      }
+      close();
+    } catch (err) {
+      console.warn('Could not save the task:', err);
+    } finally {
+      setSaving(false);
     }
-    close();
   };
 
   return (
@@ -311,35 +323,67 @@ export function ItemFormModal() {
                 </View>
               </Field>
 
+              <Field label="Tag *">
+                <View className="flex-row flex-wrap gap-2">
+                  {TAGS.map(t => (
+                    <Chip
+                      key={t.key}
+                      label={t.label}
+                      color={t.color}
+                      active={tag === t.key}
+                      onPress={() => setTag(t.key)}
+                    />
+                  ))}
+                </View>
+              </Field>
+
               <Field
                 label={`Assignees${
                   assigneeIds.length > 0 ? ` (${assigneeIds.length})` : ''
                 }`}
               >
-                <MultiSelectDropdown
-                  label="Assignees"
-                  options={MEMBERS.map(m => ({
-                    id: m.id,
-                    label: m.name,
-                    color: m.color,
-                    locked:
-                      m.id === CURRENT_USER_ID && assigneeIds.includes(m.id),
-                  }))}
-                  selectedIds={assigneeIds}
-                  onToggle={toggleAssignee}
-                  onQueryChange={setAssigneeQuery}
-                  placeholder="Select assignees"
-                />
-                {assigneeIds.length === 0 ? (
-                  <Text className="mt-1 text-xs text-text-main">
-                    Nobody selected — this task will be unassigned.
-                  </Text>
-                ) : assigneeIds.includes(CURRENT_USER_ID) ? (
-                  <Text className="mt-1 text-xs text-text-main">
-                    You're on this task — you can add others, but you can't
-                    remove yourself.
-                  </Text>
-                ) : null}
+                {isServerBacked ? (
+                  <>
+                    <Text className="text-sm text-text-heading">
+                      {assigneeIds.length > 0
+                        ? assigneeIds
+                            .map(id => MEMBERS.find(m => m.id === id)?.name ?? id)
+                            .join(', ')
+                        : 'Unassigned'}
+                    </Text>
+                    <Text className="mt-1 text-xs text-text-main">
+                      Assigning teammates isn't available yet — the API has no
+                      endpoint for it.
+                    </Text>
+                  </>
+                ) : (
+                  <>
+                    <MultiSelectDropdown
+                      label="Assignees"
+                      options={MEMBERS.map(m => ({
+                        id: m.id,
+                        label: m.name,
+                        color: m.color,
+                        locked:
+                          m.id === CURRENT_USER_ID && assigneeIds.includes(m.id),
+                      }))}
+                      selectedIds={assigneeIds}
+                      onToggle={toggleAssignee}
+                      onQueryChange={setAssigneeQuery}
+                      placeholder="Select assignees"
+                    />
+                    {assigneeIds.length === 0 ? (
+                      <Text className="mt-1 text-xs text-text-main">
+                        Nobody selected — this task will be unassigned.
+                      </Text>
+                    ) : assigneeIds.includes(CURRENT_USER_ID) ? (
+                      <Text className="mt-1 text-xs text-text-main">
+                        You're on this task — you can add others, but you can't
+                        remove yourself.
+                      </Text>
+                    ) : null}
+                  </>
+                )}
               </Field>
 
               <View className="flex-row gap-3">
@@ -533,16 +577,20 @@ export function ItemFormModal() {
               </Pressable>
               <Pressable
                 accessibilityRole="button"
-                accessibilityState={{ disabled: !valid }}
-                disabled={!valid}
+                accessibilityState={{ disabled: !valid || !canSaveNow || saving }}
+                disabled={!valid || !canSaveNow || saving}
                 onPress={save}
                 className={`flex-1 items-center rounded-2xl bg-accent py-3 active:opacity-80 ${
-                  valid ? '' : 'opacity-40'
+                  valid && canSaveNow && !saving ? '' : 'opacity-40'
                 }`}
               >
-                <Text className="font-semibold text-accent-foreground">
-                  {editing ? 'Save' : 'Create'}
-                </Text>
+                {saving ? (
+                  <ActivityIndicator color="#ffffff" />
+                ) : (
+                  <Text className="font-semibold text-accent-foreground">
+                    {editing ? 'Save' : 'Create'}
+                  </Text>
+                )}
               </Pressable>
             </View>
           </Pressable>
