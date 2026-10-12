@@ -4,6 +4,7 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import { tokenAtom, userAtom } from '../atoms/auth';
 import { userInfoAtom } from '../atoms/userInfo';
 import { fetchUserInfo } from '../services/users';
+import { withAuthRetry } from '../services/authRetry';
 
 // GET /user/info/{user_id} for the signed-in user, via TanStack Query. The result
 // is bridged onto userInfoAtom so the rest of the app (profile, members, view sync,
@@ -16,7 +17,7 @@ export function useUserInfo() {
 
   const query = useQuery({
     queryKey: ['userInfo', userId],
-    queryFn: () => fetchUserInfo(token!, userId!),
+    queryFn: () => withAuthRetry(token, t => fetchUserInfo(t, userId!)),
     enabled: !!token && !!userId,
   });
 

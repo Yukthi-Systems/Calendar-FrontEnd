@@ -71,7 +71,7 @@ export function ItemFormModal() {
   const [assigneeQuery, setAssigneeQuery] = useState('');
   useUserSearch(assigneeQuery);
   const setSelected = useSetAtom(selectedItemIdAtom);
-  const { addItem, editItem, isServerBacked, canCreate, unavailableReason } =
+  const { addItem, editItem, assignUser, isServerBacked, unavailableReason } =
     useTaskMutations();
   const [saving, setSaving] = useState(false);
 
@@ -107,12 +107,22 @@ export function ItemFormModal() {
   const [moreOpen, setMoreOpen] = useState(false);
   const c = useThemeColors();
 
-  // You can always add yourself, but never remove yourself — only someone
-  // else can do that (see src/data/permissions.ts).
+  // Server-backed: once a person is actually assigned (i.e. was already on the
+  // task when this form opened), they can't be removed here — the API only has
+  // an endpoint to add an assignee, never to remove one (see
+  // useTaskMutations.ts's assignUser). Newly picked-but-not-yet-saved people
+  // stay freely removable until Save actually sends them.
+  // Local-only (signed out, or the API unavailable): the old rule applies
+  // instead — you can always add yourself, but never remove yourself, same as
+  // before any of this existed (see src/data/permissions.ts).
+  const confirmedAssigneeIds = isServerBacked ? editing?.assigneeIds ?? [] : [];
   const toggleAssignee = (id: string) =>
     setAssigneeIds(prev => {
       if (prev.includes(id)) {
-        return id === CURRENT_USER_ID ? prev : prev.filter(x => x !== id);
+        const locked = isServerBacked
+          ? confirmedAssigneeIds.includes(id)
+          : id === CURRENT_USER_ID;
+        return locked ? prev : prev.filter(x => x !== id);
       }
       return [...prev, id];
     });
@@ -219,10 +229,16 @@ export function ItemFormModal() {
   };
   const valid =
     !Object.values(errors).some(Boolean) && (!needsLeapWarning || leapAck);
-  // Creating and editing are gated differently right now — see
-  // useTaskMutations' addItem/editItem — so which one applies depends on which
-  // this form is doing.
-  const canSaveNow = editing ? !unavailableReason : canCreate;
+  const canSaveNow = !unavailableReason;
+
+  // Picked in this session but not yet actually assigned server-side — newly
+  // toggled-on people, minus whoever was already confirmed, minus yourself
+  // (the server rejects self-assignment outright).
+  const toAssign = isServerBacked
+    ? assigneeIds.filter(
+        id => !confirmedAssigneeIds.includes(id) && id !== CURRENT_USER_ID,
+      )
+    : [];
 
   const save = async () => {
     if (!valid) {
@@ -241,9 +257,11 @@ export function ItemFormModal() {
       status,
       priority,
       tag,
-      // Server-backed tasks can't change assignees here (see the Assignees
-      // field below) — keep whatever the task already had.
-      assigneeIds: editing ? editing.assigneeIds : assigneeIds,
+      // Assignees are never part of the task's own payload — the API assigns
+      // one person per call (assignNewAssignees below), separate from the
+      // task fields. Server-backed: keep whatever's already confirmed here;
+      // local-only: assigneeIds IS the task's assignee list, same as before.
+      assigneeIds: isServerBacked ? editing?.assigneeIds ?? [] : assigneeIds,
       start,
       end,
       labels: labels
@@ -253,20 +271,31 @@ export function ItemFormModal() {
       recurrence,
       reminders,
     };
+    const assignNewAssignees = async (taskId: string) => {
+      for (const id of toAssign) {
+        try {
+          await assignUser(taskId, id);
+        } catch (err) {
+          console.warn('Could not assign', id, 'to', taskId, err);
+        }
+      }
+    };
     setSaving(true);
     try {
       if (editing) {
         // createdById never changes via edit — who opened a task is fixed.
         await editItem({ ...editing, ...fields });
+        await assignNewAssignees(editing.id);
       } else {
         const id = await addItem({
           parentId: parent?.id ?? null,
           ...fields,
         });
         // '' means it was created but can't be confirmed/shown yet (see
-        // addItem's own comment) — nothing to select in that case.
+        // addItem's own comment) — nothing to select or assign in that case.
         if (id) {
           setSelected(id);
+          await assignNewAssignees(id);
         }
       }
       close();
@@ -373,38 +402,35 @@ export function ItemFormModal() {
             ) : null
           }
           hint={
-            isServerBacked
-              ? 'Assigning teammates isn’t available yet — the API has no endpoint for it.'
-              : assigneeIds.length === 0
+            assigneeIds.length === 0
               ? 'Nobody selected — this task will be unassigned.'
+              : isServerBacked
+              ? toAssign.length > 0
+                ? `${toAssign.length} will be assigned when you save. Already-assigned people can’t be removed here.`
+                : 'Already-assigned people can’t be removed here — the API only has an endpoint to add one.'
               : assigneeIds.includes(CURRENT_USER_ID)
               ? 'You’re on this task — you can add others, but not remove yourself.'
               : null
           }
         >
-          {isServerBacked ? (
-            <Text className="text-sm text-text-heading">
-              {assigneeIds.length > 0
-                ? assigneeIds
-                    .map(id => MEMBERS.find(m => m.id === id)?.name ?? id)
-                    .join(', ')
-                : 'Unassigned'}
-            </Text>
-          ) : (
-            <MultiSelectDropdown
-              label="Assignees"
-              options={MEMBERS.map(m => ({
-                id: m.id,
-                label: m.name,
-                color: m.color,
-                locked: m.id === CURRENT_USER_ID && assigneeIds.includes(m.id),
-              }))}
-              selectedIds={assigneeIds}
-              onToggle={toggleAssignee}
-              onQueryChange={setAssigneeQuery}
-              placeholder="Select people"
-            />
-          )}
+          <MultiSelectDropdown
+            label="Assignees"
+            options={MEMBERS.filter(
+              m => !isServerBacked || m.id !== CURRENT_USER_ID,
+            ).map(m => ({
+              id: m.id,
+              label: m.name,
+              color: m.color,
+              locked: isServerBacked
+                ? confirmedAssigneeIds.includes(m.id)
+                : m.id === CURRENT_USER_ID && assigneeIds.includes(m.id),
+              lockedLabel: isServerBacked ? 'Assigned' : 'You',
+            }))}
+            selectedIds={assigneeIds}
+            onToggle={toggleAssignee}
+            onQueryChange={setAssigneeQuery}
+            placeholder="Select people"
+          />
         </Field>
 
         <View className="flex-row gap-3">

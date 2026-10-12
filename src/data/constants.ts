@@ -7,12 +7,7 @@ import {
   type LucideIcon,
 } from 'lucide-react-native';
 import type { Priority, Status, TaskTag, ViewType } from './types';
-import type {
-  BackendTaskStatus,
-  BackendTaskStatusWire,
-  BackendTaskTag,
-  BackendTaskTagWire,
-} from '../services/types';
+import type { BackendTaskStatus, BackendTaskTag } from '../services/types';
 
 export const STATUSES: { key: Status; label: string; color: string }[] = [
   { key: 'not_started', label: 'Not Started', color: '#6b7280' },
@@ -33,16 +28,14 @@ export const statusInfo = (status: Status) =>
   STATUS_BY_KEY[status] ?? STATUSES[0];
 
 // Tasks-Main-API's task_status enum uses different names/values (and merges
-// "rejected" into CANCELLED) — translate at the service boundary only. Every use
-// of this map builds a request payload, so it's spelled the way a REQUEST needs
-// it (PascalCase — see BackendTaskStatusWire); a response comes back
-// SCREAMING_SNAKE_CASE instead and is read via STATUS_FROM_BACKEND below.
-export const BACKEND_STATUS: Record<Status, BackendTaskStatusWire> = {
-  not_started: 'Pending',
-  in_progress: 'InProgress',
-  completed: 'Completed',
-  rejected: 'Cancelled',
-  on_hold: 'OnHold',
+// "rejected" into CANCELLED) — translate at the service boundary only. Same
+// casing both ways (request and response) — see BackendTaskStatus's own comment.
+export const BACKEND_STATUS: Record<Status, BackendTaskStatus> = {
+  not_started: 'PENDING',
+  in_progress: 'IN_PROGRESS',
+  completed: 'COMPLETED',
+  rejected: 'CANCELLED',
+  on_hold: 'ON_HOLD',
 };
 
 export const TAGS: { key: TaskTag; label: string; color: string }[] = [
@@ -60,15 +53,13 @@ export const TAG_BY_KEY = Object.fromEntries(
 
 export const tagInfo = (tag: TaskTag) => TAG_BY_KEY[tag] ?? TAGS[0];
 
-// Request-shaped spelling (PascalCase — see BackendTaskTagWire); a response reads
-// back SCREAMING_SNAKE_CASE instead, via TAG_FROM_BACKEND below.
-export const BACKEND_TAG: Record<TaskTag, BackendTaskTagWire> = {
-  work: 'Work',
-  important: 'Important',
-  urgent: 'Urgent',
-  optional: 'Optional',
-  personal: 'Personal',
-  other: 'Other',
+export const BACKEND_TAG: Record<TaskTag, BackendTaskTag> = {
+  work: 'WORK',
+  important: 'IMPORTANT',
+  urgent: 'URGENT',
+  optional: 'OPTIONAL',
+  personal: 'PERSONAL',
+  other: 'OTHER',
 };
 
 export const TAG_FROM_BACKEND: Record<BackendTaskTag, TaskTag> = {
