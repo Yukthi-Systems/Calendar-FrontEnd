@@ -3,6 +3,7 @@ export { Press } from './Press';
 export { Button, IconButton } from './Button';
 export { Input, Field } from './Input';
 export { DateField } from './DateField';
+export { Popover } from './Popover';
 export { Sheet, SheetHeader, SheetBody, SheetFooter, DOCK_BREAKPOINT } from './Sheet';
 export { SegmentedControl } from './SegmentedControl';
 export { Chip, Badge } from './Chip';

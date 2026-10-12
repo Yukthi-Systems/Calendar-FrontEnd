@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import { addDays, format, isValid, parse } from 'date-fns';
+import {
+  addDays,
+  differenceInCalendarDays,
+  format,
+  isValid,
+  parse,
+} from 'date-fns';
 import { ChevronDown, ChevronRight, Plus, X } from 'lucide-react-native';
 import {
   itemFormAtom,
@@ -215,6 +221,16 @@ export function ItemFormModal() {
     setReminders(prev => prev.filter(r => r.id !== id));
 
   const close = () => setForm(null);
+
+  // Moving the start past the due date drags the due date along, keeping the
+  // task's length — instead of leaving an error to fix by hand.
+  const changeStart = (next: string) => {
+    if (validDate(start) && validDate(end) && validDate(next) && next > end) {
+      const length = differenceInCalendarDays(parseDate(end), parseDate(start));
+      setEnd(format(addDays(parseDate(next), length), DATE_FMT));
+    }
+    setStart(next);
+  };
 
   const errors = {
     title: title.trim() ? null : 'Title is required',
@@ -438,7 +454,7 @@ export function ItemFormModal() {
             <Field label="Start" required error={show(errors.start)}>
               <DateField
                 value={start}
-                onChange={setStart}
+                onChange={changeStart}
                 invalid={!!show(errors.start)}
                 accessibilityLabel="Start date"
               />
