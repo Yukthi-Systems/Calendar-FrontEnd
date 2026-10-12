@@ -12,6 +12,7 @@ import {
 } from '../../atoms/project';
 import { PRIORITY_COLOR, STATUSES } from '../../data/constants';
 import { depthOf } from '../../data/tree';
+import { useTaskMutations } from '../../hooks/useTaskMutations';
 import type { Status, WorkItem } from '../../data/types';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { AssigneeAvatars, Pill, RecurrenceIcon, SubtaskBadge } from './shared';
@@ -28,14 +29,26 @@ export function KanbanView() {
   const [items, setItems] = useAtom(itemsAtom);
   const select = useSetAtom(selectedItemIdAtom);
   const setForm = useSetAtom(itemFormAtom);
+  const { editItem } = useTaskMutations();
   const { heading } = useThemeColors();
 
-  const move = (id: string, status: Status) =>
-    setItems(prev => prev.map(i => (i.id === id ? { ...i, status } : i)));
+  const move = (id: string, status: Status) => {
+    const item = items.find(i => i.id === id);
+    if (!item) {
+      return;
+    }
+    // Not optimistic — the card only actually moves once the server confirms
+    // it (see useTaskMutations' header comment). On failure it just stays put,
+    // which is the honest result: nothing was saved.
+    editItem({ ...item, status }).catch(err =>
+      console.warn('Could not update task status:', err),
+    );
+  };
 
-  // Only the relative order of this status's items changes; nothing else in
-  // the app reads cross-status order, so it's safe to just move them as a
-  // block within the array.
+  // Only the relative order of this status's items changes; nothing else in the
+  // app reads cross-status order, so it's fine to just move them as a block
+  // within the array. Local-only, by necessity — the API has no field to persist
+  // a manual order in, so this resets the next time the task list refetches.
   const reorder = (status: Status, newOrder: WorkItem[]) =>
     setItems(prev => [...prev.filter(i => i.status !== status), ...newOrder]);
 

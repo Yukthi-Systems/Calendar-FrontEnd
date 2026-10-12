@@ -2,6 +2,7 @@ import { apiRequest } from './apiClient';
 import type {
   CreateSharedTaskViewPayload,
   CreateTaskViewPayload,
+  SharedTaskViewDto,
   TaskViewDbDto,
   UpdateTaskViewPayload,
 } from './types';
@@ -21,13 +22,16 @@ export const createTaskView = async (
   });
 };
 
-// GET /views/list — every view the caller owns. No pagination (see the route's note).
+// GET /views/list/{is_shared} — false: views the caller owns; true: views shared
+// with the caller by someone else. No pagination (see the route's note).
 export const listTaskViews = async (
   accessToken: string,
+  isShared = false,
 ): Promise<TaskViewDbDto[]> => {
-  const { data } = await apiRequest<TaskViewDbDto[]>('/views/list', {
-    accessToken,
-  });
+  const { data } = await apiRequest<TaskViewDbDto[]>(
+    `/views/list/${isShared}`,
+    { accessToken },
+  );
   return data;
 };
 
@@ -79,4 +83,58 @@ export const createSharedTaskView = async (
     body: JSON.stringify(payload),
     parseJson: false,
   });
+};
+
+// PATCH /shared/update — same body shape as create; changes an existing share's
+// notes/ui_info/permissions. Caller must own the view.
+export const updateSharedTaskView = async (
+  accessToken: string,
+  payload: CreateSharedTaskViewPayload,
+): Promise<void> => {
+  await apiRequest('/shared/update', {
+    method: 'PATCH',
+    accessToken,
+    body: JSON.stringify(payload),
+    parseJson: false,
+  });
+};
+
+// DELETE /shared/delete/{view_id}/{user_id} — revokes one person's access to a
+// view the caller owns.
+export const deleteSharedTaskView = async (
+  accessToken: string,
+  viewId: number,
+  userId: string,
+): Promise<void> => {
+  await apiRequest(`/shared/delete/${viewId}/${encodeURIComponent(userId)}`, {
+    method: 'DELETE',
+    accessToken,
+    parseJson: false,
+  });
+};
+
+// GET /shared/list/{view_id} — everyone a view the caller owns has been shared
+// with. Owner only.
+export const listSharedUsersForView = async (
+  accessToken: string,
+  viewId: number,
+): Promise<SharedTaskViewDto[]> => {
+  const { data } = await apiRequest<SharedTaskViewDto[]>(
+    `/shared/list/${viewId}`,
+    { accessToken },
+  );
+  return data;
+};
+
+// GET /shared/info/{view_id}/{user_id} — one share record. Owner only.
+export const getSharedTaskView = async (
+  accessToken: string,
+  viewId: number,
+  userId: string,
+): Promise<SharedTaskViewDto> => {
+  const { data } = await apiRequest<SharedTaskViewDto>(
+    `/shared/info/${viewId}/${encodeURIComponent(userId)}`,
+    { accessToken },
+  );
+  return data;
 };

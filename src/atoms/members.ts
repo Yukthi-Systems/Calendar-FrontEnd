@@ -4,11 +4,15 @@ import { userAtom } from './auth';
 import { initialsOf, PROFILE_COLOR } from './profile';
 import { directoryAtom } from './userInfo';
 
-// The API exposes no member directory yet, so the only known member is the signed-in
-// user, keyed by email (always present, unlike user_id on older cached sessions). Permission checks (src/data/permissions.ts) compare against this id.
+// Keyed by the real user_id (UUID) — not email — because Tasks-Main-API's
+// owner_id/created_by/assignee_ids are all real user_id UUIDs (e.g. a task's
+// `created_by`), and WorkItem.createdById/assigneeIds need to compare equal to
+// those for permission checks (src/data/permissions.ts) and name lookups
+// (memberById) to work. Falls back to email only for an old cached session from
+// before user_id was reliably present.
 export const currentUserIdAtom = atom(get => {
   const user = get(userAtom);
-  return user?.email ?? user?.user_id ?? '';
+  return user?.user_id ?? user?.email ?? '';
 });
 
 export const membersAtom = atom<Member[]>(get => {
@@ -18,13 +22,13 @@ export const membersAtom = atom<Member[]>(get => {
     return [];
   }
   const others = get(directoryAtom)
-    .filter(u => u.email !== id)
+    .filter(u => u.user_id !== id)
     .map(u => {
       const pub = u.public_info ?? {};
       const name =
         typeof pub.name === 'string' && pub.name ? pub.name : u.email.split('@')[0];
       return {
-        id: u.email,
+        id: u.user_id,
         name,
         initials: initialsOf(name),
         color: PROFILE_COLOR,
