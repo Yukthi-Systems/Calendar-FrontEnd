@@ -11,6 +11,7 @@ import { tokenAtom } from '../atoms/auth';
 import { widgetTasks } from '../data/widgetTasks';
 import { pushWidgetTasks, takeWidgetCompletions } from './widget';
 import { updateTask } from './tasks';
+import { withAuthRetry } from './authRetry';
 import { isServerTaskId, taskToUpdatePayload } from '../data/taskSync';
 import { isServerViewId } from '../data/viewSync';
 import { TASKS_API_ENABLED } from '../config/features';
@@ -54,7 +55,7 @@ const applyWidgetCompletions = async () => {
     }
     const updated = { ...item, status: 'completed' as const };
     try {
-      await updateTask(token, viewId, taskToUpdatePayload(updated));
+      await withAuthRetry(token, t => updateTask(t, viewId, taskToUpdatePayload(updated)));
       store.set(itemsAtom, prev => prev.map(i => (i.id === id ? updated : i)));
     } catch (err) {
       console.warn('Could not save a widget completion to the server:', err);

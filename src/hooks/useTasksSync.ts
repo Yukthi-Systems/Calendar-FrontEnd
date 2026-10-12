@@ -14,10 +14,11 @@ import {
 import { MAX_DEPTH } from '../data/tree';
 import { isServerViewId } from '../data/viewSync';
 import { TASKS_API_ENABLED } from '../config/features';
+import { withAuthRetry } from '../services/authRetry';
 import type { ProjectView } from '../data/types';
 import type { TaskInfoDto } from '../services/types';
 
-// Drains every page of one GET /tasks/list/{view_id} call (root tasks, or one
+// Drains every page of one POST /tasks/list/{view_id} call (root tasks, or one
 // parent's direct children when parentTaskId is given) via the cursor it returns.
 async function drainPages(
   token: string,
@@ -72,10 +73,9 @@ async function fetchViewTaskTree(
 //
 // Signed out, the active view isn't server-backed yet (a local-only view, or
 // still mid-migration — see useViewsSync), or TASKS_API_ENABLED is off (see that
-// constant's comment — GET /tasks/list/{view_id} can't be called successfully
-// from any client right now) — itemsAtom is left exactly as it is: whatever's
-// already there (the local cache from projectStore, or nothing), edited directly
-// by the local-fallback paths in useTaskMutations.
+// constant's comment) — itemsAtom is left exactly as it is (projectStore.ts
+// deliberately never persists tasks locally, so that's an empty list unless
+// something else has already written to it this session).
 export function useTasksSync(view: ProjectView | undefined) {
   const token = useAtomValue(tokenAtom);
   const [items, setItems] = useAtom(itemsAtom);
@@ -90,7 +90,7 @@ export function useTasksSync(view: ProjectView | undefined) {
 
   const query = useQuery({
     queryKey: ['tasks', viewId, statusKey, tagKey],
-    queryFn: () => fetchViewTaskTree(token!, viewId!, view!),
+    queryFn: () => withAuthRetry(token, t => fetchViewTaskTree(t, viewId!, view!)),
     enabled: !!token && viewId !== undefined,
   });
 

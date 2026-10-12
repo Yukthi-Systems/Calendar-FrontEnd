@@ -335,9 +335,18 @@ export function MultiSelectDropdown({
   onQueryChange?: (query: string) => void;
   // Sheet title, shown while the picker is open. Falls back to `placeholder`.
   label?: string;
-  // `locked`: shown checked (if it is) but can't be toggled off — e.g. you
-  // can never remove yourself as an assignee, only add yourself.
-  options: { id: string; label: string; color?: string; locked?: boolean }[];
+  // `locked`: shown checked (if it is) but can't be toggled off — e.g. you can
+  // never remove yourself as an assignee, only add yourself; or (once a task is
+  // server-backed) nobody can be unassigned at all, since the API only has an
+  // endpoint to add one. `lockedLabel` names why; defaults to "You" since that
+  // was the only case this covered originally.
+  options: {
+    id: string;
+    label: string;
+    color?: string;
+    locked?: boolean;
+    lockedLabel?: string;
+  }[];
   selectedIds: string[];
   onToggle: (id: string) => void;
   placeholder: string;
@@ -462,7 +471,9 @@ export function MultiSelectDropdown({
                     </View>
                     <Text className="flex-1 text-text-heading">{o.label}</Text>
                     {o.locked ? (
-                      <Text className="text-[11px] text-text-main">You</Text>
+                      <Text className="text-[11px] text-text-main">
+                        {o.lockedLabel ?? 'You'}
+                      </Text>
                     ) : null}
                   </Pressable>
                 );

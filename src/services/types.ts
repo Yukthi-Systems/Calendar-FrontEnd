@@ -68,9 +68,13 @@ export interface UserSearchResult {
   created_at: string;
 }
 
-// Tasks-Main-API task_status enum, as it comes back in a response (read straight
-// off the Postgres enum column, e.g. TaskInfoDto.task_status, TaskViewDbDto.status_filter
-// — SCREAMING_SNAKE_CASE, matching the DB's own `task_status` values).
+// Tasks-Main-API task_status enum. features::task_views::model::TaskStatus
+// derives Serialize + Deserialize with #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+// (also its #[postgres(name = …)] spelling, matching the DB's own task_status
+// enum values) — so a response and a request use the SAME casing here, unlike
+// the brief period where the enum had no serde rename and a request needed
+// PascalCase instead (fixed server-side; if "unknown variant" errors come back,
+// check whether that's regressed).
 export type BackendTaskStatus =
   | 'PENDING'
   | 'IN_PROGRESS'
@@ -78,22 +82,8 @@ export type BackendTaskStatus =
   | 'CANCELLED'
   | 'ON_HOLD';
 
-// The SAME enum, but as a request has to spell it for the API to accept it.
-// features::task_views::model::TaskStatus derives plain serde Deserialize with no
-// #[serde(rename_all/rename)], so it matches only its literal Rust variant names —
-// PascalCase — never the SCREAMING_SNAKE_CASE a response reads back. Sending
-// BackendTaskStatus's casing in a request body/query 400s with "unknown variant
-// `PENDING`, expected one of `Pending`, `InProgress`, …". Used only by the request
-// payload types below; BACKEND_STATUS_WIRE (src/data/constants.ts) builds them.
-export type BackendTaskStatusWire =
-  | 'Pending'
-  | 'InProgress'
-  | 'Completed'
-  | 'Cancelled'
-  | 'OnHold';
-
-// Tasks-Main-API task_tag enum, as it comes back in a response — see
-// BackendTaskStatus above; the same read/write casing split applies here too.
+// Tasks-Main-API task_tag enum — same rename_all as BackendTaskStatus, one
+// casing for both directions.
 export type BackendTaskTag =
   | 'WORK'
   | 'IMPORTANT'
@@ -101,15 +91,6 @@ export type BackendTaskTag =
   | 'OPTIONAL'
   | 'PERSONAL'
   | 'OTHER';
-
-// task_tag's write-side spelling — see BackendTaskStatusWire.
-export type BackendTaskTagWire =
-  | 'Work'
-  | 'Important'
-  | 'Urgent'
-  | 'Optional'
-  | 'Personal'
-  | 'Other';
 
 // GET /views/list/{is_shared}, GET /views/get/{id} row shape.
 export interface TaskViewDbDto {
@@ -132,8 +113,8 @@ export interface CreateTaskViewPayload {
   view_name: string;
   description: string;
   ui_info: Record<string, unknown>;
-  status_filter: BackendTaskStatusWire[];
-  task_tag_filter: BackendTaskTagWire[];
+  status_filter: BackendTaskStatus[];
+  task_tag_filter: BackendTaskTag[];
   show_recurring: boolean;
   show_comments: boolean;
   show_subtasks: boolean;
@@ -200,8 +181,8 @@ export interface CreateTaskPayload {
   title: string;
   description: string;
   details: Record<string, unknown>;
-  task_status: BackendTaskStatusWire;
-  task_tag: BackendTaskTagWire;
+  task_status: BackendTaskStatus;
+  task_tag: BackendTaskTag;
   start_at: string;
   end_at: string;
 }
@@ -212,8 +193,8 @@ export interface UpdateTaskPayload {
   title: string;
   description: string;
   details: Record<string, unknown>;
-  task_status: BackendTaskStatusWire;
-  task_tag: BackendTaskTagWire;
+  task_status: BackendTaskStatus;
+  task_tag: BackendTaskTag;
   start_at: string;
   end_at: string;
 }
@@ -224,8 +205,8 @@ export interface UpdateTaskPayload {
 export interface TaskFilterQuery {
   parent_task_id?: number;
   title_contains?: string;
-  any_of_task_status: BackendTaskStatusWire[];
-  any_of_task_tag: BackendTaskTagWire[];
+  any_of_task_status: BackendTaskStatus[];
+  any_of_task_tag: BackendTaskTag[];
   start_at: string;
   end_at: string;
   cursor_start_at?: string;
@@ -251,7 +232,7 @@ export interface CreateRecurringTaskPayload {
   description: string;
   details: Record<string, unknown>;
   rrule: string;
-  task_tag: BackendTaskTagWire;
+  task_tag: BackendTaskTag;
 }
 
 export interface UpdateRecurringTaskPayload {
@@ -260,5 +241,5 @@ export interface UpdateRecurringTaskPayload {
   description: string;
   details: Record<string, unknown>;
   rrule: string;
-  task_tag: BackendTaskTagWire;
+  task_tag: BackendTaskTag;
 }

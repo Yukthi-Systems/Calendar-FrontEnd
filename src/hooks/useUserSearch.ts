@@ -4,6 +4,7 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import { tokenAtom } from '../atoms/auth';
 import { directoryAtom } from '../atoms/userInfo';
 import { searchUsersByEmail } from '../services/users';
+import { withAuthRetry } from '../services/authRetry';
 import { useDebouncedValue } from './useDebouncedValue';
 
 const MIN_QUERY_LENGTH = 2;
@@ -21,7 +22,7 @@ export function useUserSearch(query: string) {
 
   const result = useQuery({
     queryKey: ['userSearch', debounced],
-    queryFn: () => searchUsersByEmail(token!, debounced),
+    queryFn: () => withAuthRetry(token, t => searchUsersByEmail(t, debounced)),
     enabled,
     staleTime: 60_000,
   });

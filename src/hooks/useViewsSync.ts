@@ -17,6 +17,7 @@ import {
   viewToCreatePayload,
   viewToUpdatePayload,
 } from '../data/viewSync';
+import { withAuthRetry } from '../services/authRetry';
 import type { ProjectView } from '../data/types';
 
 // Task views now live in Tasks-Main-API's /views (one row per view; GET /views/get,
@@ -44,20 +45,21 @@ export function useViewsSync() {
 
   const viewsQuery = useQuery({
     queryKey: ['views', userId],
-    queryFn: () => listTaskViews(token!),
+    queryFn: () => withAuthRetry(token, t => listTaskViews(t)),
     enabled: !!token && !!userId,
   });
 
   const createMutation = useMutation({
     mutationFn: (draft: Omit<ProjectView, 'id'>) =>
-      createTaskView(token!, viewToCreatePayload(draft)),
+      withAuthRetry(token, t => createTaskView(t, viewToCreatePayload(draft))),
   });
   const updateMutation = useMutation({
     mutationFn: (view: ProjectView) =>
-      updateTaskView(token!, viewToUpdatePayload(view)),
+      withAuthRetry(token, t => updateTaskView(t, viewToUpdatePayload(view))),
   });
   const deleteMutation = useMutation({
-    mutationFn: (viewId: number) => deleteTaskView(token!, viewId),
+    mutationFn: (viewId: number) =>
+      withAuthRetry(token, t => deleteTaskView(t, viewId)),
   });
 
   const migratedFor = useRef<string | null>(null);
@@ -109,7 +111,7 @@ export function useViewsSync() {
         try {
           const after = await queryClient.query({
             queryKey: ['views', userId],
-            queryFn: () => listTaskViews(token),
+            queryFn: () => withAuthRetry(token, t => listTaskViews(t)),
             staleTime: 0,
           });
           if (after.length > 0) {
@@ -151,7 +153,7 @@ export function useViewsSync() {
     try {
       const server = await queryClient.query({
         queryKey: ['views', userId],
-        queryFn: () => listTaskViews(token),
+        queryFn: () => withAuthRetry(token, t => listTaskViews(t)),
         staleTime: 0,
       });
       setViews(server.map(viewFromServer));
@@ -170,7 +172,7 @@ export function useViewsSync() {
       await createMutation.mutateAsync(draft);
       const server = await queryClient.query({
         queryKey: ['views', userId],
-        queryFn: () => listTaskViews(token),
+        queryFn: () => withAuthRetry(token, t => listTaskViews(t)),
         staleTime: 0,
       });
       const next = server.map(viewFromServer);
