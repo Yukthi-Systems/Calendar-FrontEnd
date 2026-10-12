@@ -1,7 +1,20 @@
 import { useEffect, useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import { Check, Share2 } from 'lucide-react-native';
+import { Text, View } from 'react-native';
+import { Share2, Trash2 } from 'lucide-react-native';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import {
+  Button,
+  Chip,
+  Field,
+  IconButton,
+  Input,
+  Press,
+  Sheet,
+  SheetBody,
+  SheetFooter,
+  SheetHeader,
+  Switch,
+} from '../ui';
 import { STATUSES, TAGS, VIEW_TYPES } from '../../data/constants';
 import { fieldOptionsFor } from '../../data/viewFields';
 import { isServerViewId } from '../../data/viewSync';
@@ -38,7 +51,7 @@ export function ViewModal({
   onDelete: () => void;
   onShare: (view: ProjectView) => void;
 }) {
-  const { heading } = useThemeColors();
+  const c = useThemeColors();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [type, setType] = useState<ViewType>('kanban');
@@ -99,9 +112,9 @@ export function ViewModal({
     set: (v: boolean) => void;
   }[] = [
     { key: 'recurring', label: 'Recurring tasks', on: showRecurring, set: setShowRecurring },
-    { key: 'comments', label: 'Comments', on: showComments, set: setShowComments },
     { key: 'subtasks', label: 'Subtasks', on: showSubtasks, set: setShowSubtasks },
-    { key: 'assigned', label: 'Assigned to me', on: showAssigned, set: setShowAssigned },
+    { key: 'assigned', label: 'Tasks assigned to me', on: showAssigned, set: setShowAssigned },
+    { key: 'comments', label: 'Comments', on: showComments, set: setShowComments },
   ];
 
   const save = () => {
@@ -122,226 +135,148 @@ export function ViewModal({
   };
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
-    >
-      <Pressable
-        accessibilityLabel="Close"
-        onPress={onClose}
-        className="flex-1 items-center justify-end bg-black/50 sm:justify-center"
-      >
-        <Pressable
-          onPress={() => {}}
-          className="max-h-[92%] w-full max-w-lg rounded-t-3xl bg-bg-card p-5 sm:rounded-3xl"
-        >
-          <Text className="mb-4 text-lg font-bold text-text-heading">
-            {view ? 'Edit view' : 'New view'}
-          </Text>
+    <Sheet visible={visible} onClose={onClose} size="lg">
+      <SheetHeader
+        title={view ? 'Edit view' : 'New view'}
+        description={
+          view ? undefined : 'A saved layout of your tasks, with its own filters.'
+        }
+        onClose={onClose}
+      />
+      <SheetBody>
+        <Field label="Name" required>
+          <Input
+            value={name}
+            onChangeText={setName}
+            placeholder="e.g. Sprint board"
+            autoFocus={!view}
+            onSubmitEditing={() => trimmed && save()}
+          />
+        </Field>
+        <Field label="Description">
+          <Input
+            value={description}
+            onChangeText={setDescription}
+            placeholder="What this view is for (optional)"
+            multiline
+            minHeight={56}
+          />
+        </Field>
 
-          <ScrollView keyboardShouldPersistTaps="handled">
-            <Text className="mb-1 text-xs font-semibold uppercase text-text-main">
-              Name
-            </Text>
-            <TextInput
-              value={name}
-              onChangeText={setName}
-              placeholder="e.g. Sprint board"
-              placeholderTextColor="#9ca3af"
-              className="mb-4 rounded-xl border border-border-main px-3 py-2.5 text-text-heading"
-            />
-
-            <Text className="mb-1 text-xs font-semibold uppercase text-text-main">
-              Description
-            </Text>
-            <TextInput
-              value={description}
-              onChangeText={setDescription}
-              placeholder="What this view is for (optional)"
-              placeholderTextColor="#9ca3af"
-              multiline
-              textAlignVertical="top"
-              className="mb-4 min-h-[60px] rounded-xl border border-border-main px-3 py-2.5 text-text-heading"
-            />
-
-            <Text className="mb-2 text-xs font-semibold uppercase text-text-main">
-              Layout
-            </Text>
-            <View className="mb-5 gap-2">
-              {VIEW_TYPES.map(t => {
-                const active = t.key === type;
-                return (
-                  <Pressable
-                    key={t.key}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: active }}
-                    onPress={() => pickType(t.key)}
-                    className={`flex-row items-center gap-3 rounded-xl border px-3 py-2.5 ${
-                      active ? 'border-accent bg-accent/10' : 'border-border-main'
-                    }`}
-                  >
-                    <t.icon size={22} color={heading} />
-                    <View className="flex-1">
-                      <Text className="font-medium text-text-heading">
-                        {t.label}
-                      </Text>
-                      <Text className="text-xs text-text-main">{t.blurb}</Text>
-                    </View>
-                  </Pressable>
-                );
-              })}
-            </View>
-
-            {options ? (
-              <View className="mb-5">
-                <Text className="mb-2 text-xs font-semibold uppercase text-text-main">
-                  Fields shown
-                </Text>
-                <View className="flex-row flex-wrap gap-2">
-                  {options.map(o => {
-                    const on = fields.includes(o.key);
-                    return (
-                      <Pressable
-                        key={o.key}
-                        accessibilityRole="checkbox"
-                        accessibilityState={{ checked: on }}
-                        onPress={() => toggleField(o.key)}
-                        className={`flex-row items-center gap-1.5 rounded-full border px-3 py-1.5 ${
-                          on ? 'border-accent bg-accent/10' : 'border-border-main'
-                        }`}
-                      >
-                        {on ? <Check size={14} color={heading} /> : null}
-                        <Text className="text-sm text-text-heading">{o.label}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-                <Text className="mt-2 text-xs text-text-main">
-                  The task title is always shown.
-                </Text>
-              </View>
-            ) : null}
-
-            <Text className="mb-2 text-xs font-semibold uppercase text-text-main">
-              Status filter
-            </Text>
-            <View className="mb-1 flex-row flex-wrap gap-2">
-              {STATUSES.map(s => {
-                const on = statusFilter.includes(s.key);
-                return (
-                  <Pressable
-                    key={s.key}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: on }}
-                    onPress={() => toggleStatus(s.key)}
-                    style={on ? { borderColor: s.color, backgroundColor: `${s.color}1a` } : undefined}
-                    className="flex-row items-center gap-1.5 rounded-full border border-border-main px-3 py-1.5"
-                  >
-                    {on ? <Check size={14} color={heading} /> : null}
-                    <Text className="text-sm text-text-heading">{s.label}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            <Text className="mb-5 text-xs text-text-main">
-              {statusFilter.length === 0
-                ? 'Every status shown.'
-                : 'Only the selected statuses are shown.'}
-            </Text>
-
-            <Text className="mb-2 text-xs font-semibold uppercase text-text-main">
-              Tag filter
-            </Text>
-            <View className="mb-1 flex-row flex-wrap gap-2">
-              {TAGS.map(t => {
-                const on = tagFilter.includes(t.key);
-                return (
-                  <Pressable
-                    key={t.key}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: on }}
-                    onPress={() => toggleTag(t.key)}
-                    style={on ? { borderColor: t.color, backgroundColor: `${t.color}1a` } : undefined}
-                    className="flex-row items-center gap-1.5 rounded-full border border-border-main px-3 py-1.5"
-                  >
-                    {on ? <Check size={14} color={heading} /> : null}
-                    <Text className="text-sm text-text-heading">{t.label}</Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            <Text className="mb-5 text-xs text-text-main">
-              {tagFilter.length === 0
-                ? 'Every tag shown.'
-                : 'Only the selected tags are shown.'}
-            </Text>
-
-            <Text className="mb-2 text-xs font-semibold uppercase text-text-main">
-              Also show
-            </Text>
-            <View className="mb-1 flex-row flex-wrap gap-2">
-              {visibilityToggles.map(t => (
-                <Pressable
+        <Field label="Layout">
+          <View className="flex-row flex-wrap gap-2">
+            {VIEW_TYPES.map(t => {
+              const active = t.key === type;
+              return (
+                <Press
                   key={t.key}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: t.on }}
-                  onPress={() => t.set(!t.on)}
-                  className={`flex-row items-center gap-1.5 rounded-full border px-3 py-1.5 ${
-                    t.on ? 'border-accent bg-accent/10' : 'border-border-main'
+                  feedback="subtle"
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: active, checked: active }}
+                  onPress={() => pickType(t.key)}
+                  style={{ flexBasis: 170, flexGrow: 1 }}
+                  className={`gap-2 rounded-xl border p-3 ${
+                    active
+                      ? 'border-accent bg-accent-soft'
+                      : 'border-border-main bg-bg-card hover:border-border-strong hover:bg-hover'
                   }`}
                 >
-                  {t.on ? <Check size={14} color={heading} /> : null}
-                  <Text className="text-sm text-text-heading">{t.label}</Text>
-                </Pressable>
+                  <t.icon size={18} color={active ? c.accent : c.text} />
+                  <View>
+                    <Text className="text-sm font-medium text-text-heading">{t.label}</Text>
+                    <Text className="text-xs text-text-main">{t.blurb}</Text>
+                  </View>
+                </Press>
+              );
+            })}
+          </View>
+        </Field>
+
+        {options ? (
+          <Field label="Fields shown" hint="The task title is always shown.">
+            <View className="flex-row flex-wrap gap-1.5">
+              {options.map(o => (
+                <Chip
+                  key={o.key}
+                  role="checkbox"
+                  label={o.label}
+                  active={fields.includes(o.key)}
+                  onPress={() => toggleField(o.key)}
+                />
               ))}
             </View>
-          </ScrollView>
+          </Field>
+        ) : null}
 
-          <View className="mt-2 flex-row gap-2">
-            {view && isServerViewId(view.id) ? (
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Share ${view.name}`}
-                onPress={() => onShare(view)}
-                className="items-center justify-center rounded-2xl border border-border-main px-4 py-3 active:opacity-70"
-              >
-                <Share2 size={18} color={heading} />
-              </Pressable>
-            ) : null}
-            {view ? (
-              <Pressable
-                accessibilityRole="button"
-                onPress={onDelete}
-                className="items-center rounded-2xl border border-destructive/40 px-4 py-3 active:opacity-70"
-              >
-                <Text className="font-semibold text-destructive">Delete</Text>
-              </Pressable>
-            ) : null}
-            <Pressable
-              accessibilityRole="button"
-              onPress={onClose}
-              className="flex-1 items-center rounded-2xl border border-border-main py-3 active:opacity-70"
-            >
-              <Text className="text-text-heading">Cancel</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              disabled={!trimmed}
-              onPress={save}
-              className={`flex-1 items-center rounded-2xl bg-accent py-3 active:opacity-80 ${
-                trimmed ? '' : 'opacity-40'
-              }`}
-            >
-              <Text className="font-semibold text-accent-foreground">
-                {view ? 'Save' : 'Create'}
-              </Text>
-            </Pressable>
+        <Field
+          label="Status filter"
+          hint={statusFilter.length === 0 ? 'Every status is shown.' : 'Only the selected statuses are shown.'}
+        >
+          <View className="flex-row flex-wrap gap-1.5">
+            {STATUSES.map(st => (
+              <Chip
+                key={st.key}
+                role="checkbox"
+                label={st.label}
+                color={st.color}
+                active={statusFilter.includes(st.key)}
+                onPress={() => toggleStatus(st.key)}
+              />
+            ))}
           </View>
-        </Pressable>
-      </Pressable>
-    </Modal>
+        </Field>
+
+        <Field
+          label="Tag filter"
+          hint={tagFilter.length === 0 ? 'Every tag is shown.' : 'Only the selected tags are shown.'}
+        >
+          <View className="flex-row flex-wrap gap-1.5">
+            {TAGS.map(t => (
+              <Chip
+                key={t.key}
+                role="checkbox"
+                label={t.label}
+                color={t.color}
+                active={tagFilter.includes(t.key)}
+                onPress={() => toggleTag(t.key)}
+              />
+            ))}
+          </View>
+        </Field>
+
+        <Field label="Also show" className="mb-0">
+          <View className="rounded-xl border border-border-main px-3 py-1">
+            {visibilityToggles.map((t, i) => (
+              <View key={t.key} className={i > 0 ? 'border-t border-border-main' : ''}>
+                <Switch value={t.on} onChange={t.set} label={t.label} />
+              </View>
+            ))}
+          </View>
+        </Field>
+      </SheetBody>
+
+      <SheetFooter
+        left={
+          view ? (
+            <View className="flex-row items-center gap-1">
+              <Button variant="destructive-ghost" icon={Trash2} onPress={onDelete}>
+                Delete
+              </Button>
+              {isServerViewId(view.id) ? (
+                <IconButton icon={Share2} label={`Share ${view.name}`} onPress={() => onShare(view)} />
+              ) : null}
+            </View>
+          ) : null
+        }
+      >
+        <Button variant="ghost" onPress={onClose}>
+          Cancel
+        </Button>
+        <Button variant="primary" disabled={!trimmed} onPress={save}>
+          {view ? 'Save' : 'Create view'}
+        </Button>
+      </SheetFooter>
+    </Sheet>
   );
 }
 

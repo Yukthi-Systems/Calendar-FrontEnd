@@ -10,6 +10,9 @@ export const itemsAtom = atom<WorkItem[]>([]);
 export const selectedItemIdAtom = atom<string | null>(null);
 export const searchOpenAtom = atom(false);
 export const searchTitleAtom = atom('');
+// True while the active view's first task fetch is in flight (useTasksSync) —
+// views show skeletons instead of an empty state until it settles.
+export const tasksLoadingAtom = atom(false);
 
 // Every task and subtask has its own thread — comments are just filtered by
 // `itemId`, so no special-casing is needed between a task and a subtask.

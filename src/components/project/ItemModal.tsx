@@ -1,21 +1,25 @@
-import { useState } from 'react';
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
+import type { ReactNode } from 'react';
+import { Text, View } from 'react-native';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { format, parseISO } from 'date-fns';
 import {
+  ArrowRight,
   Bell,
   ChevronRight,
   ListTree,
+  Pencil,
   Plus,
   Repeat,
+  Trash2,
 } from 'lucide-react-native';
 import {
   itemFormAtom,
   itemsAtom,
   selectedItemIdAtom,
 } from '../../atoms/project';
-import { PRIORITY_COLOR, STATUSES, tagInfo } from '../../data/constants';
+import { STATUSES, tagInfo } from '../../data/constants';
 import { currentUserIdAtom } from '../../atoms/members';
+import { confirm, errorMessage, toast } from '../../atoms/feedback';
 import { canDelete, canEditFields, roleFor } from '../../data/permissions';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
 import { describeRecurrence } from '../../data/rrule';
@@ -29,8 +33,25 @@ import {
   subtaskProgress,
 } from '../../data/tree';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import {
+  Badge,
+  Button,
+  Callout,
+  Chip,
+  IconButton,
+  Press,
+  Sheet,
+  SheetBody,
+  SheetHeader,
+} from '../ui';
 import { CommentsSection } from './CommentsSection';
-import { AssigneeAvatars, Pill, StatusDot, assigneeNames } from './shared';
+import {
+  AssigneeAvatars,
+  DueDate,
+  PriorityBadge,
+  StatusIcon,
+  assigneeNames,
+} from './shared';
 
 // Detail sheet for any work item, opened from every view.
 export function ItemModal() {
@@ -38,21 +59,12 @@ export function ItemModal() {
   const items = useAtomValue(itemsAtom);
   const CURRENT_USER_ID = useAtomValue(currentUserIdAtom);
   const setForm = useSetAtom(itemFormAtom);
-  const { editItem, removeItem, isServerBacked, unavailableReason } = useTaskMutations();
-  const { heading, text, accent } = useThemeColors();
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const { editItem, removeItem, isServerBacked, unavailableReason } =
+    useTaskMutations();
+  const c = useThemeColors();
   const item = items.find(i => i.id === selectedId);
-  const close = () => {
-    setConfirmDelete(false);
-    setActionError(null);
-    setSelectedId(null);
-  };
-  const open = (id: string) => {
-    setConfirmDelete(false);
-    setActionError(null);
-    setSelectedId(id);
-  };
+  const close = () => setSelectedId(null);
+  const open = (id: string) => setSelectedId(id);
 
   const crumbs = item ? ancestorsOf(items, item) : [];
   const depth = item ? depthOf(items, item) : 1;
@@ -65,279 +77,290 @@ export function ItemModal() {
   const editable = item ? canEditFields(item, CURRENT_USER_ID) : false;
   const deletable = item ? canDelete(item, CURRENT_USER_ID) : false;
 
+  const setStatus = (status: (typeof STATUSES)[number]['key']) => {
+    if (!item || item.status === status) {
+      return;
+    }
+    editItem({ ...item, status }).catch(err =>
+      toast.error('Couldn’t update the status', {
+        description: errorMessage(err, 'Please try again.'),
+      }),
+    );
+  };
+
+  const remove = async () => {
+    if (!item) {
+      return;
+    }
+    const kids = progress?.total ?? 0;
+    const ok = await confirm({
+      title: `Delete ${item.id}?`,
+      message: kids
+        ? `“${item.title}” and its ${kids} subtask${kids === 1 ? '' : 's'} will be deleted. This can’t be undone.`
+        : `“${item.title}” will be deleted. This can’t be undone.`,
+      confirmLabel: 'Delete',
+      destructive: true,
+    });
+    if (!ok) {
+      return;
+    }
+    try {
+      await removeItem(item);
+      close();
+      toast.success('Task deleted');
+    } catch (err) {
+      toast.error('Couldn’t delete the task', {
+        description: errorMessage(err, 'Please try again.'),
+      });
+    }
+  };
+
+  const tag = item ? tagInfo(item.tag) : null;
+
   return (
-    <Modal
-      visible={!!item}
-      transparent
-      animationType="fade"
-      onRequestClose={close}
-    >
-      <Pressable
-        accessibilityLabel="Close"
-        onPress={close}
-        className="flex-1 items-center justify-end bg-black/50 sm:justify-center"
-      >
-        {item ? (
-          // Inner Pressable swallows taps so only the backdrop closes the sheet.
-          <Pressable
-            onPress={() => {}}
-            className="max-h-[90%] w-full max-w-xl rounded-t-3xl bg-bg-card p-5 sm:rounded-3xl"
-          >
-            <ScrollView showsVerticalScrollIndicator={false}>
-              {crumbs.length > 0 ? (
-                <View className="mb-2 flex-row flex-wrap items-center gap-1">
-                  {crumbs.map(c => (
-                    <View key={c.id} className="flex-row items-center gap-1">
-                      <Pressable
-                        accessibilityRole="button"
-                        onPress={() => open(c.id)}
-                        className="active:opacity-70"
-                      >
-                        <Text className="text-xs text-accent">{c.id}</Text>
-                      </Pressable>
-                      <ChevronRight size={12} color={text} />
-                    </View>
-                  ))}
-                </View>
-              ) : null}
-              <Text className="text-xs text-text-main">
-                {item.id} · Level {depth} of {MAX_DEPTH}
-              </Text>
-              <Text className="mb-3 text-xl font-bold text-text-heading">
+    <Sheet visible={!!item} onClose={close} size="lg">
+      {item ? (
+        <>
+          <SheetHeader
+            onClose={close}
+            eyebrow={
+              <View className="flex-row flex-wrap items-center gap-1">
+                {crumbs.map(cr => (
+                  <View key={cr.id} className="flex-row items-center gap-1">
+                    <Press
+                      feedback="none"
+                      accessibilityRole="link"
+                      accessibilityLabel={`Open ${cr.title}`}
+                      onPress={() => open(cr.id)}
+                      className="rounded px-0.5"
+                    >
+                      <Text className="text-xs font-medium text-text-main hover:text-accent">
+                        {cr.id}
+                      </Text>
+                    </Press>
+                    <ChevronRight size={12} color={c.subtle} />
+                  </View>
+                ))}
+                <Text className="text-xs font-medium text-text-subtle">{item.id}</Text>
+                {depth > 1 ? (
+                  <Text className="text-xs text-text-subtle">
+                    {' '}· level {depth} of {MAX_DEPTH}
+                  </Text>
+                ) : null}
+              </View>
+            }
+            title={
+              <Text className="text-xl font-semibold text-text-heading">
                 {item.title}
               </Text>
-              <Text className="mb-4 text-sm text-text-main">
-                {item.description}
-              </Text>
+            }
+            actions={
+              <>
+                {editable ? (
+                  <IconButton
+                    icon={Pencil}
+                    label="Edit task"
+                    onPress={() => {
+                      setForm({ mode: 'edit', id: item.id });
+                      close();
+                    }}
+                  />
+                ) : null}
+                {deletable ? (
+                  <IconButton
+                    icon={Trash2}
+                    label="Delete task"
+                    color={c.destructive}
+                    onPress={remove}
+                  />
+                ) : null}
+              </>
+            }
+          />
+          <SheetBody>
+            {item.description ? (
+              <Text className="mb-5 text-base text-text-main">{item.description}</Text>
+            ) : null}
 
-              {!isServerBacked && unavailableReason ? (
-                <View className="mb-4 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2">
-                  <Text className="text-xs text-text-heading">{unavailableReason}</Text>
-                </View>
-              ) : null}
-              {actionError ? (
-                <View className="mb-4 rounded-xl border border-destructive/40 bg-destructive/5 px-3 py-2">
-                  <Text className="text-xs text-destructive">{actionError}</Text>
-                </View>
-              ) : null}
+            {!isServerBacked && unavailableReason ? (
+              <View className="mb-4">
+                <Callout kind="warning">{unavailableReason}</Callout>
+              </View>
+            ) : null}
+            {role === 'assignee' ? (
+              <View className="mb-4">
+                <Callout kind="info">
+                  You’re assigned to this task — you can comment, change its status
+                  and manage subtasks. Only its creator can edit details or delete it.
+                </Callout>
+              </View>
+            ) : null}
 
-              {role === 'assignee' ? (
-                <View className="mb-4 rounded-xl border border-border-main bg-bg-main px-3 py-2">
-                  <Text className="text-xs text-text-main">
-                    You're assigned to this task — you can comment, update its
-                    status, and manage subtasks. Only the creator can edit its
-                    other details or delete it.
-                  </Text>
-                </View>
-              ) : null}
-
-              <View className="mb-4 flex-row flex-wrap items-center gap-2">
-                <Pill
-                  text={`${item.priority} priority`}
-                  color={PRIORITY_COLOR[item.priority]}
+            <View className="mb-5 flex-row flex-wrap gap-1.5">
+              {STATUSES.map(s => (
+                <Chip
+                  key={s.key}
+                  label={s.label}
+                  color={s.color}
+                  active={s.key === item.status}
+                  onPress={() => setStatus(s.key)}
                 />
-                <Pill text={tagInfo(item.tag).label} color={tagInfo(item.tag).color} />
-                {item.labels.map(l => (
-                  <Pill key={l} text={l} />
-                ))}
-              </View>
+              ))}
+            </View>
 
-              <View className="mb-2 flex-row items-center gap-2">
-                <AssigneeAvatars ids={item.assigneeIds} size={28} />
-                <Text className="text-sm text-text-heading">
-                  {assigneeNames(item.assigneeIds)}
-                </Text>
-              </View>
-              <Text className="mb-1 text-sm text-text-main">
-                {format(parseISO(item.start), 'MMM d')} –{' '}
-                {format(parseISO(item.end), 'MMM d, yyyy')}
-              </Text>
-
-              {item.recurrence ? (
-                <View className="mb-1 flex-row items-center gap-1.5">
-                  <Repeat size={13} color={text} />
-                  <Text className="text-xs text-text-main">
-                    {describeRecurrence(item.recurrence) || item.recurrence}
+            <View className="mb-6 rounded-xl border border-border-main">
+              <Property label="Priority" first>
+                <PriorityBadge priority={item.priority} />
+              </Property>
+              <Property label="Tag">
+                {tag ? <Badge label={tag.label} color={tag.color} dot /> : null}
+              </Property>
+              <Property label="Assignees">
+                <View className="flex-1 flex-row items-center gap-2">
+                  <AssigneeAvatars ids={item.assigneeIds} size={22} max={5} />
+                  <Text numberOfLines={1} className="flex-1 text-sm text-text-heading">
+                    {assigneeNames(item.assigneeIds)}
                   </Text>
                 </View>
+              </Property>
+              <Property label="Dates">
+                <View className="flex-row items-center gap-2">
+                  <Text className="text-sm text-text-heading">
+                    {format(parseISO(item.start), 'MMM d')}
+                  </Text>
+                  <ArrowRight size={13} color={c.subtle} />
+                  <DueDate item={item} />
+                  <Text className="text-sm text-text-subtle">
+                    {format(parseISO(item.end), 'yyyy')}
+                  </Text>
+                </View>
+              </Property>
+              {item.recurrence ? (
+                <Property label="Repeats">
+                  <View className="flex-row items-center gap-1.5">
+                    <Repeat size={13} color={c.text} />
+                    <Text className="text-sm text-text-heading">
+                      {describeRecurrence(item.recurrence) || item.recurrence}
+                    </Text>
+                  </View>
+                </Property>
               ) : null}
               {(item.reminders ?? []).length > 0 ? (
-                <View className="mb-4 flex-row items-center gap-1.5">
-                  <Bell size={13} color={text} />
-                  <Text className="text-xs text-text-main">
-                    {item.reminders
-                      .map(
-                        r =>
-                          `${
-                            r.offsetDays === 0
-                              ? 'Due date'
-                              : `${r.offsetDays}d before`
-                          } at ${r.time}`,
-                      )
-                      .join(' · ')}
-                  </Text>
-                </View>
-              ) : (
-                <View className="mb-4" />
-              )}
-
-              <Text className="mb-2 text-xs font-semibold uppercase text-text-main">
-                Status
-              </Text>
-              <View className="mb-5 flex-row flex-wrap gap-2">
-                {STATUSES.map(s => {
-                  const active = s.key === item.status;
-                  return (
-                    <Pressable
-                      key={s.key}
-                      accessibilityRole="button"
-                      onPress={() =>
-                        editItem({ ...item, status: s.key }).catch(err =>
-                          setActionError(
-                            err instanceof Error
-                              ? err.message
-                              : 'Could not update the status',
-                          ),
+                <Property label="Reminders">
+                  <View className="flex-row flex-wrap items-center gap-1.5">
+                    <Bell size={13} color={c.text} />
+                    <Text className="text-sm text-text-heading">
+                      {item.reminders
+                        .map(
+                          r =>
+                            `${r.offsetDays === 0 ? 'On the day' : `${r.offsetDays}d before`} at ${r.time}`,
                         )
-                      }
-                      style={active ? { backgroundColor: s.color } : undefined}
-                      className="rounded-full border border-border-main px-3 py-1.5 active:opacity-70"
-                    >
-                      <Text
-                        className={active ? 'text-white' : 'text-text-heading'}
-                      >
-                        {s.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-
-              <View className="mb-2 flex-row items-center justify-between">
-                <View className="flex-row items-center gap-2">
-                  <ListTree size={16} color={heading} />
-                  <Text className="font-semibold text-text-heading">
-                    Subtasks
-                  </Text>
-                  {progress && progress.total > 0 ? (
-                    <Text className="text-xs text-text-main">
-                      {progress.done}/{progress.total} done
+                        .join(' · ')}
                     </Text>
-                  ) : null}
-                </View>
+                  </View>
+                </Property>
+              ) : null}
+              {item.labels.length > 0 ? (
+                <Property label="Labels">
+                  <View className="flex-row flex-wrap gap-1">
+                    {item.labels.map(l => (
+                      <Badge key={l} label={l} />
+                    ))}
+                  </View>
+                </Property>
+              ) : null}
+            </View>
+
+            <View className="mb-6">
+              <View className="mb-2 flex-row items-center gap-2">
+                <ListTree size={15} color={c.text} />
+                <Text className="text-sm font-semibold text-text-heading">Subtasks</Text>
+                {progress && progress.total > 0 ? (
+                  <Text className="text-sm text-text-subtle">
+                    {progress.done}/{progress.total}
+                  </Text>
+                ) : null}
+                <View className="flex-1" />
                 {canAdd ? (
-                  <Pressable
-                    accessibilityRole="button"
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    icon={Plus}
                     onPress={() => {
                       setForm({ mode: 'new', parentId: item.id });
                       close();
                     }}
-                    className="flex-row items-center gap-1 rounded-lg px-2 py-1 active:opacity-70"
                   >
-                    <Plus size={16} color={accent} />
-                    <Text className="text-sm font-medium text-accent">
-                      Add subtask
-                    </Text>
-                  </Pressable>
+                    Add subtask
+                  </Button>
                 ) : (
-                  <Text className="text-xs text-text-main">
+                  <Text className="text-xs text-text-subtle">
                     Max depth ({MAX_DEPTH}) reached
                   </Text>
                 )}
               </View>
               {progress && progress.total > 0 ? (
-                <View className="mb-2 h-1.5 overflow-hidden rounded-full bg-border-main">
+                <View className="mb-2 h-1 overflow-hidden rounded-full bg-muted">
                   <View
-                    style={{
-                      width: `${(progress.done / progress.total) * 100}%`,
-                    }}
-                    className="h-1.5 rounded-full bg-[#10b981]"
+                    style={{ width: `${(progress.done / progress.total) * 100}%` }}
+                    className="h-1 rounded-full bg-success"
                   />
                 </View>
               ) : null}
-              <View className="mb-5 gap-1">
-                {subtasks.length === 0 ? (
-                  <Text className="text-sm text-text-main">
-                    No subtasks yet.
-                  </Text>
-                ) : (
-                  subtasks.map(({ item: s, depth: d }) => (
-                    <Pressable
+              {subtasks.length === 0 ? (
+                <Text className="py-1 text-sm text-text-subtle">No subtasks yet</Text>
+              ) : (
+                <View className="overflow-hidden rounded-xl border border-border-main">
+                  {subtasks.map(({ item: s, depth: d }, idx) => (
+                    <Press
                       key={s.id}
+                      feedback="none"
                       accessibilityRole="button"
+                      accessibilityLabel={`Open ${s.title}`}
                       onPress={() => open(s.id)}
-                      style={{ marginLeft: (d - 1) * 16 }}
-                      className="flex-row items-center gap-2 rounded-lg border border-border-main px-3 py-2 active:opacity-70"
+                      style={{ paddingLeft: 12 + (d - 1) * 16 }}
+                      className={`flex-row items-center gap-2.5 py-2 pr-3 hover:bg-hover ${
+                        idx > 0 ? 'border-t border-border-main' : ''
+                      }`}
                     >
-                      <StatusDot status={s.status} />
-                      <Text
-                        numberOfLines={1}
-                        className="flex-1 text-sm text-text-heading"
-                      >
+                      <StatusIcon status={s.status} size={14} />
+                      <Text className="text-2xs text-text-subtle">{s.id}</Text>
+                      <Text numberOfLines={1} className="flex-1 text-sm text-text-heading">
                         {s.title}
                       </Text>
-                      <AssigneeAvatars ids={s.assigneeIds} size={20} />
-                    </Pressable>
-                  ))
-                )}
-              </View>
+                      <AssigneeAvatars ids={s.assigneeIds} size={18} />
+                    </Press>
+                  ))}
+                </View>
+              )}
+            </View>
 
-              <CommentsSection itemId={item.id} />
+            <CommentsSection itemId={item.id} />
+          </SheetBody>
+        </>
+      ) : null}
+    </Sheet>
+  );
+}
 
-              <View className="flex-row gap-2">
-                {deletable ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => {
-                      if (!confirmDelete) {
-                        setConfirmDelete(true);
-                        return;
-                      }
-                      removeItem(item)
-                        .then(close)
-                        .catch(err =>
-                          setActionError(
-                            err instanceof Error
-                              ? err.message
-                              : 'Could not delete the task',
-                          ),
-                        );
-                    }}
-                    className="items-center rounded-2xl border border-destructive/40 px-4 py-3 active:opacity-70"
-                  >
-                    <Text className="font-semibold text-destructive">
-                      {confirmDelete
-                        ? progress && progress.total > 0
-                          ? `Delete with ${progress.total} subtasks?`
-                          : 'Tap again to delete'
-                        : 'Delete'}
-                    </Text>
-                  </Pressable>
-                ) : null}
-                {editable ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => {
-                      setForm({ mode: 'edit', id: item.id });
-                      close();
-                    }}
-                    className="flex-1 items-center rounded-2xl border border-border-main py-3 active:opacity-70"
-                  >
-                    <Text className="text-text-heading">Edit</Text>
-                  </Pressable>
-                ) : null}
-                <Pressable
-                  accessibilityRole="button"
-                  onPress={close}
-                  className="flex-1 items-center rounded-2xl bg-accent py-3 active:opacity-80"
-                >
-                  <Text className="font-semibold text-accent-foreground">Done</Text>
-                </Pressable>
-              </View>
-            </ScrollView>
-          </Pressable>
-        ) : null}
-      </Pressable>
-    </Modal>
+// One label/value row in the properties panel.
+function Property({
+  label,
+  first = false,
+  children,
+}: {
+  label: string;
+  first?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <View
+      className={`min-h-[40px] flex-row items-center gap-3 px-3 py-2 ${
+        first ? '' : 'border-t border-border-main'
+      }`}
+    >
+      <Text className="w-24 text-sm text-text-subtle">{label}</Text>
+      <View className="flex-1 flex-row items-center">{children}</View>
+    </View>
   );
 }

@@ -88,6 +88,7 @@ GoogleService-Info.plist
 # Web build output
 /web-build/
 /dist/
+CLAUDE.md
 
 # Tests and Jest mocks (kept local)
 __tests__/

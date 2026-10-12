@@ -1,13 +1,6 @@
 import { useEffect, useState } from 'react';
-import {
-  KeyboardAvoidingView,
-  Modal,
-  Platform,
-  Pressable,
-  ScrollView,
-  Text,
-  View,
-} from 'react-native';
+import { View } from 'react-native';
+import { Mail, Phone } from 'lucide-react-native';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import {
   profileAtom,
@@ -16,7 +9,16 @@ import {
 } from '../../atoms/profile';
 import { userInfoAtom } from '../../atoms/userInfo';
 import { useUpdateUserInfo } from '../../hooks/useUpdateUserInfo';
-import { Field, FormInput } from './shared';
+import { errorMessage, toast } from '../../atoms/feedback';
+import {
+  Button,
+  Field,
+  Input,
+  Sheet,
+  SheetBody,
+  SheetFooter,
+  SheetHeader,
+} from '../ui';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -34,6 +36,7 @@ export function ProfileEditModal() {
   const [organization, setOrganization] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [attempted, setAttempted] = useState(false);
 
   // Reset the fields from the current profile each time the form opens.
   useEffect(() => {
@@ -45,6 +48,7 @@ export function ProfileEditModal() {
     setOrganization(profile.organization);
     setEmail(profile.email);
     setPhone(profile.phone);
+    setAttempted(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
@@ -61,6 +65,7 @@ export function ProfileEditModal() {
 
   const save = () => {
     if (!valid) {
+      setAttempted(true);
       return;
     }
     setProfile(prev => ({
@@ -82,99 +87,69 @@ export function ProfileEditModal() {
       Promise.all([
         updateUserInfo.mutateAsync({ isPublic: true, info: publicInfo }),
         updateUserInfo.mutateAsync({ isPublic: false, info: privateInfo }),
-      ]).catch(err => console.warn('Could not save profile to server:', err));
+      ]).catch(err =>
+        toast.error('Profile saved on this device only', {
+          description: errorMessage(err, 'The server didn’t accept the update.'),
+        }),
+      );
     }
+    toast.success('Profile updated');
     backToView();
   };
 
   return (
-    <Modal
-      visible={open}
-      transparent
-      animationType="fade"
-      onRequestClose={backToView}
-    >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        className="flex-1"
-      >
-        <Pressable
-          accessibilityLabel="Close"
-          onPress={backToView}
-          className="flex-1 items-center justify-end bg-black/50 sm:justify-center"
-        >
-          <Pressable
-            onPress={() => {}}
-            className="max-h-[92%] w-full max-w-md rounded-t-3xl bg-bg-card p-5 sm:rounded-3xl"
-          >
-            <Text className="mb-3 text-lg font-bold text-text-heading">
-              Edit profile
-            </Text>
-            <ScrollView keyboardShouldPersistTaps="handled">
-              <Field label="Name" error={errors.name}>
-                <FormInput
-                  value={name}
-                  onChangeText={setName}
-                  placeholder="Your name"
-                />
-              </Field>
-              <Field label="Role">
-                <FormInput
-                  value={role}
-                  onChangeText={setRole}
-                  placeholder="e.g. Tech Lead"
-                />
-              </Field>
-              <Field label="Organization">
-                <FormInput
-                  value={organization}
-                  onChangeText={setOrganization}
-                  placeholder="e.g. Yukthi Systems"
-                />
-              </Field>
-              <Field label="Email" error={errors.email}>
-                <FormInput
-                  value={email}
-                  onChangeText={setEmail}
-                  placeholder="you@company.com"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                />
-              </Field>
-              <Field label="Phone">
-                <FormInput
-                  value={phone}
-                  onChangeText={setPhone}
-                  placeholder="Optional"
-                  keyboardType="phone-pad"
-                />
-              </Field>
-            </ScrollView>
-
-            <View className="mt-3 flex-row gap-2">
-              <Pressable
-                accessibilityRole="button"
-                onPress={backToView}
-                className="flex-1 items-center rounded-2xl border border-border-main py-3 active:opacity-70"
-              >
-                <Text className="text-text-heading">Cancel</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityState={{ disabled: !valid }}
-                disabled={!valid}
-                onPress={save}
-                className={`flex-1 items-center rounded-2xl bg-accent py-3 active:opacity-80 ${
-                  valid ? '' : 'opacity-40'
-                }`}
-              >
-                <Text className="font-semibold text-accent-foreground">Save</Text>
-              </Pressable>
-            </View>
-          </Pressable>
-        </Pressable>
-      </KeyboardAvoidingView>
-    </Modal>
+    <Sheet visible={open} onClose={backToView} size="sm">
+      <SheetHeader title="Edit profile" onClose={backToView} />
+      <SheetBody>
+        <Field label="Name" required error={attempted ? errors.name : null}>
+          <Input value={name} onChangeText={setName} placeholder="Your name" autoFocus />
+        </Field>
+        <View className="flex-row gap-3">
+          <View className="flex-1">
+            <Field label="Role">
+              <Input value={role} onChangeText={setRole} placeholder="e.g. Tech Lead" />
+            </Field>
+          </View>
+          <View className="flex-1">
+            <Field label="Organization">
+              <Input
+                value={organization}
+                onChangeText={setOrganization}
+                placeholder="e.g. Yukthi Systems"
+              />
+            </Field>
+          </View>
+        </View>
+        <Field label="Email" required error={attempted ? errors.email : null}>
+          <Input
+            icon={Mail}
+            value={email}
+            onChangeText={setEmail}
+            placeholder="you@company.com"
+            keyboardType="email-address"
+            autoCapitalize="none"
+            invalid={attempted && !!errors.email}
+          />
+        </Field>
+        <Field label="Phone" hint="Only you can see this." className="mb-1">
+          <Input
+            icon={Phone}
+            value={phone}
+            onChangeText={setPhone}
+            placeholder="Optional"
+            keyboardType="phone-pad"
+          />
+        </Field>
+      </SheetBody>
+      <SheetFooter>
+        <Button variant="ghost" onPress={backToView}>
+          Cancel
+        </Button>
+        <Button variant="primary" onPress={save} disabled={attempted && !valid}>
+          Save
+        </Button>
+      </SheetFooter>
+    </Sheet>
   );
 }
 

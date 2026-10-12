@@ -1,8 +1,8 @@
 import { useEffect } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useAtom, useAtomValue } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { tokenAtom } from '../atoms/auth';
-import { itemsAtom } from '../atoms/project';
+import { itemsAtom, tasksLoadingAtom } from '../atoms/project';
 import { listTasks } from '../services/tasks';
 import {
   FETCH_PAGE_LIMIT,
@@ -115,10 +115,17 @@ export function useTasksSync(view: ProjectView | undefined) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to the view/token actually changing, not to every items write
   }, [viewId, token]);
 
+  // isLoading, not isPending: a disabled query (TASKS_API_ENABLED off, or a
+  // local-only view) stays "pending" forever but never fetches.
+  const setLoading = useSetAtom(tasksLoadingAtom);
+  useEffect(() => {
+    setLoading(query.isLoading);
+  }, [query.isLoading, setLoading]);
+
   const refetch = () =>
     viewId !== undefined
       ? queryClient.invalidateQueries({ queryKey: ['tasks', viewId] })
       : Promise.resolve();
 
-  return { ready: !query.isPending, refetch };
+  return { ready: !query.isPending, loading: query.isLoading, refetch };
 }

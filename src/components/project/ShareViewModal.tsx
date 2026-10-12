@@ -1,14 +1,6 @@
 import { useState } from 'react';
-import {
-  ActivityIndicator,
-  Modal,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import { Check } from 'lucide-react-native';
+import { ScrollView, Text, View } from 'react-native';
+import { CircleCheck, Search } from 'lucide-react-native';
 import { useAtomValue } from 'jotai';
 import { tokenAtom } from '../../atoms/auth';
 import { currentUserIdAtom } from '../../atoms/members';
@@ -16,6 +8,20 @@ import { directoryAtom } from '../../atoms/userInfo';
 import { createSharedTaskView } from '../../services/views';
 import { withAuthRetry } from '../../services/authRetry';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { toast } from '../../atoms/feedback';
+import {
+  Button,
+  Callout,
+  Checkbox,
+  Field,
+  Input,
+  Press,
+  Sheet,
+  SheetBody,
+  SheetFooter,
+  SheetHeader,
+} from '../ui';
+import { InitialsAvatar } from './shared';
 import { useUserSearch } from '../../hooks/useUserSearch';
 import type { ProjectView } from '../../data/types';
 import type { UserSearchResult } from '../../services/types';
@@ -36,7 +42,7 @@ export function ShareViewModal({
   const token = useAtomValue(tokenAtom);
   const currentUserId = useAtomValue(currentUserIdAtom);
   const directory = useAtomValue(directoryAtom);
-  const { heading } = useThemeColors();
+  const c = useThemeColors();
 
   const [query, setQuery] = useState('');
   const [picked, setPicked] = useState<UserSearchResult | null>(null);
@@ -96,6 +102,7 @@ export function ShareViewModal({
         }),
       );
       setDone(true);
+      toast.success(`Shared with ${picked.email}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not share the view');
     } finally {
@@ -104,159 +111,105 @@ export function ShareViewModal({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
-      <Pressable
-        accessibilityLabel="Close"
-        onPress={close}
-        className="flex-1 items-center justify-end bg-black/50 sm:justify-center"
-      >
-        <Pressable
-          onPress={() => {}}
-          className="max-h-[92%] w-full max-w-md rounded-t-3xl bg-bg-card p-5 sm:rounded-3xl"
-        >
-          <Text className="mb-1 text-lg font-bold text-text-heading">
-            Share "{view?.name}"
-          </Text>
-
-          {done ? (
-            <View className="items-center gap-3 py-6">
-              <Text className="text-center text-text-heading">
-                Shared with {picked?.email}.
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                onPress={close}
-                className="rounded-2xl bg-accent px-5 py-3 active:opacity-80"
-              >
-                <Text className="font-semibold text-accent-foreground">Done</Text>
-              </Pressable>
+    <Sheet visible={visible} onClose={close} size="md" dismissable={!saving}>
+      <SheetHeader
+        title={`Share “${view?.name ?? ''}”`}
+        description="Only people in your organization can be found."
+        onClose={close}
+      />
+      {done ? (
+        <SheetBody scroll={false}>
+          <View className="items-center py-6">
+            <View className="mb-3 h-11 w-11 items-center justify-center rounded-full bg-success/15">
+              <CircleCheck size={22} color={c.success} />
             </View>
-          ) : (
-            <ScrollView keyboardShouldPersistTaps="handled">
-              <Text className="mb-3 text-xs text-text-main">
-                Only people in your organization can be found.
-              </Text>
-
-              <Text className="mb-1 text-xs font-semibold uppercase text-text-main">
-                Colleague's email
-              </Text>
-              <TextInput
+            <Text className="text-base font-semibold text-text-heading">View shared</Text>
+            <Text className="mt-1 text-sm text-text-main">{picked?.email} can open it now.</Text>
+          </View>
+        </SheetBody>
+      ) : (
+        <SheetBody>
+          <Field label="Colleague">
+            {picked ? (
+              <View className="h-10 flex-row items-center gap-2.5 rounded-lg border border-accent/50 bg-accent-soft px-3">
+                <InitialsAvatar color={c.accent} initials={picked.email[0]?.toUpperCase() ?? '?'} size={22} />
+                <Text numberOfLines={1} className="flex-1 text-sm text-text-heading">{picked.email}</Text>
+                <Button size="sm" variant="ghost" onPress={() => setPicked(null)}>Change</Button>
+              </View>
+            ) : (
+              <Input
+                icon={Search}
                 value={query}
                 onChangeText={search}
                 placeholder="Start typing an email"
-                placeholderTextColor="#9ca3af"
                 autoCapitalize="none"
                 autoCorrect={false}
-                className="mb-2 rounded-xl border border-border-main px-3 py-2.5 text-text-heading"
+                autoFocus
               />
-
-              {picked ? (
-                <View className="mb-4 flex-row items-center justify-between rounded-xl border border-accent/50 bg-accent/10 px-3 py-2.5">
-                  <Text className="text-text-heading">{picked.email}</Text>
-                  <Pressable
-                    accessibilityRole="button"
-                    onPress={() => setPicked(null)}
-                  >
-                    <Text className="text-xs text-accent">Change</Text>
-                  </Pressable>
-                </View>
-              ) : query.trim().length >= 2 ? (
-                <View className="mb-4 max-h-40 gap-1 rounded-xl border border-border-main p-1.5">
-                  {matches.length === 0 ? (
-                    <Text className="px-2 py-2 text-xs text-text-main">
-                      No matches yet — keep typing, or they may not exist in this
-                      organization.
-                    </Text>
-                  ) : (
-                    <ScrollView>
-                      {matches.map(u => (
-                        <Pressable
-                          key={u.user_id}
-                          accessibilityRole="button"
-                          onPress={() => setPicked(u)}
-                          className="rounded-lg px-2 py-2 active:opacity-70"
-                        >
-                          <Text className="text-text-heading">{u.email}</Text>
-                        </Pressable>
-                      ))}
-                    </ScrollView>
-                  )}
-                </View>
-              ) : null}
-
-              <Text className="mb-1 text-xs font-semibold uppercase text-text-main">
-                Note (optional)
-              </Text>
-              <TextInput
-                value={notes}
-                onChangeText={setNotes}
-                placeholder="Why you're sharing this"
-                placeholderTextColor="#9ca3af"
-                multiline
-                textAlignVertical="top"
-                className="mb-4 min-h-[50px] rounded-xl border border-border-main px-3 py-2.5 text-text-heading"
-              />
-
-              <Text className="mb-2 text-xs font-semibold uppercase text-text-main">
-                Their permissions
-              </Text>
-              <View className="mb-2 flex-row flex-wrap gap-2">
-                {[
-                  { label: 'Can create tasks', on: canCreate, set: setCanCreate },
-                  { label: 'Can edit tasks', on: canEdit, set: setCanEdit },
-                  { label: 'Can delete tasks', on: canDelete, set: setCanDelete },
-                ].map(t => (
-                  <Pressable
-                    key={t.label}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked: t.on }}
-                    onPress={() => t.set(!t.on)}
-                    className={`flex-row items-center gap-1.5 rounded-full border px-3 py-1.5 ${
-                      t.on ? 'border-accent bg-accent/10' : 'border-border-main'
-                    }`}
-                  >
-                    {t.on ? <Check size={14} color={heading} /> : null}
-                    <Text className="text-sm text-text-heading">{t.label}</Text>
-                  </Pressable>
-                ))}
-              </View>
-              <Text className="mb-2 text-xs text-text-main">
-                They can always view the view itself and anything it shows.
-              </Text>
-
-              {error ? (
-                <Text className="mb-2 text-xs text-destructive">{error}</Text>
-              ) : null}
-            </ScrollView>
-          )}
-
-          {!done ? (
-            <View className="mt-2 flex-row gap-2">
-              <Pressable
-                accessibilityRole="button"
-                onPress={close}
-                className="flex-1 items-center rounded-2xl border border-border-main py-3 active:opacity-70"
-              >
-                <Text className="text-text-heading">Cancel</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                disabled={!picked || saving}
-                onPress={share}
-                className={`flex-1 items-center rounded-2xl bg-accent py-3 active:opacity-80 ${
-                  picked && !saving ? '' : 'opacity-40'
-                }`}
-              >
-                {saving ? (
-                  <ActivityIndicator color="#ffffff" />
+            )}
+            {!picked && query.trim().length >= 2 ? (
+              <View className="mt-1.5 overflow-hidden rounded-lg border border-border-main bg-bg-card">
+                {matches.length === 0 ? (
+                  <Text className="px-3 py-3 text-sm text-text-subtle">
+                    No matches yet — keep typing, or they may not be in this organization.
+                  </Text>
                 ) : (
-                  <Text className="font-semibold text-accent-foreground">Share</Text>
+                  <ScrollView className="max-h-44">
+                    {matches.map(u => (
+                      <Press
+                        key={u.user_id}
+                        feedback="none"
+                        accessibilityRole="button"
+                        onPress={() => setPicked(u)}
+                        className="flex-row items-center gap-2.5 px-3 py-2 hover:bg-hover"
+                      >
+                        <InitialsAvatar color={c.borderStrong} initials={u.email[0]?.toUpperCase() ?? '?'} size={22} />
+                        <Text className="text-sm text-text-heading">{u.email}</Text>
+                      </Press>
+                    ))}
+                  </ScrollView>
                 )}
-              </Pressable>
+              </View>
+            ) : null}
+          </Field>
+
+          <Field label="Note">
+            <Input
+              value={notes}
+              onChangeText={setNotes}
+              placeholder="Why you're sharing this (optional)"
+              multiline
+              minHeight={56}
+            />
+          </Field>
+
+          <Field label="Their permissions" hint="They can always open the view and see what it shows." className="mb-1">
+            <View className="gap-1">
+              <Checkbox checked={canCreate} onChange={setCanCreate} label="Can create tasks" />
+              <Checkbox checked={canEdit} onChange={setCanEdit} label="Can edit tasks" />
+              <Checkbox checked={canDelete} onChange={setCanDelete} label="Can delete tasks" />
+            </View>
+          </Field>
+
+          {error ? (
+            <View className="mt-3">
+              <Callout kind="error">{error}</Callout>
             </View>
           ) : null}
-        </Pressable>
-      </Pressable>
-    </Modal>
+        </SheetBody>
+      )}
+      <SheetFooter>
+        {done ? (
+          <Button variant="primary" onPress={close}>Done</Button>
+        ) : (
+          <>
+            <Button variant="ghost" onPress={close} disabled={saving}>Cancel</Button>
+            <Button variant="primary" onPress={share} disabled={!picked} loading={saving}>
+              Share
+            </Button>
+          </>
+        )}
+      </SheetFooter>
+    </Sheet>
   );
 }

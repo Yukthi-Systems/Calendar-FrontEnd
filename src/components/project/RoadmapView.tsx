@@ -2,13 +2,14 @@ import { useRef, useState } from 'react';
 import {
   NativeScrollEvent,
   NativeSyntheticEvent,
-  Pressable,
   ScrollView,
   type ScrollViewInstance,
   Text,
   View,
 } from 'react-native';
 import { useAtomValue, useSetAtom } from 'jotai';
+import { GanttChart, Plus } from 'lucide-react-native';
+import type { WorkItem } from '../../data/types';
 import {
   addDays,
   differenceInCalendarDays,
@@ -21,13 +22,16 @@ import {
   startOfMonth,
   startOfWeek,
 } from 'date-fns';
-import { itemsAtom, selectedItemIdAtom } from '../../atoms/project';
+import { itemFormAtom, itemsAtom, selectedItemIdAtom } from '../../atoms/project';
 import { STATUSES, statusInfo } from '../../data/constants';
 import { flattenTree } from '../../data/tree';
-import { AssigneeAvatars } from './shared';
+import { useThemeColors, useTone } from '../../hooks/useThemeColors';
+import { mix } from '../../theme/color';
+import { Button, EmptyState, Press, SegmentedControl } from '../ui';
+import { AssigneeAvatars, StatusIcon } from './shared';
 
-const ROW_H = 46;
-const HEADER_H = 40;
+const ROW_H = 44;
+const HEADER_H = 36;
 const LABEL_W = 260;
 const INDENT = 14;
 
@@ -112,6 +116,33 @@ function buildColumns(
 // Timeline in tree order: each subtask sits under its parent, indented by level.
 export function RoadmapView() {
   const items = useAtomValue(itemsAtom);
+  if (items.length === 0) {
+    return <RoadmapEmpty />;
+  }
+  return <RoadmapTimeline items={items} />;
+}
+
+// Nothing to lay out yet — the timeline's date range comes from the tasks, so an
+// empty list has no range at all.
+function RoadmapEmpty() {
+  const setForm = useSetAtom(itemFormAtom);
+  return (
+    <EmptyState
+      icon={GanttChart}
+      title="Nothing on the roadmap"
+      description="Tasks appear here as bars across their start and due dates, so you can see what overlaps."
+      action={
+        <Button variant="primary" icon={Plus} onPress={() => setForm({ mode: 'new' })}>
+          New task
+        </Button>
+      }
+    />
+  );
+}
+
+function RoadmapTimeline({ items }: { items: WorkItem[] }) {
+  const toneOf = useTone();
+  const theme = useThemeColors();
   const headerRef = useRef<ScrollViewInstance>(null);
   const select = useSetAtom(selectedItemIdAtom);
   const [zoom, setZoom] = useState<Zoom>('week');
@@ -142,34 +173,31 @@ export function RoadmapView() {
   // Legend + zoom switch and the header row stay fixed; rows scroll vertically.
   // The header's horizontal position follows the body's.
   return (
-    <View className="flex-1 p-4">
+    <View className="flex-1 px-4 pb-4 pt-3 lg:px-6">
       <View className="mb-3 flex-row flex-wrap items-center justify-between gap-3">
-        <View className="flex-row flex-wrap items-center gap-4">
+        <View className="flex-row flex-wrap items-center gap-x-4 gap-y-1">
           {STATUSES.map(s => (
             <View key={s.key} className="flex-row items-center gap-1.5">
-              <View
-                style={{ backgroundColor: s.color }}
-                className="h-2.5 w-2.5 rounded-sm"
-              />
+              <StatusIcon status={s.key} size={13} />
               <Text className="text-xs text-text-main">{s.label}</Text>
             </View>
           ))}
           <View className="flex-row items-center gap-1.5">
-            <View className="h-3 w-px bg-accent" />
+            <View className="h-3 w-0.5 rounded-full bg-accent" />
             <Text className="text-xs text-text-main">Today</Text>
           </View>
         </View>
-        <ZoomSwitch zoom={zoom} onChange={setZoom} />
+        <SegmentedControl options={ZOOMS} value={zoom} onChange={setZoom} />
       </View>
 
-      <View className="flex-1 overflow-hidden rounded-2xl border border-border-main bg-bg-card">
-        <View className="flex-row border-b border-border-main bg-bg-main">
+      <View className="flex-1 overflow-hidden rounded-xl border border-border-main bg-bg-card">
+        <View className="flex-row border-b border-border-main bg-muted">
           <View
             style={{ width: LABEL_W, height: HEADER_H }}
             className="justify-center border-r border-border-main px-3"
           >
-            <Text className="text-[11px] font-semibold uppercase tracking-wide text-text-main">
-              Item
+            <Text className="text-2xs font-semibold uppercase tracking-wider text-text-subtle">
+              Task
             </Text>
           </View>
           <ScrollView
@@ -191,7 +219,7 @@ export function RoadmapView() {
                 >
                   <Text
                     numberOfLines={1}
-                    className="text-[11px] font-medium text-text-main"
+                    className="text-2xs font-medium text-text-subtle"
                   >
                     {headerLabel(c.start)}
                   </Text>
@@ -208,26 +236,29 @@ export function RoadmapView() {
               className="border-r border-border-main"
             >
               {rows.map(({ item: i, depth }) => (
-                <Pressable
+                <Press
                   key={i.id}
+                  feedback="none"
                   accessibilityRole="button"
+                  accessibilityLabel={i.title}
                   onPress={() => select(i.id)}
                   style={{
                     height: ROW_H,
                     paddingLeft: 12 + (depth - 1) * INDENT,
                   }}
-                  className="flex-row items-center gap-2 border-b border-border-main pr-3 active:bg-accent/10"
+                  className="flex-row items-center gap-2 border-b border-border-main pr-3 hover:bg-hover"
                 >
-                  <AssigneeAvatars ids={i.assigneeIds} size={22} />
+                  <StatusIcon status={i.status} size={14} />
                   <Text
                     numberOfLines={1}
-                    className={`flex-1 text-xs text-text-heading ${
-                      depth === 1 ? 'font-semibold' : ''
+                    className={`flex-1 text-sm text-text-heading ${
+                      depth === 1 ? 'font-medium' : ''
                     }`}
                   >
                     {i.title}
                   </Text>
-                </Pressable>
+                  <AssigneeAvatars ids={i.assigneeIds} size={20} max={2} />
+                </Press>
               ))}
             </View>
 
@@ -238,48 +269,7 @@ export function RoadmapView() {
               className="flex-1"
             >
               <View style={{ width: totalW }}>
-                {rows.map(({ item: i, depth }) => {
-                  const left =
-                    differenceInCalendarDays(parseISO(i.start), first) *
-                    dayWidth;
-                  const width =
-                    (differenceInCalendarDays(
-                      parseISO(i.end),
-                      parseISO(i.start),
-                    ) +
-                      1) *
-                    dayWidth;
-                  const color = statusInfo(i.status).color;
-                  return (
-                    <View
-                      key={i.id}
-                      style={{ height: ROW_H }}
-                      className="justify-center border-b border-border-main"
-                    >
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={i.title}
-                        onPress={() => select(i.id)}
-                        style={{
-                          left,
-                          width: Math.max(width - 2, 4),
-                          backgroundColor: color,
-                          height: depth === 1 ? 28 : 22,
-                        }}
-                        className="absolute justify-center rounded-lg px-2 active:opacity-70"
-                      >
-                        {width >= 28 ? (
-                          <Text
-                            numberOfLines={1}
-                            className="text-[11px] font-medium text-white"
-                          >
-                            {width >= 120 ? i.title : i.id}
-                          </Text>
-                        ) : null}
-                      </Pressable>
-                    </View>
-                  );
-                })}
+                {/* Grid and today marker first, so the bars paint over them. */}
                 {columns.map(c => (
                   <View
                     key={`grid-${c.start.toISOString()}`}
@@ -293,48 +283,67 @@ export function RoadmapView() {
                 <View
                   pointerEvents="none"
                   style={{ left: todayX }}
-                  className="absolute bottom-0 top-0 w-0.5 bg-accent"
+                  className="absolute bottom-0 top-0 w-0.5 bg-accent/70"
                 />
+                <View
+                  pointerEvents="none"
+                  style={{ left: todayX - 3 }}
+                  className="absolute top-0 h-2 w-2 rounded-full bg-accent"
+                />
+                {rows.map(({ item: i, depth }) => {
+                  const left =
+                    differenceInCalendarDays(parseISO(i.start), first) *
+                    dayWidth;
+                  const width =
+                    (differenceInCalendarDays(
+                      parseISO(i.end),
+                      parseISO(i.start),
+                    ) +
+                      1) *
+                    dayWidth;
+                  const color = statusInfo(i.status).color;
+                  const t = toneOf(color);
+                  return (
+                    <View
+                      key={i.id}
+                      style={{ height: ROW_H }}
+                      className="justify-center border-b border-border-main"
+                    >
+                      <Press
+                        feedback="subtle"
+                        accessibilityRole="button"
+                        accessibilityLabel={i.title}
+                        onPress={() => select(i.id)}
+                        style={{
+                          left,
+                          width: Math.max(width - 2, 6),
+                          // Opaque (tint mixed into the card colour) so the
+                          // grid and today line don't show through.
+                          backgroundColor: mix(theme.card, color, theme.dark ? 0.22 : 0.13),
+                          borderColor: t.border,
+                          borderLeftColor: color,
+                          height: depth === 1 ? 26 : 20,
+                        }}
+                        className="absolute justify-center rounded-md border border-l-[3px] px-2 hover:opacity-80"
+                      >
+                        {width >= 36 ? (
+                          <Text
+                            numberOfLines={1}
+                            style={{ color: t.fg }}
+                            className="text-2xs font-medium"
+                          >
+                            {width >= 120 ? i.title : i.id}
+                          </Text>
+                        ) : null}
+                      </Press>
+                    </View>
+                  );
+                })}
               </View>
             </ScrollView>
           </View>
         </ScrollView>
       </View>
-    </View>
-  );
-}
-
-function ZoomSwitch({
-  zoom,
-  onChange,
-}: {
-  zoom: Zoom;
-  onChange: (z: Zoom) => void;
-}) {
-  return (
-    <View className="flex-row rounded-lg border border-border-main p-0.5">
-      {ZOOMS.map(z => {
-        const active = z.key === zoom;
-        return (
-          <Pressable
-            key={z.key}
-            accessibilityRole="radio"
-            accessibilityState={{ selected: active }}
-            onPress={() => onChange(z.key)}
-            className={`rounded-md px-3 py-1.5 active:opacity-70 ${
-              active ? 'bg-accent' : ''
-            }`}
-          >
-            <Text
-              className={`text-xs font-medium ${
-                active ? 'text-accent-foreground' : 'text-text-main'
-              }`}
-            >
-              {z.label}
-            </Text>
-          </Pressable>
-        );
-      })}
     </View>
   );
 }

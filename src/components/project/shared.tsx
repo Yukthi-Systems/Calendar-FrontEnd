@@ -1,23 +1,22 @@
 import { useMemo, useState } from 'react';
+import { ScrollView, Text, View } from 'react-native';
 import {
-  Modal,
-  Pressable,
-  ScrollView,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
-import {
-  Check,
   ChevronDown,
+  CircleCheck,
+  CircleDashed,
+  CircleDot,
+  CirclePause,
+  CircleX,
   ListTree,
-  Lock,
   Repeat,
   Search,
-  X,
+  SignalHigh,
+  SignalLow,
+  SignalMedium,
   type LucideIcon,
 } from 'lucide-react-native';
 import { useAtomValue, useSetAtom } from 'jotai';
+import { differenceInCalendarDays, format, parseISO } from 'date-fns';
 import { itemsAtom, selectedItemIdAtom } from '../../atoms/project';
 import { PRIORITY_COLOR, statusInfo } from '../../data/constants';
 import { useThemeColors } from '../../hooks/useThemeColors';
@@ -25,8 +24,18 @@ import { memberById } from '../../atoms/members';
 import { describeRecurrence } from '../../data/rrule';
 import { subtaskProgress } from '../../data/tree';
 import { showsField } from '../../data/viewFields';
-import type { ViewField, WorkItem } from '../../data/types';
+import type { Priority, Status, ViewField, WorkItem } from '../../data/types';
 import { Tooltip } from './Tooltip';
+import {
+  Badge,
+  Button,
+  CheckboxBox,
+  Input,
+  Press,
+  Sheet,
+  SheetFooter,
+  SheetHeader,
+} from '../ui';
 
 // A colour + initials circle, decoupled from the team-member lookup below —
 // also used for the account profile avatar, which isn't necessarily a member.
@@ -49,11 +58,14 @@ export function InitialsAvatar({
         height: size,
         borderRadius: size / 2,
         backgroundColor: color,
-        borderWidth: ring ? 2 : 0,
+        borderWidth: ring ? 1.5 : 0,
       }}
       className={`items-center justify-center ${ring ? 'border-bg-card' : ''}`}
     >
-      <Text style={{ fontSize: size * 0.4 }} className="font-bold text-white">
+      <Text
+        style={{ fontSize: Math.max(9, size * 0.38), lineHeight: size }}
+        className="font-semibold text-white"
+      >
         {initials}
       </Text>
     </View>
@@ -95,16 +107,18 @@ export function AssigneeAvatars({
 }) {
   if (ids.length === 0) {
     return (
-      <View
-        style={{
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          borderWidth: 1.5,
-          borderStyle: 'dashed',
-        }}
-        className="items-center justify-center border-border-main"
-      />
+      <Tooltip label="Unassigned">
+        <View
+          style={{
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+            borderWidth: 1.5,
+            borderStyle: 'dashed',
+          }}
+          className="border-border-strong"
+        />
+      </Tooltip>
     );
   }
   const shown = ids.slice(0, max);
@@ -112,7 +126,7 @@ export function AssigneeAvatars({
   return (
     <View className="flex-row items-center">
       {shown.map((id, i) => (
-        <View key={id} style={{ marginLeft: i === 0 ? 0 : -size * 0.3 }}>
+        <View key={id} style={{ marginLeft: i === 0 ? 0 : -size * 0.28 }}>
           <Avatar id={id} size={size} ring />
         </View>
       ))}
@@ -128,13 +142,14 @@ export function AssigneeAvatars({
               width: size,
               height: size,
               borderRadius: size / 2,
-              marginLeft: -size * 0.3,
+              marginLeft: -size * 0.28,
+              borderWidth: 1.5,
             }}
-            className="items-center justify-center bg-border-main"
+            className="items-center justify-center border-bg-card bg-muted"
           >
             <Text
-              style={{ fontSize: size * 0.38 }}
-              className="font-bold text-text-heading"
+              style={{ fontSize: Math.max(9, size * 0.36) }}
+              className="font-semibold text-text-main"
             >
               +{rest}
             </Text>
@@ -161,59 +176,152 @@ export function RecurrenceIcon({
   freq: string;
   size?: number;
 }) {
-  const { text } = useThemeColors();
+  const { subtle } = useThemeColors();
   return (
     <Tooltip label={describeRecurrence(freq) || 'Repeats'}>
-      <Repeat size={size} color={text} />
+      <Repeat size={size} color={subtle} strokeWidth={2} />
     </Tooltip>
   );
 }
 
-export function StatusDot({ status }: { status: WorkItem['status'] }) {
+const STATUS_ICON: Record<Status, LucideIcon> = {
+  not_started: CircleDashed,
+  in_progress: CircleDot,
+  completed: CircleCheck,
+  rejected: CircleX,
+  on_hold: CirclePause,
+};
+
+// Shape + colour per status (Linear-style), readable without relying on colour alone.
+export function StatusIcon({
+  status,
+  size = 15,
+}: {
+  status: Status;
+  size?: number;
+}) {
+  const s = statusInfo(status);
+  const Icon = STATUS_ICON[status] ?? CircleDashed;
+  return (
+    <Tooltip label={s.label}>
+      <Icon size={size} color={s.color} strokeWidth={2.25} />
+    </Tooltip>
+  );
+}
+
+// Kept for call sites that only have room for a dot.
+export function StatusDot({ status }: { status: Status }) {
   return (
     <View
       style={{ backgroundColor: statusInfo(status).color }}
-      className="h-2.5 w-2.5 rounded-full"
+      className="h-2 w-2 rounded-full"
     />
   );
 }
 
-export function Pill({ text, color }: { text: string; color?: string }) {
+export function StatusBadge({ status }: { status: Status }) {
+  const s = statusInfo(status);
+  return <Badge label={s.label} color={s.color} dot />;
+}
+
+const PRIORITY_ICON: Record<Priority, LucideIcon> = {
+  low: SignalLow,
+  medium: SignalMedium,
+  high: SignalHigh,
+};
+
+export const PRIORITY_LABEL: Record<Priority, string> = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+};
+
+export function PriorityIcon({
+  priority,
+  size = 15,
+}: {
+  priority: Priority;
+  size?: number;
+}) {
+  const Icon = PRIORITY_ICON[priority] ?? SignalMedium;
   return (
-    <View
-      style={color ? { backgroundColor: `${color}22` } : undefined}
-      className={`rounded-full px-2 py-0.5 ${color ? '' : 'bg-border-main'}`}
-    >
-      <Text
-        style={color ? { color } : undefined}
-        className="text-[11px] text-text-main"
-      >
-        {text}
+    <Tooltip label={`${PRIORITY_LABEL[priority]} priority`}>
+      <Icon size={size} color={PRIORITY_COLOR[priority]} strokeWidth={2.5} />
+    </Tooltip>
+  );
+}
+
+export function PriorityBadge({ priority }: { priority: Priority }) {
+  return (
+    <View className="flex-row items-center gap-1.5">
+      <PriorityIcon priority={priority} size={14} />
+      <Text className="text-sm text-text-main">
+        {PRIORITY_LABEL[priority]}
       </Text>
     </View>
   );
 }
 
-// Compact row used by the team, calendar and kanban views.
+// "Oct 14", tinted red when it's past and the task isn't finished, amber when due
+// within a day.
+export function DueDate({
+  item,
+  className = 'text-sm',
+}: {
+  item: WorkItem;
+  className?: string;
+}) {
+  const done = item.status === 'completed' || item.status === 'rejected';
+  const days = differenceInCalendarDays(parseISO(item.end), new Date());
+  const tint = done
+    ? 'text-text-main'
+    : days < 0
+    ? 'text-destructive'
+    : days <= 1
+    ? 'text-warning'
+    : 'text-text-main';
+  return (
+    <Tooltip
+      label={
+        done
+          ? `Due ${format(parseISO(item.end), 'PP')}`
+          : days < 0
+          ? `Overdue by ${-days} day${days === -1 ? '' : 's'}`
+          : days === 0
+          ? 'Due today'
+          : `Due in ${days} day${days === 1 ? '' : 's'}`
+      }
+    >
+      <Text numberOfLines={1} className={`${className} ${tint}`}>
+        {format(parseISO(item.end), 'MMM d')}
+      </Text>
+    </Tooltip>
+  );
+}
+
+// Compact row used by the team, calendar and search views.
 export function ItemRow({
   item,
   showAssignee = true,
   fields,
+  onPress,
 }: {
   item: WorkItem;
   showAssignee?: boolean;
   fields?: ViewField[];
+  onPress?: () => void;
 }) {
   const select = useSetAtom(selectedItemIdAtom);
   return (
-    <Pressable
+    <Press
+      feedback="subtle"
       accessibilityRole="button"
-      onPress={() => select(item.id)}
-      className="flex-row items-center gap-2 rounded-xl border border-border-main bg-bg-card px-3 py-2 active:opacity-70"
+      onPress={onPress ?? (() => select(item.id))}
+      className="flex-row items-center gap-2.5 rounded-lg border border-border-main bg-bg-card px-3 py-2 hover:border-border-strong hover:bg-hover"
     >
-      {showsField(fields, 'status') ? <StatusDot status={item.status} /> : null}
+      {showsField(fields, 'status') ? <StatusIcon status={item.status} /> : null}
       <View className="flex-1">
-        <View className="flex-row items-center gap-1">
+        <View className="flex-row items-center gap-1.5">
           <Text
             numberOfLines={1}
             className="shrink text-sm font-medium text-text-heading"
@@ -224,53 +332,21 @@ export function ItemRow({
             <RecurrenceIcon freq={item.recurrence} size={11} />
           ) : null}
         </View>
-        <View className="flex-row items-center gap-2">
+        <View className="mt-0.5 flex-row items-center gap-2">
           {showsField(fields, 'id') ? (
-            <Text className="text-[11px] text-text-main">{item.id}</Text>
+            <Text className="text-2xs text-text-subtle">{item.id}</Text>
           ) : null}
+          <DueDate item={item} className="text-2xs" />
           <SubtaskBadge id={item.id} />
         </View>
       </View>
       {showsField(fields, 'priority') ? (
-        <View
-          style={{ backgroundColor: PRIORITY_COLOR[item.priority] }}
-          className="h-2 w-2 rounded-full"
-        />
+        <PriorityIcon priority={item.priority} size={14} />
       ) : null}
       {showAssignee && showsField(fields, 'assignee') ? (
-        <AssigneeAvatars ids={item.assigneeIds} size={22} />
+        <AssigneeAvatars ids={item.assigneeIds} size={20} />
       ) : null}
-    </Pressable>
-  );
-}
-
-export function SectionHeader({ children }: { children: React.ReactNode }) {
-  return (
-    <Text className="mb-2 mt-4 text-xs font-semibold uppercase tracking-wide text-text-main">
-      {children}
-    </Text>
-  );
-}
-
-export function IconButton({
-  icon: Icon,
-  label,
-  onPress,
-}: {
-  icon: LucideIcon;
-  label: string;
-  onPress: () => void;
-}) {
-  const { heading } = useThemeColors();
-  return (
-    <Pressable
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      onPress={onPress}
-      className="h-9 w-9 items-center justify-center rounded-lg border border-border-main active:opacity-70"
-    >
-      <Icon size={18} color={heading} />
-    </Pressable>
+    </Press>
   );
 }
 
@@ -282,47 +358,9 @@ export const PAGE_STYLE = {
   alignSelf: 'center',
 } as const;
 
-// Labeled form field with an optional inline error — used by every text-input
-// form in the app (item create/edit, profile edit).
-export function Field({
-  label,
-  error,
-  children,
-}: {
-  label: string;
-  error?: string | null;
-  children: React.ReactNode;
-}) {
-  return (
-    <View className="mb-4">
-      <Text className="mb-1 text-xs font-semibold uppercase text-text-main">
-        {label}
-      </Text>
-      {children}
-      {error ? (
-        <Text className="mt-1 text-xs text-destructive">{error}</Text>
-      ) : null}
-    </View>
-  );
-}
-
-export function FormInput(props: React.ComponentProps<typeof TextInput>) {
-  return (
-    <TextInput
-      placeholderTextColor="#9ca3af"
-      textAlignVertical={props.multiline ? 'top' : 'center'}
-      {...props}
-      className={`rounded-xl border border-border-main px-3 py-2.5 text-text-heading ${
-        props.multiline ? 'min-h-[72px]' : ''
-      }`}
-    />
-  );
-}
-
-// Multi-select dropdown: a trigger showing the current selection, and — while
-// open — the option list inline underneath it (not an overlay/portal, so it
-// works the same inside a ScrollView on every platform, with no z-index or
-// clipping concerns). Used for the item form's Assignees field.
+// Multi-select picker: a trigger showing the current selection that opens a
+// searchable sheet — a list of 100+ options would otherwise push the rest of the
+// form far down the screen. Used for the item form's Assignees field.
 export function MultiSelectDropdown({
   label,
   options,
@@ -353,15 +391,17 @@ export function MultiSelectDropdown({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const { text, heading } = useThemeColors();
+  const c = useThemeColors();
   const selected = options.filter(o => selectedIds.includes(o.id));
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q ? options.filter(
+    return q
+      ? options.filter(
           o =>
             o.label.toLowerCase().includes(q) || o.id.toLowerCase().includes(q),
-        ) : options;
+        )
+      : options;
   }, [options, query]);
 
   const close = () => {
@@ -371,132 +411,79 @@ export function MultiSelectDropdown({
 
   return (
     <View>
-      <Pressable
+      <Press
+        feedback="none"
         accessibilityRole="button"
         onPress={() => setOpen(true)}
-        className="flex-row items-center justify-between rounded-xl border border-border-main px-3 py-2.5"
+        className="min-h-[36px] flex-row items-center gap-2 rounded-lg border border-border-main bg-bg-card px-3 py-1.5 hover:border-border-strong"
       >
-        <Text
-          numberOfLines={1}
-          className={`flex-1 ${
-            selected.length ? 'text-text-heading' : 'text-text-main'
-          }`}
-        >
-          {selected.length
-            ? selected.map(o => o.label).join(', ')
-            : placeholder}
-        </Text>
-        <ChevronDown size={16} color={text} />
-      </Pressable>
+        {selected.length > 0 ? (
+          <View className="flex-1 flex-row items-center gap-2">
+            <AssigneeAvatars ids={selected.map(o => o.id)} size={20} max={4} />
+            <Text numberOfLines={1} className="flex-1 text-base text-text-heading">
+              {selected.map(o => o.label).join(', ')}
+            </Text>
+          </View>
+        ) : (
+          <Text className="flex-1 text-base text-text-subtle">{placeholder}</Text>
+        )}
+        <ChevronDown size={15} color={c.subtle} />
+      </Press>
 
-      {/* A real picker sheet, not an inline expansion — a list of 100+ options
-          would otherwise push the rest of the form far down the screen. It
-          floats over the form and scrolls on its own, with a search box so a
-          long list is still fast to use. */}
-      <Modal
-        visible={open}
-        transparent
-        animationType="fade"
-        onRequestClose={close}
-      >
-        <Pressable
-          accessibilityLabel="Close"
-          onPress={close}
-          className="flex-1 items-center justify-end bg-black/50 sm:justify-center"
+      <Sheet visible={open} onClose={close} size="sm">
+        <SheetHeader title={label ?? placeholder} onClose={close} />
+        <View className="px-5 pb-2">
+          <Input
+            icon={Search}
+            value={query}
+            onChangeText={q => {
+              setQuery(q);
+              onQueryChange?.(q);
+            }}
+            placeholder="Search people…"
+            autoFocus
+          />
+        </View>
+        <ScrollView
+          style={{ flexGrow: 0, flexShrink: 1, maxHeight: 360 }}
+          contentContainerClassName="px-3 pb-2"
+          keyboardShouldPersistTaps="handled"
         >
-          <Pressable
-            onPress={() => {}}
-            className="max-h-[80%] w-full max-w-md rounded-t-3xl bg-bg-card p-4 sm:rounded-3xl"
-          >
-            <View className="mb-3 flex-row items-center justify-between">
-              <Text className="text-base font-bold text-text-heading">
-                {label ?? placeholder}
-              </Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Close"
-                onPress={close}
-                className="h-8 w-8 items-center justify-center rounded-lg active:opacity-70"
+          {filtered.map(o => {
+            const checked = selectedIds.includes(o.id);
+            return (
+              <Press
+                key={o.id}
+                feedback="subtle"
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked, disabled: o.locked }}
+                disabled={o.locked}
+                onPress={() => onToggle(o.id)}
+                className="flex-row items-center gap-3 rounded-lg px-2 py-2 hover:bg-hover"
               >
-                <X size={18} color={text} />
-              </Pressable>
-            </View>
-
-            <View className="mb-3 flex-row items-center gap-2 rounded-xl border border-border-main px-3 py-2">
-              <Search size={16} color={text} />
-              <TextInput
-                value={query}
-                onChangeText={q => {
-                  setQuery(q);
-                  onQueryChange?.(q);
-                }}
-                placeholder="Search…"
-                placeholderTextColor="#9ca3af"
-                className="flex-1 text-text-heading"
-              />
-            </View>
-
-            <ScrollView
-              className="max-h-[360px]"
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-            >
-              {filtered.map((o, i) => {
-                const checked = selectedIds.includes(o.id);
-                return (
-                  <Pressable
-                    key={o.id}
-                    accessibilityRole="checkbox"
-                    accessibilityState={{ checked, disabled: o.locked }}
-                    disabled={o.locked}
-                    onPress={() => onToggle(o.id)}
-                    className={`flex-row items-center gap-2.5 rounded-lg px-2 py-2.5 active:opacity-70 ${
-                      i > 0 ? 'border-t border-border-main' : ''
-                    } ${checked ? 'bg-accent/10' : ''}`}
-                  >
-                    <View
-                      style={{
-                        borderColor: checked ? o.color ?? heading : undefined,
-                        backgroundColor: checked
-                          ? o.color ?? heading
-                          : undefined,
-                      }}
-                      className="h-5 w-5 items-center justify-center rounded-md border border-border-main"
-                    >
-                      {o.locked ? (
-                        <Lock size={10} color="#ffffff" />
-                      ) : checked ? (
-                        <Check size={13} color="#ffffff" />
-                      ) : null}
-                    </View>
-                    <Text className="flex-1 text-text-heading">{o.label}</Text>
-                    {o.locked ? (
-                      <Text className="text-[11px] text-text-main">
-                        {o.lockedLabel ?? 'You'}
-                      </Text>
-                    ) : null}
-                  </Pressable>
-                );
-              })}
-              {filtered.length === 0 ? (
-                <Text className="py-6 text-center text-sm text-text-main">
-                  No matches.
-                </Text>
-              ) : null}
-            </ScrollView>
-
-            <Pressable
-              accessibilityRole="button"
-              onPress={close}
-              className="mt-3 items-center rounded-2xl bg-accent py-3 active:opacity-80"
-            >
-              <Text className="font-semibold text-accent-foreground">
-                Done{selected.length ? ` (${selected.length})` : ''}
-              </Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
+                <CheckboxBox checked={checked} locked={o.locked} />
+                <Avatar id={o.id} size={22} />
+                <Text className="flex-1 text-sm text-text-heading">{o.label}</Text>
+                {o.locked ? (
+                  <Text className="text-xs text-text-subtle">
+                    {o.lockedLabel ?? 'You'}
+                  </Text>
+                ) : null}
+              </Press>
+            );
+          })}
+          {filtered.length === 0 ? (
+            <Text className="py-8 text-center text-sm text-text-main">
+              No one matches “{query}”.
+            </Text>
+          ) : null}
+        </ScrollView>
+        <SheetFooter>
+          <Button variant="primary" onPress={close}>
+            {`Done${selected.length ? ` · ${selected.length}` : ''}`}
+          </Button>
+        </SheetFooter>
+      </Sheet>
     </View>
   );
 }
@@ -504,17 +491,19 @@ export function MultiSelectDropdown({
 // "2/5" chip with a tree icon; renders nothing for tasks without subtasks.
 export function SubtaskBadge({ id }: { id: string }) {
   const items = useAtomValue(itemsAtom);
-  const { text } = useThemeColors();
+  const { subtle } = useThemeColors();
   const { done, total } = subtaskProgress(items, id);
   if (total === 0) {
     return null;
   }
   return (
-    <View className="flex-row items-center gap-1">
-      <ListTree size={12} color={text} />
-      <Text className="text-[11px] text-text-main">
-        {done}/{total}
-      </Text>
-    </View>
+    <Tooltip label={`${done} of ${total} subtasks done`}>
+      <View className="flex-row items-center gap-1">
+        <ListTree size={12} color={subtle} />
+        <Text className="text-2xs text-text-subtle">
+          {done}/{total}
+        </Text>
+      </View>
+    </Tooltip>
   );
 }

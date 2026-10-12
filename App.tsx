@@ -32,6 +32,8 @@ import { LoginScreen } from './src/components/LoginScreen';
 import { SsoLoginModal } from './src/components/SsoLoginModal';
 import { ThemeRoot } from './src/components/ThemeRoot';
 import { ProjectScreen } from './src/components/project/ProjectScreen';
+import { ConfirmHost, ToastHost } from './src/components/ui';
+import { seedDemoIfRequested } from './src/dev/demoData';
 import { SSO_ENABLED } from './src/config/features';
 
 function App() {
@@ -41,6 +43,7 @@ function App() {
     bootProject();
     bootNotifications();
     bootWidgetSync();
+    seedDemoIfRequested();
     return () => {
       signal.cancelled = true;
     };
@@ -56,6 +59,8 @@ function App() {
             <StatusBarForTheme />
             <AppContent />
             {SSO_ENABLED ? <SsoLoginModal /> : null}
+            <ConfirmHost />
+            <ToastHost />
           </ThemeRoot>
         </SafeAreaProvider>
       </QueryClientProvider>
@@ -93,11 +98,9 @@ function AppContent() {
   if (SSO_ENABLED && authLoading && !sso.ssoPending) {
     return (
       <SafeAreaView className="flex-1 bg-bg-main">
-        <View className="flex-1 items-center justify-center gap-4 px-6">
-          <ActivityIndicator color={accent} size="large" />
-          <Text className="font-medium text-text-main">
-            Restoring secure session...
-          </Text>
+        <View className="flex-1 items-center justify-center gap-3 px-6">
+          <ActivityIndicator color={accent} />
+          <Text className="text-sm text-text-subtle">Restoring your session…</Text>
         </View>
       </SafeAreaView>
     );

@@ -1,33 +1,119 @@
 /* Web-only interaction states. Kept out of global.css because NativeWind also compiles
-   that file for iOS/Android, where these selectors don't apply. */
+   that file for iOS/Android, where these selectors don't apply. Hover colours
+   themselves live on the components (`hover:bg-hover` etc.); this file supplies the
+   timing so every state change eases instead of snapping. */
+
+/* Typography: Inter (loaded in index.html) everywhere, including RNW <Modal>s that
+   portal straight onto <body>. `:is(#app-root, body)` takes the id's specificity, so it
+   outranks react-native-web's atomic font-family classes. */
+body,
+:is(#app-root, body) * {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, sans-serif;
+  font-feature-settings: 'cv11', 'ss01', 'ss03';
+}
+
+html,
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: rgb(var(--accent) / 0.22);
+}
 
 [role='button'],
 [role='tab'],
-[role='radio'] {
+[role='radio'],
+[role='checkbox'],
+[role='switch'],
+[role='menuitem'],
+[role='link'] {
   cursor: pointer;
-  transition: filter 120ms ease-out;
+  transition-property: background-color, border-color, color, box-shadow, opacity,
+    transform;
+  transition-duration: 140ms;
+  transition-timing-function: cubic-bezier(0.2, 0, 0, 1);
   /* Clicking tabs/buttons shouldn't select their label text. */
   -webkit-user-select: none;
   user-select: none;
 }
 
+/* Press feedback for ui/Press: a quick press-in, a softer release. */
+[data-press='scale']:active:not([aria-disabled='true']) {
+  transform: scale(0.97);
+  transition-duration: 60ms;
+}
+
+[data-press='subtle']:active:not([aria-disabled='true']) {
+  transform: scale(0.995);
+  transition-duration: 60ms;
+}
+
+/* Controls that only appear when their row is hovered (`reveal-on-hover` inside a
+   `group`). Touch screens have no hover, so there they simply stay visible. */
+.reveal-on-hover {
+  transition: opacity 140ms ease-out;
+}
+
 @media (hover: hover) {
-  [role='button']:not([aria-disabled='true']):hover,
-  [role='tab']:hover,
-  [role='radio']:hover {
-    filter: brightness(0.95);
+  .group:not(:hover):not(:focus-within) .reveal-on-hover {
+    opacity: 0;
   }
 }
 
+input,
+textarea {
+  transition: border-color 140ms ease-out, box-shadow 140ms ease-out,
+    background-color 140ms ease-out;
+}
+
 /* Keyboard focus ring (mouse clicks don't trigger :focus-visible). */
-[tabindex]:focus-visible {
-  outline: 2px solid rgb(var(--accent));
+[tabindex]:focus-visible,
+button:focus-visible,
+a:focus-visible {
+  outline: 2px solid rgb(var(--accent) / 0.7);
   outline-offset: 2px;
   border-radius: 8px;
 }
 
+/* Text fields show focus with their own border + soft ring (see ui/Input). */
+input:focus-visible,
+textarea:focus-visible {
+  outline: none;
+}
+
 [aria-disabled='true'] {
   cursor: not-allowed;
+}
+
+/* Native date/time pickers styled to sit inside ui/DateField. */
+input[type='date'],
+input[type='time'] {
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  font: inherit;
+  width: 100%;
+  min-width: 0;
+  outline: none;
+}
+
+input[type='date']::-webkit-calendar-picker-indicator,
+input[type='time']::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 140ms ease-out;
+}
+
+input[type='date']::-webkit-calendar-picker-indicator:hover,
+input[type='time']::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -41,12 +127,12 @@
    scroll chaining/rubber-banding from an inner list into the page behind it. */
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgb(var(--border)) transparent;
+  scrollbar-color: rgb(var(--border-strong)) transparent;
 }
 
 *::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 
 *::-webkit-scrollbar-track {
@@ -55,11 +141,13 @@
 
 *::-webkit-scrollbar-thumb {
   background-color: rgb(var(--border));
+  border: 2px solid transparent;
+  background-clip: padding-box;
   border-radius: 8px;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background-color: rgb(var(--text));
+  background-color: rgb(var(--border-strong));
 }
 
 *::-webkit-scrollbar-corner {
