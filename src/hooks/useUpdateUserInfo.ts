@@ -3,6 +3,7 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import { tokenAtom, userAtom } from '../atoms/auth';
 import { userInfoAtom } from '../atoms/userInfo';
 import { updateUserInfo } from '../services/users';
+import { withAuthRetry } from '../services/authRetry';
 import type { UserInfoResponse } from '../services/types';
 
 // POST /user/info/{is_public}, shared by every writer of public_info/private_info
@@ -23,12 +24,7 @@ export function useUpdateUserInfo() {
     }: {
       isPublic: boolean;
       info: Record<string, unknown>;
-    }) => {
-      if (!token) {
-        return Promise.reject(new Error('Not signed in'));
-      }
-      return updateUserInfo(token, isPublic, info);
-    },
+    }) => withAuthRetry(token, t => updateUserInfo(t, isPublic, info)),
     onSuccess: (_void, { isPublic, info }) => {
       setUserInfo(prev =>
         prev

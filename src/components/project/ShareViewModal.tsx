@@ -14,6 +14,7 @@ import { tokenAtom } from '../../atoms/auth';
 import { currentUserIdAtom } from '../../atoms/members';
 import { directoryAtom } from '../../atoms/userInfo';
 import { createSharedTaskView } from '../../services/views';
+import { withAuthRetry } from '../../services/authRetry';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { useUserSearch } from '../../hooks/useUserSearch';
 import type { ProjectView } from '../../data/types';
@@ -83,15 +84,17 @@ export function ShareViewModal({
     setSaving(true);
     setError(null);
     try {
-      await createSharedTaskView(token, {
-        view_id: Number(view.id),
-        user_id: picked.user_id,
-        share_notes: notes.trim(),
-        ui_info: {},
-        can_create: canCreate,
-        can_edit: canEdit,
-        can_delete: canDelete,
-      });
+      await withAuthRetry(token, t =>
+        createSharedTaskView(t, {
+          view_id: Number(view.id),
+          user_id: picked.user_id,
+          share_notes: notes.trim(),
+          ui_info: {},
+          can_create: canCreate,
+          can_edit: canEdit,
+          can_delete: canDelete,
+        }),
+      );
       setDone(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not share the view');

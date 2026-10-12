@@ -3,6 +3,7 @@ import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { tokenAtom } from '../atoms/auth';
 import { activeViewIdAtom, commentsAtom, itemsAtom, viewsAtom } from '../atoms/project';
 import { createTask, deleteTask, updateTask, listTasks } from '../services/tasks';
+import { assignUserToTask } from '../services/taskAssignees';
 import {
   buildTaskFilter,
   isServerTaskId,
@@ -12,8 +13,10 @@ import {
 } from '../data/taskSync';
 import { descendantsOf } from '../data/tree';
 import { isServerViewId } from '../data/viewSync';
-import { TASK_CREATE_ENABLED, TASKS_API_ENABLED } from '../config/features';
+import { TASKS_API_ENABLED } from '../config/features';
+import { withAuthRetry } from '../services/authRetry';
 import type { WorkItem } from '../data/types';
+import type { TaskInfoDto } from '../services/types';
 
 // Create/update/delete for tasks, callable from anywhere (ItemFormModal, ItemModal,
 // KanbanView) — independent of useTasksSync, which only owns the list query (see
@@ -30,6 +33,18 @@ import type { WorkItem } from '../data/types';
 // a copy this one device imagines exists. Callers (ItemFormModal, ItemModal,
 // KanbanView) catch the throw and show it rather than closing as if the write
 // succeeded.
+//
+// These deliberately do NOT invalidate useTasksSync's ['tasks', …] query after a
+// write — that would mark it stale and (being an active query) trigger an
+// immediate background refetch, and since the API has no "give me a task and its
+// whole subtree" endpoint, that fetch re-lists every level of the tree one call
+// at a time (see useTasksSync's own header comment): one POST
+// /tasks/list/{view_id} per node that might have children, all over again, for a
+// write that only touched one task. That's the burst of near-identical requests
+// you'd see in the network tab after a single create. Instead, patchTaskCache
+// below edits that query's cached array directly — same end state (itemsAtom and
+// the cache agree, so switching away and back to this view within the cache's
+// staleTime still shows the write), zero extra requests.
 export function useTaskMutations() {
   const token = useAtomValue(tokenAtom);
   const views = useAtomValue(viewsAtom);
@@ -41,25 +56,11 @@ export function useTaskMutations() {
   const activeView = views.find(v => v.id === activeViewId);
   const viewId =
     activeView && isServerViewId(activeView.id) ? Number(activeView.id) : undefined;
+  const canMutate = TASKS_API_ENABLED && !!token && viewId !== undefined;
 
-  // addItem and editItem/removeItem depend on different things being enabled —
-  // see TASK_CREATE_ENABLED's comment (src/config/features.ts) for why creating
-  // is available on its own right now while the rest isn't.
-  const canCreate = TASK_CREATE_ENABLED && !!token && viewId !== undefined;
-  const canMutateExisting = TASKS_API_ENABLED && !!token && viewId !== undefined;
-
-  const reasonCreateUnavailable = (): string => {
-    if (!TASK_CREATE_ENABLED) {
-      return "Tasks can't be created right now.";
-    }
-    if (!token) {
-      return 'Sign in to create tasks.';
-    }
-    return "This view isn't synced to the server yet — tasks can't be created in it.";
-  };
-  const reasonMutateUnavailable = (): string => {
+  const reasonUnavailable = (): string => {
     if (!TASKS_API_ENABLED) {
-      return "This can't be saved right now — this is waiting on a backend fix.";
+      return "Tasks can't be saved right now — this is waiting on a backend fix.";
     }
     if (!token) {
       return 'Sign in to save tasks.';
@@ -69,77 +70,96 @@ export function useTaskMutations() {
 
   const createMutation = useMutation({
     mutationFn: (args: { viewId: number; payload: ReturnType<typeof taskToCreatePayload> }) =>
-      createTask(token!, args.viewId, args.payload),
+      withAuthRetry(token, t => createTask(t, args.viewId, args.payload)),
   });
   const updateMutation = useMutation({
     mutationFn: (args: { viewId: number; payload: ReturnType<typeof taskToUpdatePayload> }) =>
-      updateTask(token!, args.viewId, args.payload),
+      withAuthRetry(token, t => updateTask(t, args.viewId, args.payload)),
   });
   const deleteMutation = useMutation({
     mutationFn: (args: { viewId: number; taskId: number }) =>
-      deleteTask(token!, args.viewId, args.taskId),
+      withAuthRetry(token, t => deleteTask(t, args.viewId, args.taskId)),
+  });
+  const assignMutation = useMutation({
+    mutationFn: (args: { viewId: number; taskId: number; assigneeId: string }) =>
+      withAuthRetry(token, t =>
+        assignUserToTask(t, args.viewId, {
+          task_id: args.taskId,
+          assignee_id: args.assigneeId,
+        }),
+      ),
   });
 
-  const invalidate = (id: number) =>
-    queryClient.invalidateQueries({ queryKey: ['tasks', id] });
+  // Same key shape as useTasksSync's own query for this view — see its header
+  // comment. Patching it (rather than invalidating) keeps it in step with
+  // itemsAtom without triggering a refetch.
+  const taskQueryKey =
+    viewId !== undefined
+      ? [
+          'tasks',
+          viewId,
+          JSON.stringify(activeView?.statusFilter ?? []),
+          JSON.stringify(activeView?.tagFilter ?? []),
+        ]
+      : undefined;
+  const patchTaskCache = (update: (prev: TaskInfoDto[]) => TaskInfoDto[]) => {
+    if (!taskQueryKey) {
+      return;
+    }
+    queryClient.setQueryData<TaskInfoDto[]>(taskQueryKey, prev =>
+      prev ? update(prev) : prev,
+    );
+  };
 
-  // Returns the created task's id once it can confirm one, or '' when the task
-  // was saved but can't be shown/selected yet — see TASK_CREATE_ENABLED's
-  // comment. A caller should treat '' as success, just with nothing (yet) to
-  // navigate to; only a thrown error means the task wasn't actually created.
   const addItem = async (
     draft: Omit<WorkItem, 'id' | 'createdById'>,
   ): Promise<string> => {
-    if (!canCreate || viewId === undefined || !activeView) {
-      throw new Error(reasonCreateUnavailable());
+    if (!canMutate || viewId === undefined || !activeView) {
+      throw new Error(reasonUnavailable());
     }
     await createMutation.mutateAsync({
       viewId,
       payload: taskToCreatePayload(draft),
     });
-    // The create above has now genuinely happened server-side — everything
-    // from here on is only about confirming and displaying it, which needs a
-    // working GET /tasks/list/{view_id}. While that's broken (TASKS_API_ENABLED
-    // off), there's no point even trying.
-    if (!TASKS_API_ENABLED) {
-      return '';
-    }
-    try {
-      // The route returns no id (201, plain text) — (owner, parent, title) is
-      // unique, so re-listing this exact level and matching by title resolves it.
-      const parentTaskId = draft.parentId ? Number(draft.parentId) : undefined;
-      const siblings = await listTasks(
-        token!,
-        viewId,
-        buildTaskFilter(activeView, parentTaskId),
-      );
-      const created = siblings.find(t => t.title === draft.title);
-      invalidate(viewId);
-      if (created) {
-        setItems(prev => [...prev, taskFromServer(created)]);
-        return String(created.task_id);
-      }
-    } catch (err) {
-      console.warn(
-        'Task was created, but could not be confirmed/displayed yet:',
-        err,
+    // The route returns no id (201, plain text) — (owner, parent, title) is
+    // unique, so re-listing this exact level and matching by title resolves it.
+    const parentTaskId = draft.parentId ? Number(draft.parentId) : undefined;
+    const siblings = await withAuthRetry(token, t =>
+      listTasks(t, viewId, buildTaskFilter(activeView, parentTaskId)),
+    );
+    const created = siblings.find(t => t.title === draft.title);
+    if (!created) {
+      // The create call itself went through — only finding it afterwards failed
+      // (e.g. a huge sibling list past the first page) — so this isn't "nothing
+      // happened", just "this device doesn't know the new task's id yet". The
+      // next list refresh will pick it up.
+      throw new Error(
+        'Task was created, but could not be confirmed here yet — it should appear after the list refreshes.',
       );
     }
-    return '';
+    setItems(prev => [...prev, taskFromServer(created)]);
+    patchTaskCache(prev => [...prev, created]);
+    return String(created.task_id);
   };
 
   const editItem = async (item: WorkItem): Promise<void> => {
-    if (!canMutateExisting || viewId === undefined || !isServerTaskId(item.id)) {
-      throw new Error(reasonMutateUnavailable());
+    if (!canMutate || viewId === undefined || !isServerTaskId(item.id)) {
+      throw new Error(reasonUnavailable());
     }
-    await updateMutation.mutateAsync({ viewId, payload: taskToUpdatePayload(item) });
+    const payload = taskToUpdatePayload(item);
+    await updateMutation.mutateAsync({ viewId, payload });
     setItems(prev => prev.map(i => (i.id === item.id ? item : i)));
-    invalidate(viewId);
+    // Merge the edited fields onto the cached row rather than replacing it
+    // outright — owner_id/created_by/assignee_ids/created_at aren't part of the
+    // edit and only exist on the server's shape, not WorkItem's.
+    patchTaskCache(prev =>
+      prev.map(t => (t.task_id === payload.task_id ? { ...t, ...payload } : t)),
+    );
   };
 
   const removeItem = async (item: WorkItem): Promise<void> => {
-    if (!canMutateExisting || viewId === undefined || !isServerTaskId(item.id)) {
-      throw new Error(reasonMutateUnavailable());
+    if (!canMutate || viewId === undefined || !isServerTaskId(item.id)) {
+      throw new Error(reasonUnavailable());
     }
     await deleteMutation.mutateAsync({ viewId, taskId: Number(item.id) });
     // Cascades to every subtask server-side (ON DELETE CASCADE) — the local
@@ -147,21 +167,52 @@ export function useTaskMutations() {
     const gone = new Set([item.id, ...descendantsOf(items, item.id).map(d => d.id)]);
     setItems(prev => prev.filter(i => !gone.has(i.id)));
     setComments(prev => prev.filter(c => !gone.has(c.itemId)));
-    invalidate(viewId);
+    patchTaskCache(prev => prev.filter(t => !gone.has(String(t.task_id))));
+  };
+
+  // Adds one assignee to an existing task (POST /assignees/create/{view_id} —
+  // there's no bulk form, and no way to remove one once added; see
+  // services/taskAssignees.ts). Throws on self-assignment, on an org mismatch,
+  // or on the usual unavailable-right-now reasons, same as the other writes here.
+  const assignUser = async (
+    taskId: string,
+    assigneeId: string,
+  ): Promise<void> => {
+    if (!canMutate || viewId === undefined || !isServerTaskId(taskId)) {
+      throw new Error(reasonUnavailable());
+    }
+    await assignMutation.mutateAsync({
+      viewId,
+      taskId: Number(taskId),
+      assigneeId,
+    });
+    setItems(prev =>
+      prev.map(i =>
+        i.id === taskId && !i.assigneeIds.includes(assigneeId)
+          ? { ...i, assigneeIds: [...i.assigneeIds, assigneeId] }
+          : i,
+      ),
+    );
+    patchTaskCache(prev =>
+      prev.map(t =>
+        String(t.task_id) === taskId && !t.assignee_ids.includes(assigneeId)
+          ? { ...t, assignee_ids: [...t.assignee_ids, assigneeId] }
+          : t,
+      ),
+    );
   };
 
   return {
     addItem,
     editItem,
     removeItem,
-    // Governs the Assignees field's read-only display (assigning is never
-    // settable via this API, whichever flag is in play) — true whenever this
-    // task is, or would be, a server-backed one at all.
+    assignUser,
+    // Governs the Assignees field's read-only display for a task that can't
+    // have assignees changed at all right now (nothing server-backed to assign
+    // against) — true whenever this task is, or would be, a server-backed one.
     isServerBacked: viewId !== undefined,
-    canCreate,
-    // Why editing/deleting an existing task is unavailable right now — null when
-    // it isn't. Creating has its own reasonCreateUnavailable(); a caller asks
-    // for whichever one applies to what it's about to do.
-    unavailableReason: !canMutateExisting ? reasonMutateUnavailable() : null,
+    // Why writes are unavailable right now — null when they aren't. Lets a form
+    // say so upfront instead of only on save.
+    unavailableReason: !canMutate ? reasonUnavailable() : null,
   };
 }

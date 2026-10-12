@@ -135,7 +135,7 @@ export const FETCH_PAGE_LIMIT = 100;
 // the same pattern).
 export const MAX_PAGES = 20;
 
-// Builds a GET /tasks/list/{view_id} filter for `view`. The view's own
+// Builds a POST /tasks/list/{view_id} filter body for `view`. The view's own
 // statusFilter/tagFilter (if set) restrict which values the API will even allow
 // asking for (TaskViewPermission.check_status/check_tag), so "no filter" here
 // must still spell out every value — the API has no shorthand for "all".

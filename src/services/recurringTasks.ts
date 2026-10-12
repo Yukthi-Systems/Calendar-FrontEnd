@@ -1,6 +1,6 @@
 import { apiRequest } from './apiClient';
 import type {
-  BackendTaskTagWire,
+  BackendTaskTag,
   CreateRecurringTaskPayload,
   RecurringTaskDto,
   UpdateRecurringTaskPayload,
@@ -50,7 +50,7 @@ export const deleteRecurringTask = async (
   accessToken: string,
   viewId: number,
   recurringTaskId: number,
-  taskTag: BackendTaskTagWire,
+  taskTag: BackendTaskTag,
 ): Promise<void> => {
   await apiRequest(
     `/recurring/delete/${viewId}/${recurringTaskId}/${taskTag}`,
@@ -63,7 +63,7 @@ export const getRecurringTask = async (
   accessToken: string,
   viewId: number,
   recurringTaskId: number,
-  taskTag: BackendTaskTagWire,
+  taskTag: BackendTaskTag,
 ): Promise<RecurringTaskDto> => {
   const { data } = await apiRequest<RecurringTaskDto>(
     `/recurring/info/${viewId}/${recurringTaskId}/${taskTag}`,
@@ -77,12 +77,12 @@ export const getRecurringTask = async (
 // `web::Query<Vec<TaskTag>>` with no wrapping struct — the same shape that made
 // the old GET /user/search reject every call (web::Query<String> couldn't bind a
 // bare query string either; see that earlier fix request). This sends the
-// conventional repeated-key form (?task_tag=Work&task_tag=Urgent); if the route
+// conventional repeated-key form (?task_tag=WORK&task_tag=URGENT); if the route
 // has the same binding bug, every call 400s regardless of what's sent here.
 export const listRecurringTasks = async (
   accessToken: string,
   viewId: number,
-  taskTags: BackendTaskTagWire[],
+  taskTags: BackendTaskTag[],
 ): Promise<RecurringTaskDto[]> => {
   const query = taskTags.map(t => `task_tag=${t}`).join('&');
   const { data } = await apiRequest<RecurringTaskDto[]>(

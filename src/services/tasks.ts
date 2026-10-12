@@ -6,17 +6,6 @@ import type {
   UpdateTaskPayload,
 } from './types';
 
-const qs = (params: Record<string, string | number | undefined>) => {
-  const parts: string[] = [];
-  for (const [key, value] of Object.entries(params)) {
-    if (value === undefined) {
-      continue;
-    }
-    parts.push(`${key}=${encodeURIComponent(value)}`);
-  }
-  return parts.join('&');
-};
-
 // POST /tasks/create/{view_id} — permission + tag/status/subtask rules enforced
 // server-side against the view (403 when they don't hold).
 export const createTask = async (
@@ -76,33 +65,25 @@ export const getTask = async (
   return data;
 };
 
-// GET /tasks/list/{view_id} — one page (filter.limit, 10-100) of root tasks, or of
-// one parent's direct children when filter.parent_task_id is set. Ordered by
+// POST /tasks/list/{view_id} — one page (filter.limit, 10-100) of root tasks, or
+// of one parent's direct children when filter.parent_task_id is set. Ordered by
 // (start_at, task_id); page again with filter.cursor_start_at/cursor_task_id set
 // to the last row's values once a page comes back full.
+//
+// This is a POST with the filter as a JSON body, not a GET with a query string —
+// it used to be GET, but any_of_task_status/any_of_task_tag are array fields,
+// and actix's web::Query (backed by serde_urlencoded) can't bind an array from
+// any query-string encoding. The route moved to a JSON body instead of adding
+// array support, which doesn't exist for query strings here.
 export const listTasks = async (
   accessToken: string,
   viewId: number,
   filter: TaskFilterQuery,
 ): Promise<TaskInfoDto[]> => {
-  const query = qs({
-    parent_task_id: filter.parent_task_id,
-    title_contains: filter.title_contains,
-    start_at: filter.start_at,
-    end_at: filter.end_at,
-    cursor_start_at: filter.cursor_start_at,
-    cursor_task_id: filter.cursor_task_id,
-    limit: filter.limit,
+  const { data } = await apiRequest<TaskInfoDto[]>(`/tasks/list/${viewId}`, {
+    method: 'POST',
+    accessToken,
+    body: JSON.stringify(filter),
   });
-  const statusParams = filter.any_of_task_status
-    .map(s => `any_of_task_status=${s}`)
-    .join('&');
-  const tagParams = filter.any_of_task_tag
-    .map(t => `any_of_task_tag=${t}`)
-    .join('&');
-  const { data } = await apiRequest<TaskInfoDto[]>(
-    `/tasks/list/${viewId}?${[query, statusParams, tagParams].filter(Boolean).join('&')}`,
-    { accessToken },
-  );
   return data;
 };
