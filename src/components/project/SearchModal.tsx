@@ -168,6 +168,8 @@ export function SearchModal() {
               <DateField
                 value={dueFrom}
                 onChange={setDueFrom}
+                clearable
+                placeholder="Any date"
                 invalid={!!fromError}
                 accessibilityLabel="Due from"
               />
@@ -177,6 +179,8 @@ export function SearchModal() {
               <DateField
                 value={dueTo}
                 onChange={setDueTo}
+                clearable
+                placeholder="Any date"
                 min={dueFrom || undefined}
                 invalid={!!(toError ?? rangeError)}
                 accessibilityLabel="Due to"

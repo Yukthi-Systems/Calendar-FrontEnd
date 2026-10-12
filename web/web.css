@@ -90,32 +90,6 @@ textarea:focus-visible {
   cursor: not-allowed;
 }
 
-/* Native date/time pickers styled to sit inside ui/DateField. */
-input[type='date'],
-input[type='time'] {
-  appearance: none;
-  -webkit-appearance: none;
-  background: transparent;
-  border: 0;
-  color: inherit;
-  font: inherit;
-  width: 100%;
-  min-width: 0;
-  outline: none;
-}
-
-input[type='date']::-webkit-calendar-picker-indicator,
-input[type='time']::-webkit-calendar-picker-indicator {
-  cursor: pointer;
-  opacity: 0.55;
-  transition: opacity 140ms ease-out;
-}
-
-input[type='date']::-webkit-calendar-picker-indicator:hover,
-input[type='time']::-webkit-calendar-picker-indicator:hover {
-  opacity: 1;
-}
-
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
