@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { format, parseISO } from 'date-fns';
 import {
@@ -7,17 +7,28 @@ import {
   ArrowUp,
   ChevronDown,
   ChevronRight,
+  ChevronsDownUp,
+  ChevronsUpDown,
+  ListTodo,
+  Plus,
 } from 'lucide-react-native';
-import { itemsAtom, selectedItemIdAtom } from '../../atoms/project';
-import { PRIORITY_COLOR, statusInfo } from '../../data/constants';
+import {
+  itemFormAtom,
+  itemsAtom,
+  selectedItemIdAtom,
+  tasksLoadingAtom,
+} from '../../atoms/project';
 import { childrenOf, flattenTree } from '../../data/tree';
 import { showsField } from '../../data/viewFields';
 import type { ProjectView, WorkItem } from '../../data/types';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { Button, EmptyState, Press, Skeleton } from '../ui';
 import {
   AssigneeAvatars,
-  Pill,
+  DueDate,
+  PriorityBadge,
   RecurrenceIcon,
+  StatusBadge,
   SubtaskBadge,
   assigneeNames,
 } from './shared';
@@ -42,13 +53,13 @@ const STATUS_RANK = {
 
 // `width` undefined = the flexible column that absorbs spare width.
 const COLUMNS: { key: SortKey; label: string; width?: number }[] = [
-  { key: 'id', label: 'ID', width: 96 },
+  { key: 'id', label: 'ID', width: 88 },
   { key: 'title', label: 'Title' },
-  { key: 'status', label: 'Status', width: 140 },
-  { key: 'assignee', label: 'Assignees', width: 130 },
-  { key: 'priority', label: 'Priority', width: 110 },
-  { key: 'start', label: 'Start', width: 90 },
-  { key: 'end', label: 'End', width: 90 },
+  { key: 'status', label: 'Status', width: 136 },
+  { key: 'assignee', label: 'Assignees', width: 120 },
+  { key: 'priority', label: 'Priority', width: 112 },
+  { key: 'start', label: 'Start', width: 88 },
+  { key: 'end', label: 'Due', width: 88 },
 ];
 
 const sortValue = (i: WorkItem, key: SortKey): string | number => {
@@ -65,14 +76,18 @@ const sortValue = (i: WorkItem, key: SortKey): string | number => {
 };
 
 const INDENT = 20;
+const cellStyle = (width?: number) =>
+  width ? { width } : { flexGrow: 1, flexBasis: 0, minWidth: 280 };
 
 export function TableView({ view }: { view: ProjectView }) {
   const items = useAtomValue(itemsAtom);
+  const loading = useAtomValue(tasksLoadingAtom);
+  const setForm = useSetAtom(itemFormAtom);
   const columns = COLUMNS.filter(
     c => c.key === 'title' || showsField(view.fields, c.key),
   );
   const select = useSetAtom(selectedItemIdAtom);
-  const { text, heading } = useThemeColors();
+  const c = useThemeColors();
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({
     key: 'id',
     dir: 1,
@@ -100,11 +115,26 @@ export function TableView({ view }: { view: ProjectView }) {
     });
   const allCollapsed = parents.length > 0 && collapsed.size >= parents.length;
 
+  if (!loading && items.length === 0) {
+    return (
+      <EmptyState
+        icon={ListTodo}
+        title="No tasks yet"
+        description="Tasks you create show up here as a sortable table, with subtasks nested under their parent."
+        action={
+          <Button variant="primary" icon={Plus} onPress={() => setForm({ mode: 'new' })}>
+            New task
+          </Button>
+        }
+      />
+    );
+  }
+
   const cell = (i: WorkItem, key: SortKey, depth: number) => {
     switch (key) {
       case 'id':
         return (
-          <Text numberOfLines={1} className="text-xs text-text-main">
+          <Text numberOfLines={1} className="text-xs text-text-subtle">
             {i.id}
           </Text>
         );
@@ -113,30 +143,33 @@ export function TableView({ view }: { view: ProjectView }) {
         return (
           <View
             style={{ paddingLeft: (depth - 1) * INDENT }}
-            className="flex-row items-center gap-1"
+            className="flex-row items-center gap-1.5"
           >
             {hasKids ? (
-              <Pressable
+              <Press
                 accessibilityRole="button"
                 accessibilityLabel={
                   collapsed.has(i.id) ? 'Expand subtasks' : 'Collapse subtasks'
                 }
                 onPress={() => toggleRow(i.id)}
-                className="h-6 w-6 items-center justify-center rounded-md active:opacity-60"
+                hitSlop={4}
+                className="h-5 w-5 items-center justify-center rounded hover:bg-border-main"
               >
                 {collapsed.has(i.id) ? (
-                  <ChevronRight size={16} color={text} />
+                  <ChevronRight size={14} color={c.text} />
                 ) : (
-                  <ChevronDown size={16} color={text} />
+                  <ChevronDown size={14} color={c.text} />
                 )}
-              </Pressable>
+              </Press>
             ) : (
-              <View className="h-6 w-6" />
+              <View className="h-5 w-5" />
             )}
             <Text
               numberOfLines={1}
-              className={`shrink text-sm text-text-heading ${
-                depth === 1 ? 'font-semibold' : 'font-medium'
+              className={`shrink text-sm ${
+                depth === 1
+                  ? 'font-medium text-text-heading'
+                  : 'text-text-heading'
               }`}
             >
               {i.title}
@@ -146,26 +179,14 @@ export function TableView({ view }: { view: ProjectView }) {
           </View>
         );
       }
-      case 'status': {
-        const s = statusInfo(i.status);
-        return (
-          <View className="flex-row">
-            <Pill text={s.label} color={s.color} />
-          </View>
-        );
-      }
+      case 'status':
+        return <StatusBadge status={i.status} />;
       case 'assignee':
-        return (
-          <View className="flex-row items-center">
-            <AssigneeAvatars ids={i.assigneeIds} size={24} max={4} />
-          </View>
-        );
+        return <AssigneeAvatars ids={i.assigneeIds} size={22} max={4} />;
       case 'priority':
-        return (
-          <View className="flex-row">
-            <Pill text={i.priority} color={PRIORITY_COLOR[i.priority]} />
-          </View>
-        );
+        return <PriorityBadge priority={i.priority} />;
+      case 'end':
+        return <DueDate item={i} />;
       default:
         return (
           <Text className="text-sm text-text-main">
@@ -175,81 +196,107 @@ export function TableView({ view }: { view: ProjectView }) {
     }
   };
 
-  const cellStyle = (width?: number) =>
-    width ? { width } : { flexGrow: 1, flexBasis: 0, minWidth: 300 };
-
   // Toolbar and column headers stay fixed; only the rows scroll vertically. The
   // header and rows share one horizontal scroller so columns stay aligned.
   return (
-    <View className="flex-1 p-4">
-      <View className="mb-3 flex-row items-center justify-between">
+    <View className="flex-1 px-4 pb-4 pt-3 lg:px-6">
+      <View className="mb-3 h-8 flex-row items-center justify-between">
         <Text className="text-sm text-text-main">
-          {items.length} items · {parents.length} with subtasks
+          <Text className="font-medium text-text-heading">{items.length}</Text>
+          {items.length === 1 ? ' task' : ' tasks'}
+          {parents.length > 0 ? (
+            <Text className="text-text-subtle">
+              {' '}· {parents.length} with subtasks
+            </Text>
+          ) : null}
         </Text>
         {parents.length > 0 ? (
-          <Pressable
-            accessibilityRole="button"
+          <Button
+            variant="ghost"
+            size="sm"
+            icon={allCollapsed ? ChevronsUpDown : ChevronsDownUp}
             onPress={() =>
               setCollapsed(
                 allCollapsed ? new Set() : new Set(parents.map(p => p.id)),
               )
             }
-            className="rounded-lg border border-border-main px-3 py-1.5 active:opacity-70"
           >
-            <Text className="text-xs text-text-heading">
-              {allCollapsed ? 'Expand all' : 'Collapse all'}
-            </Text>
-          </Pressable>
+            {allCollapsed ? 'Expand all' : 'Collapse all'}
+          </Button>
         ) : null}
       </View>
 
-      <View className="flex-1 overflow-hidden rounded-2xl border border-border-main bg-bg-card">
+      <View className="flex-1 overflow-hidden rounded-xl border border-border-main bg-bg-card">
         <ScrollView
           horizontal
           contentContainerStyle={{ minWidth: '100%', height: '100%' }}
         >
-          <View style={{ flexGrow: 1, minWidth: 940 }}>
-            <View className="flex-row border-b border-border-main bg-bg-main">
-              {columns.map(c => (
-                <Pressable
-                  key={c.key}
-                  accessibilityRole="button"
-                  onPress={() => toggleSort(c.key)}
-                  style={cellStyle(c.width)}
-                  className="flex-row items-center gap-1 px-3 py-3 active:opacity-70"
-                >
-                  <Text className="text-[11px] font-semibold uppercase tracking-wide text-text-main">
-                    {c.label}
-                  </Text>
-                  {sort.key === c.key ? (
-                    sort.dir === 1 ? (
-                      <ArrowUp size={12} color={heading} />
-                    ) : (
-                      <ArrowDown size={12} color={heading} />
-                    )
-                  ) : null}
-                </Pressable>
-              ))}
+          <View style={{ flexGrow: 1, minWidth: 900 }}>
+            <View className="h-9 flex-row border-b border-border-main bg-muted">
+              {columns.map(col => {
+                const isSorted = sort.key === col.key;
+                return (
+                  <Press
+                    key={col.key}
+                    feedback="none"
+                    accessibilityRole="button"
+                    accessibilityLabel={`Sort by ${col.label}`}
+                    onPress={() => toggleSort(col.key)}
+                    style={cellStyle(col.width)}
+                    className="group flex-row items-center gap-1 px-3"
+                  >
+                    <Text
+                      className={`text-2xs font-semibold uppercase tracking-wider ${
+                        isSorted
+                          ? 'text-text-heading'
+                          : 'text-text-subtle group-hover:text-text-main'
+                      }`}
+                    >
+                      {col.label}
+                    </Text>
+                    {isSorted ? (
+                      sort.dir === 1 ? (
+                        <ArrowUp size={11} color={c.heading} strokeWidth={2.5} />
+                      ) : (
+                        <ArrowDown size={11} color={c.heading} strokeWidth={2.5} />
+                      )
+                    ) : null}
+                  </Press>
+                );
+              })}
             </View>
             <ScrollView className="flex-1" contentContainerClassName="pb-16">
-              {rows.map(({ item: i, depth }) => (
-                <Pressable
-                  key={i.id}
-                  accessibilityRole="button"
-                  onPress={() => select(i.id)}
-                  className="min-h-[48px] flex-row items-center border-b border-border-main active:bg-accent/10"
-                >
-                  {columns.map(c => (
+              {loading && items.length === 0
+                ? Array.from({ length: 8 }, (_, n) => (
                     <View
-                      key={c.key}
-                      style={cellStyle(c.width)}
-                      className="px-3 py-2"
+                      key={n}
+                      className="h-11 flex-row items-center gap-6 border-b border-border-main px-3"
                     >
-                      {cell(i, c.key, depth)}
+                      <Skeleton className="h-3 w-12 rounded" />
+                      <Skeleton className={`h-3 rounded ${n % 2 ? 'w-64' : 'w-80'}`} />
+                      <Skeleton className="h-3 w-20 rounded" />
                     </View>
+                  ))
+                : rows.map(({ item: i, depth }) => (
+                    <Press
+                      key={i.id}
+                      feedback="none"
+                      accessibilityRole="button"
+                      accessibilityLabel={i.title}
+                      onPress={() => select(i.id)}
+                      className="h-11 flex-row items-center border-b border-border-main hover:bg-hover active:bg-hover"
+                    >
+                      {columns.map(col => (
+                        <View
+                          key={col.key}
+                          style={cellStyle(col.width)}
+                          className="justify-center px-3"
+                        >
+                          {cell(i, col.key, depth)}
+                        </View>
+                      ))}
+                    </Press>
                   ))}
-                </Pressable>
-              ))}
             </ScrollView>
           </View>
         </ScrollView>

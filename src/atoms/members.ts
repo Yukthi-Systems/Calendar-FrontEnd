@@ -31,7 +31,7 @@ export const membersAtom = atom<Member[]>(get => {
         id: u.user_id,
         name,
         initials: initialsOf(name),
-        color: PROFILE_COLOR,
+        color: colorForId(u.user_id),
         role: typeof pub.role === 'string' ? pub.role : '',
         capacity: 5,
       };
@@ -48,6 +48,28 @@ export const membersAtom = atom<Member[]>(get => {
     ...others,
   ];
 });
+
+// A stable, distinct avatar colour per teammate (the same id always gets the same
+// colour), so people are tell-apart-able at a glance in stacked avatars.
+const AVATAR_COLORS = [
+  '#0ea5e9',
+  '#10b981',
+  '#f59e0b',
+  '#ef4444',
+  '#ec4899',
+  '#6366f1',
+  '#14b8a6',
+  '#f97316',
+  '#84cc16',
+  '#06b6d4',
+];
+export const colorForId = (id: string) => {
+  let h = 0;
+  for (let i = 0; i < id.length; i++) {
+    h = (h * 31 + id.charCodeAt(i)) % 2147483647;
+  }
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+};
 
 // Non-reactive lookup for plain helpers that aren't components.
 export const memberById = (id: string | null) =>

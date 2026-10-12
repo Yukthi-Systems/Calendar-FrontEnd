@@ -1,19 +1,29 @@
 import { useAtom } from 'jotai';
-import { Modal, Pressable, ScrollView, Text, View } from 'react-native';
-import { Check, Laptop, Moon, Sun } from 'lucide-react-native';
+import { Text, View } from 'react-native';
+import { Check, Monitor, Moon, Sun } from 'lucide-react-native';
 import { themeAtom, type ThemeMode } from '../../atoms/theme';
-import { PALETTES } from '../../data/palettes';
+import { PALETTES, type Palette } from '../../data/palettes';
+import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import {
+  Button,
+  Press,
+  SegmentedControl,
+  Sheet,
+  SheetBody,
+  SheetFooter,
+  SheetHeader,
+} from '../ui';
 
 const MODES: { key: ThemeMode; label: string; icon: typeof Sun }[] = [
   { key: 'light', label: 'Light', icon: Sun },
   { key: 'dark', label: 'Dark', icon: Moon },
-  { key: 'system', label: 'System', icon: Laptop },
+  { key: 'system', label: 'System', icon: Monitor },
 ];
 
 // Appearance (light/dark/system) + palette picker — mirrors the ThemeModal /
 // PaletteModal pair in YSPL APPS/YCT/YCT-Mobile-App, combined into one sheet
-// since this app only needs the one settings surface.
+// since this app only needs the one settings surface. Changes apply live.
 export function ThemeModal({
   visible,
   onClose,
@@ -22,107 +32,90 @@ export function ThemeModal({
   onClose: () => void;
 }) {
   const [settings, setSettings] = useAtom(themeAtom);
-  const { heading, text, accent } = useThemeColors();
+  const { dark } = useResolvedTheme();
 
   return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="fade"
-      onRequestClose={onClose}
+    <Sheet visible={visible} onClose={onClose} size="md">
+      <SheetHeader
+        title="Appearance"
+        description="Changes apply instantly and sync across your devices."
+        onClose={onClose}
+      />
+      <SheetBody>
+        <Text className="mb-2 text-xs font-medium text-text-heading">Theme</Text>
+        <View className="mb-5 self-start">
+          <SegmentedControl
+            options={MODES}
+            value={settings.mode}
+            onChange={mode => setSettings(s => ({ ...s, mode }))}
+          />
+        </View>
+
+        <Text className="mb-2 text-xs font-medium text-text-heading">Palette</Text>
+        <View className="flex-row flex-wrap gap-2.5">
+          {PALETTES.map(p => (
+            <PaletteCard
+              key={p.key}
+              palette={p}
+              dark={dark}
+              active={settings.paletteKey === p.key}
+              onPress={() => setSettings(s => ({ ...s, paletteKey: p.key }))}
+            />
+          ))}
+        </View>
+      </SheetBody>
+      <SheetFooter>
+        <Button variant="primary" onPress={onClose}>
+          Done
+        </Button>
+      </SheetFooter>
+    </Sheet>
+  );
+}
+
+// A tiny mock of the app in that palette: background, a card, an accent bar.
+function PaletteCard({
+  palette,
+  dark,
+  active,
+  onPress,
+}: {
+  palette: Palette;
+  dark: boolean;
+  active: boolean;
+  onPress: () => void;
+}) {
+  const c = useThemeColors();
+  const p = dark ? palette.dark : palette.light;
+  return (
+    <Press
+      feedback="scale"
+      accessibilityRole="radio"
+      accessibilityState={{ selected: active, checked: active }}
+      accessibilityLabel={`${palette.label} palette`}
+      onPress={onPress}
+      style={{ flexBasis: 140, flexGrow: 1 }}
+      className={`rounded-xl border-2 p-1 ${
+        active ? 'border-accent' : 'border-transparent hover:border-border-strong'
+      }`}
     >
-      <Pressable
-        accessibilityLabel="Close"
-        onPress={onClose}
-        className="flex-1 items-center justify-end bg-black/50 sm:justify-center"
+      <View
+        style={{ backgroundColor: p.background, borderColor: p.border }}
+        className="h-16 overflow-hidden rounded-lg border p-2"
       >
-        <Pressable
-          onPress={() => {}}
-          className="max-h-[85%] w-full max-w-md rounded-t-3xl bg-bg-card p-5 sm:rounded-3xl"
+        <View
+          style={{ backgroundColor: p.card, borderColor: p.border }}
+          className="flex-1 rounded-md border p-1.5"
         >
-          <Text className="mb-4 text-lg font-bold text-text-heading">
-            Appearance
-          </Text>
-
-          <View className="mb-5 flex-row gap-2">
-            {MODES.map(m => {
-              const active = settings.mode === m.key;
-              return (
-                <Pressable
-                  key={m.key}
-                  accessibilityRole="radio"
-                  accessibilityState={{ selected: active }}
-                  onPress={() => setSettings(s => ({ ...s, mode: m.key }))}
-                  className={`flex-1 items-center gap-1.5 rounded-xl border py-3 active:opacity-70 ${
-                    active ? 'border-accent bg-accent/10' : 'border-border-main'
-                  }`}
-                >
-                  <m.icon size={18} color={active ? accent : text} />
-                  <Text
-                    className={
-                      active
-                        ? 'text-xs font-semibold text-accent'
-                        : 'text-xs text-text-main'
-                    }
-                  >
-                    {m.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-
-          <Text className="mb-2 text-xs font-semibold uppercase text-text-main">
-            Color palette
-          </Text>
-          <ScrollView keyboardShouldPersistTaps="handled">
-            <View className="gap-2 pb-2">
-              {PALETTES.map(p => {
-                const active = settings.paletteKey === p.key;
-                return (
-                  <Pressable
-                    key={p.key}
-                    accessibilityRole="radio"
-                    accessibilityState={{ selected: active }}
-                    onPress={() =>
-                      setSettings(s => ({ ...s, paletteKey: p.key }))
-                    }
-                    className={`flex-row items-center gap-3 rounded-xl border px-3 py-2.5 active:opacity-70 ${
-                      active ? 'border-accent bg-accent/10' : 'border-border-main'
-                    }`}
-                  >
-                    <View className="flex-row">
-                      <View
-                        style={{ backgroundColor: p.previewPrimary }}
-                        className="h-6 w-6 rounded-full border-2 border-bg-card"
-                      />
-                      <View
-                        style={{
-                          backgroundColor: p.previewAccent,
-                          marginLeft: -8,
-                        }}
-                        className="h-6 w-6 rounded-full border-2 border-bg-card"
-                      />
-                    </View>
-                    <Text className="flex-1 font-medium text-text-heading">
-                      {p.label}
-                    </Text>
-                    {active ? <Check size={18} color={heading} /> : null}
-                  </Pressable>
-                );
-              })}
-            </View>
-          </ScrollView>
-
-          <Pressable
-            accessibilityRole="button"
-            onPress={onClose}
-            className="mt-3 items-center rounded-2xl bg-accent py-3 active:opacity-80"
-          >
-            <Text className="font-semibold text-accent-foreground">Done</Text>
-          </Pressable>
-        </Pressable>
-      </Pressable>
-    </Modal>
+          <View style={{ backgroundColor: p.foreground, opacity: 0.85 }} className="mb-1 h-1.5 w-10 rounded-full" />
+          <View style={{ backgroundColor: p.mutedForeground, opacity: 0.5 }} className="mb-1.5 h-1.5 w-14 rounded-full" />
+          <View style={{ backgroundColor: p.primary }} className="h-2 w-8 rounded-full" />
+        </View>
+      </View>
+      <View className="flex-row items-center justify-between px-1 pb-0.5 pt-1.5">
+        <Text className="text-xs font-medium text-text-heading">{palette.label}</Text>
+        {active ? <Check size={13} color={c.accent} strokeWidth={2.5} /> : null}
+      </View>
+    </Press>
   );
 }

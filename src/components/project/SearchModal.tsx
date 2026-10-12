@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, Switch, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { format, isValid, parseISO } from 'date-fns';
-import { ChevronDown, X } from 'lucide-react-native';
+import { ChevronDown, Search, SearchX, X } from 'lucide-react-native';
 import {
   itemsAtom,
   searchOpenAtom,
@@ -16,12 +16,17 @@ import { searchItems } from '../../data/search';
 import type { WorkItem } from '../../data/types';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import {
-  AssigneeAvatars,
-  Field,
-  FormInput,
-  StatusDot,
-  assigneeNames,
-} from './shared';
+  Chip,
+  DateField,
+  EmptyState,
+  IconButton,
+  Input,
+  Kbd,
+  Press,
+  Sheet,
+  Switch,
+} from '../ui';
+import { Avatar, AssigneeAvatars, DueDate, StatusIcon } from './shared';
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 const isIsoDate = (s: string) =>
@@ -35,7 +40,7 @@ export function SearchModal() {
   const CURRENT_USER_ID = useAtomValue(currentUserIdAtom);
   const MEMBERS = useAtomValue(membersAtom);
   const setSelectedId = useSetAtom(selectedItemIdAtom);
-  const { text, accent } = useThemeColors();
+  const c = useThemeColors();
 
   const [title, setTitle] = useAtom(searchTitleAtom);
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
@@ -96,190 +101,179 @@ export function SearchModal() {
   const selectedAssignee = MEMBERS.find(m => m.id === assigneeId);
 
   return (
-    <Modal visible={open} transparent animationType="fade" onRequestClose={close}>
-      <Pressable
-        accessibilityLabel="Close"
-        onPress={close}
-        className="flex-1 items-center justify-end bg-black/50 sm:justify-center"
+    <Sheet visible={open} onClose={close} size="lg">
+      <View className="flex-row items-center gap-2 border-b border-border-main px-4 py-3">
+        <Search size={18} color={c.subtle} />
+        <Input
+          accessibilityLabel="Title contains"
+          value={title}
+          onChangeText={setTitle}
+          placeholder="Search your tasks by title…"
+          bare
+          autoFocus
+          returnKeyType="search"
+          style={{ fontSize: 16 }}
+          right={<Kbd>esc</Kbd>}
+        />
+        <IconButton icon={X} label="Close search" onPress={close} />
+      </View>
+
+      <ScrollView
+        style={{ flexGrow: 0, flexShrink: 1 }}
+        contentContainerClassName="pb-4"
+        keyboardShouldPersistTaps="handled"
       >
-        <Pressable
-          onPress={() => {}}
-          className="max-h-[92%] w-full max-w-lg rounded-t-3xl bg-bg-card p-5 sm:rounded-3xl"
-        >
-          <View className="mb-3 flex-row items-center justify-between">
-            <Text className="text-lg font-bold text-text-heading">Search</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Close search"
-              onPress={close}
-              className="rounded-md p-1 active:opacity-70"
-            >
-              <X size={18} color={text} />
-            </Pressable>
+        <View className="gap-3 border-b border-border-main bg-muted/40 px-5 py-4">
+          <View>
+            <Text className="mb-1.5 text-xs font-medium text-text-heading">
+              Status <Text className="text-text-subtle">· required</Text>
+            </Text>
+            <View className="flex-row flex-wrap gap-1.5">
+              {STATUSES.map(st => (
+                <Chip
+                  key={st.key}
+                  label={st.label}
+                  color={st.color}
+                  active={st.key === status}
+                  onPress={() => setStatus(prev => (prev === st.key ? null : st.key))}
+                />
+              ))}
+            </View>
           </View>
 
-          <ScrollView keyboardShouldPersistTaps="handled">
-            <Field label="Title contains">
-              <FormInput
-                accessibilityLabel="Title contains"
-                value={title}
-                onChangeText={setTitle}
-                placeholder="Search by title"
-              />
-            </Field>
-
-            <Field label="Assignee (one)">
-              <Pressable
+          <View className="flex-row flex-wrap gap-3">
+            <View style={{ flexBasis: 200, flexGrow: 1 }}>
+              <Text className="mb-1.5 text-xs font-medium text-text-heading">Assignee</Text>
+              <Press
+                feedback="none"
                 accessibilityRole="button"
+                accessibilityState={{ expanded: assigneeOpen }}
                 onPress={() => setAssigneeOpen(o => !o)}
-                className="flex-row items-center justify-between rounded-xl border border-border-main px-3 py-2.5 active:opacity-70"
+                className="h-9 flex-row items-center gap-2 rounded-lg border border-border-main bg-bg-card px-3 hover:border-border-strong"
               >
+                {selectedAssignee ? <Avatar id={selectedAssignee.id} size={18} /> : null}
                 <Text
-                  className={selectedAssignee ? 'text-text-heading' : 'text-text-main'}
+                  numberOfLines={1}
+                  className={`flex-1 text-sm ${
+                    selectedAssignee ? 'text-text-heading' : 'text-text-subtle'
+                  }`}
                 >
                   {selectedAssignee ? selectedAssignee.name : 'Anyone'}
                 </Text>
-                <ChevronDown size={16} color={text} />
-              </Pressable>
-              {assigneeOpen ? (
-                <View className="mt-2 rounded-xl border border-border-main p-2">
-                  <FormInput
-                    value={assigneeQuery}
-                    onChangeText={setAssigneeQuery}
-                    placeholder="Filter people"
-                  />
-                  <ScrollView className="mt-2 max-h-48">
-                    <Pressable
-                      accessibilityRole="button"
-                      onPress={() => {
-                        setAssigneeId(null);
-                        setAssigneeOpen(false);
-                      }}
-                      className="rounded-lg px-2 py-2 active:opacity-70"
-                    >
-                      <Text className="text-text-main">Anyone</Text>
-                    </Pressable>
-                    {assigneeOptions.map(m => (
-                      <Pressable
-                        key={m.id}
-                        accessibilityRole="button"
-                        onPress={() => {
-                          setAssigneeId(m.id);
-                          setAssigneeOpen(false);
-                          setAssigneeQuery('');
-                        }}
-                        className="flex-row items-center gap-2 rounded-lg px-2 py-2 active:opacity-70"
-                      >
-                        <AssigneeAvatars ids={[m.id]} size={20} />
-                        <Text className="text-text-heading">{m.name}</Text>
-                      </Pressable>
-                    ))}
-                  </ScrollView>
-                </View>
-              ) : null}
-            </Field>
-
-            <Field label="Status *">
-              <View className="flex-row flex-wrap gap-2">
-                {STATUSES.map(s => {
-                  const active = s.key === status;
-                  return (
-                    <Pressable
-                      key={s.key}
-                      accessibilityRole="button"
-                      onPress={() => setStatus(s.key)}
-                      style={active ? { backgroundColor: s.color } : undefined}
-                      className="rounded-full border border-border-main px-3 py-1.5 active:opacity-70"
-                    >
-                      <Text className={active ? 'text-white' : 'text-text-heading'}>
-                        {s.label}
-                      </Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-              {!status ? (
-                <Text className="mt-1 text-xs text-text-main">
-                  Pick a status to see results.
-                </Text>
-              ) : null}
-            </Field>
-
-            <View className="flex-row gap-3">
-              <View className="flex-1">
-                <Field label="Due from" error={fromError}>
-                  <FormInput
-                    value={dueFrom}
-                    onChangeText={setDueFrom}
-                    placeholder="YYYY-MM-DD"
-                    editable={!oldUnfinishedOnly}
-                  />
-                </Field>
-              </View>
-              <View className="flex-1">
-                <Field label="Due to" error={toError ?? rangeError}>
-                  <FormInput
-                    value={dueTo}
-                    onChangeText={setDueTo}
-                    placeholder="YYYY-MM-DD"
-                    editable={!oldUnfinishedOnly}
-                  />
-                </Field>
-              </View>
+                <ChevronDown size={15} color={c.subtle} />
+              </Press>
             </View>
-
-            <View className="mb-4 flex-row items-center justify-between gap-3">
-              <Text className="flex-1 text-sm text-text-heading">
-                Show old unfinished tasks
-                <Text className="text-xs text-text-main">
-                  {' '}(due before today, not completed or rejected; ignores the due range)
-                </Text>
-              </Text>
-              <Switch
-                value={oldUnfinishedOnly}
-                onValueChange={setOldUnfinishedOnly}
-                trackColor={{ true: accent }}
+            <View style={{ flexBasis: 130, flexGrow: 1 }}>
+              <Text className="mb-1.5 text-xs font-medium text-text-heading">Due from</Text>
+              <DateField
+                value={dueFrom}
+                onChange={setDueFrom}
+                invalid={!!fromError}
+                accessibilityLabel="Due from"
               />
             </View>
+            <View style={{ flexBasis: 130, flexGrow: 1 }}>
+              <Text className="mb-1.5 text-xs font-medium text-text-heading">Due to</Text>
+              <DateField
+                value={dueTo}
+                onChange={setDueTo}
+                min={dueFrom || undefined}
+                invalid={!!(toError ?? rangeError)}
+                accessibilityLabel="Due to"
+              />
+            </View>
+          </View>
 
-            <Text className="mb-2 text-xs font-semibold uppercase text-text-main">
-              Results{results ? ` (${results.length})` : ''}
-            </Text>
-            {dateError ? (
-              <Text className="mb-4 text-sm text-text-main">
-                Fix the due dates to see results.
-              </Text>
-            ) : results === null ? (
-              <Text className="mb-4 text-sm text-text-main">
-                Choose a status to start searching.
-              </Text>
-            ) : results.length === 0 ? (
-              <Text className="mb-4 text-sm text-text-main">No matching tasks.</Text>
-            ) : (
-              <View className="mb-4 gap-2">
-                {results.map(item => (
-                  <Pressable
-                    key={item.id}
+          {assigneeOpen ? (
+            <View className="rounded-lg border border-border-main bg-bg-card p-1.5">
+              <Input
+                size="sm"
+                icon={Search}
+                value={assigneeQuery}
+                onChangeText={setAssigneeQuery}
+                placeholder="Filter people"
+                autoFocus
+              />
+              <ScrollView className="mt-1.5 max-h-48">
+                <Press
+                  feedback="none"
+                  accessibilityRole="button"
+                  onPress={() => {
+                    setAssigneeId(null);
+                    setAssigneeOpen(false);
+                  }}
+                  className="rounded-md px-2 py-1.5 hover:bg-hover"
+                >
+                  <Text className="text-sm text-text-main">Anyone</Text>
+                </Press>
+                {assigneeOptions.map(m => (
+                  <Press
+                    key={m.id}
+                    feedback="none"
                     accessibilityRole="button"
-                    onPress={() => openItem(item)}
-                    className="flex-row items-center gap-2 rounded-xl border border-border-main px-3 py-2 active:opacity-70"
+                    onPress={() => {
+                      setAssigneeId(m.id);
+                      setAssigneeOpen(false);
+                      setAssigneeQuery('');
+                    }}
+                    className={`flex-row items-center gap-2 rounded-md px-2 py-1.5 hover:bg-hover ${
+                      m.id === assigneeId ? 'bg-hover' : ''
+                    }`}
                   >
-                    <StatusDot status={item.status} />
-                    <View className="flex-1">
-                      <Text numberOfLines={1} className="text-sm font-medium text-text-heading">
-                        {item.title}
-                      </Text>
-                      <Text className="text-[11px] text-text-main">
-                        {item.id} · due {item.end} · {assigneeNames(item.assigneeIds) || 'Unassigned'}
-                      </Text>
-                    </View>
-                  </Pressable>
+                    <Avatar id={m.id} size={20} />
+                    <Text className="text-sm text-text-heading">{m.name}</Text>
+                  </Press>
                 ))}
-              </View>
-            )}
-          </ScrollView>
-        </Pressable>
-      </Pressable>
-    </Modal>
+              </ScrollView>
+            </View>
+          ) : null}
+
+          {dateError ? <Text className="text-xs text-destructive">{dateError}</Text> : null}
+
+          <Switch
+            value={oldUnfinishedOnly}
+            onChange={setOldUnfinishedOnly}
+            label="Only overdue, unfinished tasks"
+            description="Due before today and not completed or rejected — ignores the due range."
+          />
+        </View>
+
+        <View className="px-3 pt-3">
+          {results && results.length > 0 ? (
+            <Text className="mb-1 px-2 text-2xs font-semibold uppercase tracking-wider text-text-subtle">
+              {results.length} {results.length === 1 ? 'result' : 'results'}
+            </Text>
+          ) : null}
+          {dateError ? (
+            <EmptyState compact icon={SearchX} title="Check the due dates" description="Fix the date range above to see results." />
+          ) : results === null ? (
+            <EmptyState compact icon={Search} title="Pick a status to search" description="Searches the top-level tasks you created. Narrow it down with title, assignee and due dates." />
+          ) : results.length === 0 ? (
+            <EmptyState compact icon={SearchX} title="No matching tasks" description="Try another status or loosen the filters." />
+          ) : (
+            results.map(item => (
+              <Press
+                key={item.id}
+                feedback="subtle"
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${item.title}`}
+                onPress={() => openItem(item)}
+                className="flex-row items-center gap-3 rounded-lg px-2 py-2 hover:bg-hover"
+              >
+                <StatusIcon status={item.status} />
+                <View className="flex-1">
+                  <Text numberOfLines={1} className="text-sm font-medium text-text-heading">
+                    {item.title}
+                  </Text>
+                  <Text className="text-xs text-text-subtle">{item.id}</Text>
+                </View>
+                <DueDate item={item} className="text-xs" />
+                <AssigneeAvatars ids={item.assigneeIds} size={20} />
+              </Press>
+            ))
+          )}
+        </View>
+      </ScrollView>
+    </Sheet>
   );
 }

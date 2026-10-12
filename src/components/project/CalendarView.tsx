@@ -6,7 +6,7 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import { ChevronLeft, ChevronRight } from 'lucide-react-native';
+import { CalendarCheck2, ChevronLeft, ChevronRight } from 'lucide-react-native';
 import { useAtomValue, useSetAtom } from 'jotai';
 import {
   Calendar,
@@ -35,15 +35,16 @@ import {
   startOfYear,
 } from 'date-fns';
 import { itemsAtom, selectedItemIdAtom } from '../../atoms/project';
-import { PRIORITY_COLOR, statusInfo } from '../../data/constants';
+import { statusInfo } from '../../data/constants';
 import { occurrencesInRange } from '../../data/recurrence';
 import { showsField } from '../../data/viewFields';
 import type { ProjectView, ViewField, WorkItem } from '../../data/types';
-import { useThemeColors } from '../../hooks/useThemeColors';
+import { useThemeColors, useTone } from '../../hooks/useThemeColors';
+import { Button, IconButton, Press, SegmentedControl } from '../ui';
 import {
   AssigneeAvatars,
-  IconButton,
   ItemRow,
+  PriorityIcon,
   RecurrenceIcon,
   SubtaskBadge,
 } from './shared';
@@ -103,7 +104,7 @@ export function CalendarView({ view }: { view: ProjectView }) {
   const items = useAtomValue(itemsAtom);
   const fields = view.fields;
   const select = useSetAtom(selectedItemIdAtom);
-  const { text, heading, accent, border } = useThemeColors();
+  const c = useThemeColors();
   const { width } = useWindowDimensions();
   const split = width >= SPLIT;
   const roomy = width >= ROOMY;
@@ -119,16 +120,16 @@ export function CalendarView({ view }: { view: ProjectView }) {
     setSelected(today);
   };
   const step = (dir: 1 | -1) =>
-    setCursor(c => {
+    setCursor(d => {
       switch (mode) {
         case 'day':
-          return addDays(c, dir);
+          return addDays(d, dir);
         case 'week':
-          return addWeeks(c, dir);
+          return addWeeks(d, dir);
         case 'year':
-          return addYears(c, dir);
+          return addYears(d, dir);
         default:
-          return addMonths(c, dir);
+          return addMonths(d, dir);
       }
     });
   // From the Year view, jump straight into that day's detail.
@@ -195,7 +196,7 @@ export function CalendarView({ view }: { view: ProjectView }) {
 
   const calendarBox = (
     <View
-      className="flex-1 overflow-hidden rounded-2xl border border-border-main"
+      className="flex-1 overflow-hidden rounded-xl border border-border-main bg-bg-card"
       onLayout={e => setBodyHeight(e.nativeEvent.layout.height)}
     >
       {bodyHeight > 0 ? (
@@ -216,16 +217,21 @@ export function CalendarView({ view }: { view: ProjectView }) {
           showAdjacentMonths
           theme={{
             palette: {
-              primary: { main: accent, contrastText: '#ffffff' },
+              primary: { main: c.accent, contrastText: c.accentForeground },
               gray: {
-                100: border,
-                200: border,
-                300: border,
-                500: text,
-                800: heading,
+                100: c.border,
+                200: c.border,
+                300: c.border,
+                500: c.subtle,
+                800: c.heading,
               },
-              nowIndicator: accent,
-              moreLabel: text,
+              nowIndicator: c.accent,
+              moreLabel: c.text,
+            },
+            typography: {
+              xs: { fontSize: 11, fontWeight: '500' },
+              sm: { fontSize: 12, fontWeight: '500' },
+              xl: { fontSize: 15, fontWeight: '600' },
             },
           }}
         />
@@ -235,18 +241,9 @@ export function CalendarView({ view }: { view: ProjectView }) {
 
   // Full-bleed: no max-width, so the grid uses all the space the screen gives it.
   return (
-    <View className="flex-1 px-4">
-      <View className="flex-row flex-wrap items-center justify-between gap-3 py-4">
-        <Text className="text-lg font-bold text-text-heading">{title}</Text>
-        <View className="flex-row items-center gap-2">
-          <ModeSwitch mode={mode} onChange={setMode} />
-          <Pressable
-            accessibilityRole="button"
-            onPress={goToday}
-            className="rounded-lg border border-border-main px-3 py-2 active:opacity-70"
-          >
-            <Text className="text-xs text-text-heading">Today</Text>
-          </Pressable>
+    <View className="flex-1 px-4 lg:px-6">
+      <View className="flex-row flex-wrap items-center gap-3 py-3">
+        <View className="flex-row items-center gap-1">
           <IconButton
             icon={ChevronLeft}
             label={`Previous ${mode}`}
@@ -258,6 +255,12 @@ export function CalendarView({ view }: { view: ProjectView }) {
             onPress={() => step(1)}
           />
         </View>
+        <Text className="text-lg font-semibold text-text-heading">{title}</Text>
+        <View className="flex-1" />
+        <Button size="sm" onPress={goToday}>
+          Today
+        </Button>
+        <SegmentedControl options={MODES} value={mode} onChange={setMode} />
       </View>
 
       {mode === 'year' ? (
@@ -316,27 +319,45 @@ function WeekAgenda({
     end: addDays(weekStart, 6),
   });
   return (
-    <ScrollView contentContainerClassName="gap-5 pb-8">
+    <ScrollView contentContainerClassName="gap-3 pb-10">
       {days.map(day => {
         const agenda = itemsOn(items, day);
+        const today = isToday(day);
         return (
-          <View key={day.toISOString()}>
-            <Text
-              className={`mb-2 text-sm font-bold ${
-                isToday(day) ? 'text-accent' : 'text-text-heading'
-              }`}
-            >
-              {format(day, 'EEEE, MMM d')}
-              {isToday(day) ? ' · Today' : ''}
-            </Text>
-            <View className="gap-2">
+          <View
+            key={day.toISOString()}
+            className={`flex-row gap-4 rounded-xl border bg-bg-card p-3 ${
+              today ? 'border-accent/40' : 'border-border-main'
+            }`}
+          >
+            <View className="w-14 items-center pt-0.5">
+              <Text
+                className={`text-2xs font-semibold uppercase tracking-wider ${
+                  today ? 'text-accent' : 'text-text-subtle'
+                }`}
+              >
+                {format(day, 'EEE')}
+              </Text>
+              <View
+                className={`mt-1 h-8 w-8 items-center justify-center rounded-full ${
+                  today ? 'bg-accent' : ''
+                }`}
+              >
+                <Text
+                  className={`text-lg font-semibold ${
+                    today ? 'text-accent-foreground' : 'text-text-heading'
+                  }`}
+                >
+                  {format(day, 'd')}
+                </Text>
+              </View>
+            </View>
+            <View className="flex-1 justify-center gap-1.5">
               {agenda.map(i => (
                 <ItemRow key={i.id} item={i} fields={fields} />
               ))}
               {agenda.length === 0 ? (
-                <Text className="text-xs text-text-main">
-                  Nothing scheduled.
-                </Text>
+                <Text className="text-sm text-text-subtle">Nothing scheduled</Text>
               ) : null}
             </View>
           </View>
@@ -356,20 +377,30 @@ function AgendaPanel({
   fields?: ViewField[];
 }) {
   const agenda = itemsOn(items, day);
+  const c = useThemeColors();
   return (
     <View>
-      <Text className="mb-1 text-base font-bold text-text-heading">
-        {format(day, 'EEEE, MMM d')}
-      </Text>
-      <Text className="mb-3 text-xs text-text-main">
-        {agenda.length} {agenda.length === 1 ? 'item' : 'items'}
-      </Text>
-      <View className="gap-2">
+      <View className="mb-3 flex-row items-baseline justify-between">
+        <Text className="text-base font-semibold text-text-heading">
+          {isToday(day) ? 'Today' : format(day, 'EEEE')}
+          <Text className="font-normal text-text-subtle">
+            {'  '}
+            {format(day, 'MMM d')}
+          </Text>
+        </Text>
+        <Text className="text-xs text-text-subtle">
+          {agenda.length} {agenda.length === 1 ? 'task' : 'tasks'}
+        </Text>
+      </View>
+      <View className="gap-1.5">
         {agenda.map(i => (
           <ItemRow key={i.id} item={i} fields={fields} />
         ))}
         {agenda.length === 0 ? (
-          <Text className="text-sm text-text-main">Nothing scheduled.</Text>
+          <View className="items-center rounded-xl border border-dashed border-border-strong px-4 py-8">
+            <CalendarCheck2 size={18} color={c.subtle} />
+            <Text className="mt-2 text-sm text-text-subtle">Nothing scheduled</Text>
+          </View>
         ) : null}
       </View>
     </View>
@@ -394,33 +425,38 @@ function EventCell({
 }) {
   const { key, style, onPress, disabled } = touchableOpacityProps;
   const { workItem } = event;
+  const toneOf = useTone();
   const color = showsField(fields, 'status')
     ? statusInfo(workItem.status).color
     : '#9ca3af';
+  const t = toneOf(color);
   return (
     <Pressable
       key={key}
       accessibilityRole="button"
+      accessibilityLabel={workItem.title}
       onPress={onPress}
       disabled={disabled}
       style={[
         style,
         {
           height: compact ? EVENT_CELL_HEIGHT : undefined,
-          backgroundColor: `${color}26`,
+          backgroundColor: t.bg,
           borderLeftColor: color,
-          borderLeftWidth: 3,
-          borderRadius: 6,
-          paddingHorizontal: 6,
-          paddingVertical: compact ? 0 : 2,
+          borderLeftWidth: 2.5,
+          borderRadius: 4,
+          paddingHorizontal: 5,
+          paddingVertical: compact ? 0 : 3,
           justifyContent: 'center',
         },
       ]}
+      className="hover:opacity-80"
     >
       <View className="flex-row items-center gap-1">
         <Text
           numberOfLines={1}
-          className="shrink text-[11px] font-medium text-text-heading"
+          style={{ color: t.fg }}
+          className="shrink text-2xs font-medium"
         >
           {workItem.title}
         </Text>
@@ -429,15 +465,12 @@ function EventCell({
         ) : null}
       </View>
       {!compact ? (
-        <View className="mt-0.5 flex-row items-center gap-1">
+        <View className="mt-0.5 flex-row items-center gap-1.5">
           {showsField(fields, 'id') ? (
-            <Text className="text-[10px] text-text-main">{workItem.id}</Text>
+            <Text className="text-2xs text-text-subtle">{workItem.id}</Text>
           ) : null}
           {showsField(fields, 'priority') ? (
-            <View
-              style={{ backgroundColor: PRIORITY_COLOR[workItem.priority] }}
-              className="h-1.5 w-1.5 rounded-full"
-            />
+            <PriorityIcon priority={workItem.priority} size={11} />
           ) : null}
           {showsField(fields, 'assignee') ? (
             <AssigneeAvatars ids={workItem.assigneeIds} size={14} max={2} />
@@ -449,44 +482,9 @@ function EventCell({
   );
 }
 
-function ModeSwitch({
-  mode,
-  onChange,
-}: {
-  mode: CalMode;
-  onChange: (m: CalMode) => void;
-}) {
-  return (
-    <View className="flex-row rounded-lg border border-border-main p-0.5">
-      {MODES.map(m => {
-        const active = m.key === mode;
-        return (
-          <Pressable
-            key={m.key}
-            accessibilityRole="radio"
-            accessibilityState={{ selected: active }}
-            onPress={() => onChange(m.key)}
-            className={`rounded-md px-3 py-1.5 active:opacity-70 ${
-              active ? 'bg-accent' : ''
-            }`}
-          >
-            <Text
-              className={`text-xs font-medium ${
-                active ? 'text-accent-foreground' : 'text-text-main'
-              }`}
-            >
-              {m.label}
-            </Text>
-          </Pressable>
-        );
-      })}
-    </View>
-  );
-}
-
-// 12 compact months in a wrapping grid. Each day with items gets a status-colour
-// dot; tapping a day jumps straight to its Day view. Kept custom since the
-// calendar library has no year mode.
+// 12 compact months in a wrapping grid. Days with tasks get an accent dot;
+// tapping a day jumps straight to its Day view. Kept custom since the calendar
+// library has no year mode.
 function YearBody({
   items,
   yearAnchor,
@@ -501,7 +499,7 @@ function YearBody({
     end: endOfYear(yearAnchor),
   });
   return (
-    <View className="flex-1 flex-row flex-wrap gap-4 p-4">
+    <ScrollView contentContainerClassName="flex-row flex-wrap gap-3 pb-10">
       {months.map(m => (
         <MiniMonth
           key={m.toISOString()}
@@ -510,7 +508,7 @@ function YearBody({
           onSelectDay={onSelectDay}
         />
       ))}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -527,19 +525,26 @@ function MiniMonth({
     start: startOfWeek(startOfMonth(month), { weekStartsOn: 1 }),
     end: endOfWeek(endOfMonth(month), { weekStartsOn: 1 }),
   });
+  const current = isSameMonth(month, new Date());
   return (
     <View
       style={{ minWidth: 220, flexGrow: 1, flexBasis: 220 }}
-      className="rounded-2xl border border-border-main bg-bg-card p-3"
+      className={`rounded-xl border bg-bg-card p-3 ${
+        current ? 'border-accent/40' : 'border-border-main'
+      }`}
     >
-      <Text className="mb-2 text-sm font-semibold text-text-heading">
+      <Text
+        className={`mb-2 px-1 text-sm font-semibold ${
+          current ? 'text-accent' : 'text-text-heading'
+        }`}
+      >
         {format(month, 'MMMM')}
       </Text>
       <View className="flex-row">
         {WEEKDAYS.map(w => (
           <Text
             key={w}
-            className="flex-1 text-center text-[9px] font-semibold uppercase text-text-main"
+            className="flex-1 pb-1 text-center text-2xs font-medium text-text-subtle"
           >
             {w[0]}
           </Text>
@@ -551,37 +556,41 @@ function MiniMonth({
             {week.map(day => {
               const count = itemsOn(items, day).length;
               const inMonth = isSameMonth(day, month);
+              const today = isToday(day);
               return (
-                <Pressable
+                <Press
                   key={day.toISOString()}
+                  feedback="scale"
                   accessibilityRole="button"
-                  accessibilityLabel={format(day, 'EEEE, MMMM d')}
+                  accessibilityLabel={`${format(day, 'EEEE, MMMM d')}${
+                    count ? `, ${count} tasks` : ''
+                  }`}
                   onPress={() => onSelectDay(day)}
                   style={{ flex: 1, minWidth: 0 }}
-                  className="items-center gap-0.5 py-1 active:opacity-60"
+                  className="items-center py-0.5"
                 >
                   <View
-                    className={`h-5 w-5 items-center justify-center rounded-full ${
-                      isToday(day) ? 'bg-accent' : ''
+                    className={`h-6 w-6 items-center justify-center rounded-full ${
+                      today ? 'bg-accent' : 'hover:bg-hover'
                     }`}
                   >
                     <Text
-                      className={`text-[10px] ${
-                        isToday(day)
-                          ? 'font-bold text-accent-foreground'
+                      className={`text-2xs ${
+                        today
+                          ? 'font-semibold text-accent-foreground'
                           : inMonth
                           ? 'text-text-heading'
-                          : 'text-text-main opacity-30'
+                          : 'text-text-subtle opacity-40'
                       }`}
                     >
                       {format(day, 'd')}
                     </Text>
                   </View>
                   <View
-                    style={{ opacity: count > 0 ? 1 : 0 }}
-                    className="h-1 w-1 rounded-full bg-accent"
+                    style={{ opacity: count > 0 && inMonth ? 1 : 0 }}
+                    className="mt-px h-1 w-1 rounded-full bg-accent"
                   />
-                </Pressable>
+                </Press>
               );
             })}
           </View>
