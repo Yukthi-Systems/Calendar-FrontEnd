@@ -1,57 +1,68 @@
-import { useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import {
-  Pressable,
+  PanResponder,
   ScrollView,
   Text,
   useWindowDimensions,
   View,
 } from 'react-native';
-import { CalendarCheck2, ChevronLeft, ChevronRight } from 'lucide-react-native';
-import { useAtomValue, useSetAtom } from 'jotai';
 import {
-  Calendar,
-  type CalendarTouchableOpacityProps,
-  type EventRenderer,
-  type ICalendarEventBase,
-  type Mode as CalendarLibMode,
-} from 'react-native-big-calendar';
+  CalendarCheck2,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+} from 'lucide-react-native';
+import { useAtomValue, useSetAtom } from 'jotai';
 import {
   addDays,
   addMonths,
   addWeeks,
   addYears,
+  differenceInCalendarDays,
   eachDayOfInterval,
   eachMonthOfInterval,
   endOfMonth,
   endOfWeek,
   endOfYear,
   format,
+  isSameDay,
   isSameMonth,
   isToday,
+  isWeekend,
   parseISO,
   startOfDay,
   startOfMonth,
   startOfWeek,
   startOfYear,
 } from 'date-fns';
-import { itemsAtom, selectedItemIdAtom } from '../../atoms/project';
+import {
+  itemFormAtom,
+  itemsAtom,
+  selectedItemIdAtom,
+} from '../../atoms/project';
 import { statusInfo } from '../../data/constants';
 import { occurrencesInRange } from '../../data/recurrence';
 import { showsField } from '../../data/viewFields';
 import type { ProjectView, ViewField, WorkItem } from '../../data/types';
 import { useThemeColors, useTone } from '../../hooks/useThemeColors';
-import { Button, IconButton, Press, SegmentedControl } from '../ui';
+import { useShortcuts } from '../../hooks/useShortcuts';
+import { mix } from '../../theme/color';
+import { Button, IconButton, Kbd, Press, SegmentedControl } from '../ui';
 import {
   AssigneeAvatars,
   ItemRow,
   PriorityIcon,
   RecurrenceIcon,
-  SubtaskBadge,
+  StatusIcon,
 } from './shared';
+import { Tooltip } from './Tooltip';
 
-const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-const SPLIT = 1000; // width where the day agenda moves beside the grid instead of below it
-const ROOMY = 700; // width where Month cells have room for a 3rd visible event
+const WEEK = { weekStartsOn: 1 } as const;
+const DATE_FMT = 'yyyy-MM-dd';
+// Width at which the selected-day agenda sits beside the month grid.
+const SPLIT = 1100;
+// Below this, month cells are too narrow for titled bars — they show dots.
+const NARROW = 640;
 
 type CalMode = 'day' | 'week' | 'month' | 'year';
 const MODES: { key: CalMode; label: string }[] = [
@@ -60,38 +71,255 @@ const MODES: { key: CalMode; label: string }[] = [
   { key: 'month', label: 'Month' },
   { key: 'year', label: 'Year' },
 ];
-// Fixed calendar height on narrow screens for Month, which pairs the grid
-// with an agenda list below it. Day/Week/Year fill the available space instead.
-const MONTH_MOBILE_HEIGHT = 420;
-// Month's compact event cell height — kept in step with the `eventMinHeightForMonthView`
-// prop passed to <Calendar> below, so the grid reserves exactly this much room per row.
-const EVENT_CELL_HEIGHT = 20;
 
-// react-native-big-calendar's own event shape, plus the WorkItem it represents.
-interface CalEvent extends ICalendarEventBase {
-  workItem: WorkItem;
+// One appearance of a task on the calendar. A recurring task yields one per
+// repeat inside the visible range; everything else yields exactly one.
+interface Occ {
+  key: string;
+  item: WorkItem;
+  start: Date;
+  end: Date;
 }
 
-// Items active on `day`, counting each repeat of a recurring task as if it
-// were present — e.g. a weekly task shows up every week it recurs into, not
-// only in the week it was created. The task itself is still one WorkItem;
-// this only decides what to *display*, same as `occurrencesInRange` it reads.
-const itemsOn = (items: WorkItem[], day: Date) =>
-  items.filter(
-    i =>
-      occurrencesInRange(
-        parseISO(i.start),
-        parseISO(i.end),
-        i.recurrence,
-        day,
-        day,
-      ).length > 0,
+const occurrencesBetween = (items: WorkItem[], from: Date, to: Date): Occ[] =>
+  items.flatMap(item =>
+    occurrencesInRange(
+      parseISO(item.start),
+      parseISO(item.end),
+      item.recurrence,
+      from,
+      to,
+    ).map(o => ({
+      key: `${item.id}@${format(o.start, DATE_FMT)}`,
+      item,
+      start: startOfDay(o.start),
+      end: startOfDay(o.end),
+    })),
   );
 
-// Splits a flat list of days into weeks of 7, so the Year mini-months render
-// one explicit flex-row per week (each cell `flex: 1`) rather than relying on
-// flex-wrap with percentage-width cells — that rounds unpredictably on RN's
-// Android renderer and was dropping the 7th (Sunday) column to the next line.
+const onDay = (occ: Occ[], day: Date) =>
+  occ.filter(o => o.start <= day && o.end >= day);
+
+// A task's slice of one week row: which columns it covers, which lane (row of
+// bars) it sits in, and whether the task really starts/ends inside this week
+// (rounded ends) or carries on from/into the neighbouring week (square ends).
+interface Segment {
+  occ: Occ;
+  col: number;
+  span: number;
+  lane: number;
+  isStart: boolean;
+  isEnd: boolean;
+}
+
+function layoutWeek(occ: Occ[], weekStart: Date): Segment[] {
+  const weekEnd = addDays(weekStart, 6);
+  const parts = occ
+    .filter(o => o.start <= weekEnd && o.end >= weekStart)
+    .map(o => {
+      const s = o.start < weekStart ? weekStart : o.start;
+      const e = o.end > weekEnd ? weekEnd : o.end;
+      return {
+        occ: o,
+        col: differenceInCalendarDays(s, weekStart),
+        span: differenceInCalendarDays(e, s) + 1,
+        lane: 0,
+        isStart: o.start >= weekStart,
+        isEnd: o.end <= weekEnd,
+      };
+    })
+    // Earlier first, then longer first — long bars claim the top lanes.
+    .sort((a, b) => a.col - b.col || b.span - a.span);
+  const laneEnds: number[] = [];
+  for (const p of parts) {
+    let lane = laneEnds.findIndex(endCol => endCol < p.col);
+    if (lane === -1) {
+      lane = laneEnds.length;
+      laneEnds.push(0);
+    }
+    laneEnds[lane] = p.col + p.span - 1;
+    p.lane = lane;
+  }
+  return parts;
+}
+
+export function CalendarView({ view }: { view: ProjectView }) {
+  const items = useAtomValue(itemsAtom);
+  const fields = view.fields;
+  const setForm = useSetAtom(itemFormAtom);
+  const { width } = useWindowDimensions();
+  const split = width >= SPLIT;
+  const narrow = width < NARROW;
+
+  const [mode, setMode] = useState<CalMode>('month');
+  const [cursor, setCursor] = useState(() => new Date());
+  const [selected, setSelected] = useState(() => new Date());
+
+  const goToday = () => {
+    const today = new Date();
+    setCursor(today);
+    setSelected(today);
+  };
+  const step = (dir: 1 | -1) =>
+    setCursor(d =>
+      mode === 'day'
+        ? addDays(d, dir)
+        : mode === 'week'
+        ? addWeeks(d, dir)
+        : mode === 'year'
+        ? addYears(d, dir)
+        : addMonths(d, dir),
+    );
+  const openDay = (day: Date) => {
+    setCursor(day);
+    setSelected(day);
+    setMode('day');
+  };
+  const newTaskOn = (day: Date) =>
+    setForm({ mode: 'new', start: format(day, DATE_FMT) });
+
+  useShortcuts({
+    arrowleft: () => step(-1),
+    arrowright: () => step(1),
+    t: goToday,
+    d: () => setMode('day'),
+    w: () => setMode('week'),
+    m: () => setMode('month'),
+    y: () => setMode('year'),
+  });
+
+  // Swipe left/right on the grid to page (touch); a mouse drag works too.
+  const stepRef = useRef(step);
+  stepRef.current = step;
+  const swipe = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, g) =>
+        Math.abs(g.dx) > 24 && Math.abs(g.dx) > Math.abs(g.dy) * 2,
+      onPanResponderRelease: (_, g) => {
+        if (g.dx < -60) {
+          stepRef.current(1);
+        } else if (g.dx > 60) {
+          stepRef.current(-1);
+        }
+      },
+    }),
+  ).current;
+
+  const weekStart = startOfWeek(cursor, WEEK);
+  const weekEnd = addDays(weekStart, 6);
+  const title =
+    mode === 'day' ? (
+      <>
+        {format(cursor, 'EEEE')}
+        <Text className="font-normal text-text-subtle"> {format(cursor, 'MMM d, yyyy')}</Text>
+      </>
+    ) : mode === 'week' ? (
+      <>
+        {format(weekStart, 'MMM d')} – {format(weekEnd, isSameMonth(weekStart, weekEnd) ? 'd' : 'MMM d')}
+        <Text className="font-normal text-text-subtle"> {format(weekEnd, 'yyyy')}</Text>
+      </>
+    ) : mode === 'year' ? (
+      format(cursor, 'yyyy')
+    ) : (
+      <>
+        {format(cursor, 'MMMM')}
+        <Text className="font-normal text-text-subtle"> {format(cursor, 'yyyy')}</Text>
+      </>
+    );
+
+  // Distinct tasks in the visible range, for the toolbar.
+  const visibleCount = useMemo(() => {
+    const [from, to] =
+      mode === 'day'
+        ? [startOfDay(cursor), startOfDay(cursor)]
+        : mode === 'week'
+        ? [startOfWeek(cursor, WEEK), addDays(startOfWeek(cursor, WEEK), 6)]
+        : mode === 'year'
+        ? [startOfYear(cursor), endOfYear(cursor)]
+        : [startOfMonth(cursor), endOfMonth(cursor)];
+    return new Set(occurrencesBetween(items, from, to).map(o => o.item.id)).size;
+  }, [items, mode, cursor]);
+
+  return (
+    <View className="flex-1 px-4 lg:px-6">
+      <View className="flex-row flex-wrap items-center gap-x-3 gap-y-2 py-3">
+        <Text className="min-w-[170px] text-xl font-semibold text-text-heading">{title}</Text>
+        <View className="flex-row items-center">
+          <IconButton icon={ChevronLeft} label={`Previous ${mode} (←)`} onPress={() => step(-1)} />
+          <IconButton icon={ChevronRight} label={`Next ${mode} (→)`} onPress={() => step(1)} />
+        </View>
+        <Button size="sm" onPress={goToday}>
+          Today
+        </Button>
+        <View className="flex-1" />
+        {!narrow ? (
+          <Text className="text-xs text-text-subtle">
+            {visibleCount} {visibleCount === 1 ? 'task' : 'tasks'}
+          </Text>
+        ) : null}
+        <SegmentedControl options={MODES} value={mode} onChange={setMode} />
+      </View>
+
+      <View className="flex-1" {...swipe.panHandlers}>
+        {mode === 'year' ? (
+          <YearBody items={items} yearAnchor={cursor} onSelectDay={openDay} />
+        ) : mode === 'day' ? (
+          <DayBody day={cursor} items={items} fields={fields} onNewTask={newTaskOn} />
+        ) : mode === 'week' ? (
+          <WeekBody
+            weekStart={weekStart}
+            items={items}
+            fields={fields}
+            onOpenDay={openDay}
+            onNewTask={newTaskOn}
+          />
+        ) : split ? (
+          <View className="flex-1 flex-row gap-4 pb-4">
+            <MonthGrid
+              cursor={cursor}
+              items={items}
+              fields={fields}
+              selected={selected}
+              narrow={false}
+              onSelectDay={setSelected}
+              onOpenDay={openDay}
+              onNewTask={newTaskOn}
+            />
+            <ScrollView className="w-[300px] grow-0" contentContainerClassName="pb-8">
+              <AgendaPanel day={selected} items={items} fields={fields} onNewTask={newTaskOn} />
+            </ScrollView>
+          </View>
+        ) : (
+          <ScrollView contentContainerClassName="pb-10">
+            <View style={{ height: narrow ? 360 : 540 }}>
+              <MonthGrid
+                cursor={cursor}
+                items={items}
+                fields={fields}
+                selected={selected}
+                narrow={narrow}
+                onSelectDay={setSelected}
+                onOpenDay={openDay}
+                onNewTask={newTaskOn}
+              />
+            </View>
+            <View className="pt-5">
+              <AgendaPanel day={selected} items={items} fields={fields} onNewTask={newTaskOn} />
+            </View>
+          </ScrollView>
+        )}
+      </View>
+    </View>
+  );
+}
+
+// ── Month ────────────────────────────────────────────────────────────────────
+
+const DATE_ROW_H = 30;
+const BAR_H = 20;
+const BAR_GAP = 2;
+const MORE_H = 16;
+
 const chunkWeeks = (days: Date[]) => {
   const weeks: Date[][] = [];
   for (let i = 0; i < days.length; i += 7) {
@@ -100,246 +328,349 @@ const chunkWeeks = (days: Date[]) => {
   return weeks;
 };
 
-export function CalendarView({ view }: { view: ProjectView }) {
-  const items = useAtomValue(itemsAtom);
-  const fields = view.fields;
-  const select = useSetAtom(selectedItemIdAtom);
-  const c = useThemeColors();
-  const { width } = useWindowDimensions();
-  const split = width >= SPLIT;
-  const roomy = width >= ROOMY;
-
-  const [mode, setMode] = useState<CalMode>('month');
-  const [cursor, setCursor] = useState(() => new Date());
-  const [selected, setSelected] = useState(() => new Date());
-  const [bodyHeight, setBodyHeight] = useState(0);
-
-  const goToday = () => {
-    const today = new Date();
-    setCursor(today);
-    setSelected(today);
-  };
-  const step = (dir: 1 | -1) =>
-    setCursor(d => {
-      switch (mode) {
-        case 'day':
-          return addDays(d, dir);
-        case 'week':
-          return addWeeks(d, dir);
-        case 'year':
-          return addYears(d, dir);
-        default:
-          return addMonths(d, dir);
-      }
-    });
-  // From the Year view, jump straight into that day's detail.
-  const openDayDetail = (day: Date) => {
-    setCursor(day);
-    setSelected(day);
-    setMode('day');
-  };
-  // Tapping a date in Month/Week (an empty cell, the date number, or a day
-  // header) picks it as the agenda focus, without changing the visible range.
-  const pickDay = (day: Date) => setSelected(day);
-
-  const title =
-    mode === 'day'
-      ? format(cursor, 'EEEE, MMM d, yyyy')
-      : mode === 'week'
-      ? `${format(
-          startOfWeek(cursor, { weekStartsOn: 1 }),
-          'MMM d',
-        )} – ${format(endOfWeek(cursor, { weekStartsOn: 1 }), 'MMM d, yyyy')}`
-      : mode === 'year'
-      ? format(cursor, 'yyyy')
-      : format(cursor, 'MMMM yyyy');
-
-  // Date-only tasks, mapped to react-native-big-calendar's all-day event shape
-  // (both start and end at midnight — that's how the library recognises an
-  // event as all-day/multi-day instead of a timed one). Only consumed by
-  // Month mode, so expanding recurring tasks just across the padded month
-  // grid (not open-ended) keeps this bounded regardless of how old the task is.
-  const monthRangeStart = startOfWeek(startOfMonth(cursor), {
-    weekStartsOn: 1,
-  });
-  const monthRangeEnd = endOfWeek(endOfMonth(cursor), { weekStartsOn: 1 });
-  const calEvents: CalEvent[] = items.flatMap(i =>
-    occurrencesInRange(
-      parseISO(i.start),
-      parseISO(i.end),
-      i.recurrence,
-      monthRangeStart,
-      monthRangeEnd,
-    ).map(occ => ({
-      start: startOfDay(occ.start),
-      end: addDays(startOfDay(occ.end), 1),
-      title: i.title,
-      workItem: i,
-    })),
+function MonthGrid({
+  cursor,
+  items,
+  fields,
+  selected,
+  narrow,
+  onSelectDay,
+  onOpenDay,
+  onNewTask,
+}: {
+  cursor: Date;
+  items: WorkItem[];
+  fields?: ViewField[];
+  selected: Date;
+  narrow: boolean;
+  onSelectDay: (d: Date) => void;
+  onOpenDay: (d: Date) => void;
+  onNewTask: (d: Date) => void;
+}) {
+  const weeks = useMemo(
+    () =>
+      chunkWeeks(
+        eachDayOfInterval({
+          start: startOfWeek(startOfMonth(cursor), WEEK),
+          end: endOfWeek(endOfMonth(cursor), WEEK),
+        }),
+      ),
+    [cursor],
   );
-
-  // Month's row height is fixed (the grid divides the box evenly, it doesn't
-  // grow to fit taller content), so its cells stay single-line to fit inside
-  // it — a taller cell just overflows into the row below instead of pushing
-  // it down. Week has room to spare, so it keeps the fuller cell.
-  const renderEvent: EventRenderer<CalEvent> = (
-    event,
-    touchableOpacityProps,
-  ) => (
-    <EventCell
-      event={event}
-      touchableOpacityProps={touchableOpacityProps}
-      compact={mode === 'month'}
-      fields={fields}
-    />
+  const occ = useMemo(
+    () => occurrencesBetween(items, weeks[0][0], weeks[weeks.length - 1][6]),
+    [items, weeks],
   );
+  const [rowH, setRowH] = useState(0);
 
-  const calendarBox = (
-    <View
-      className="flex-1 overflow-hidden rounded-xl border border-border-main bg-bg-card"
-      onLayout={e => setBodyHeight(e.nativeEvent.layout.height)}
-    >
-      {bodyHeight > 0 ? (
-        <Calendar<CalEvent>
-          events={calEvents}
-          height={bodyHeight}
-          mode={mode as CalendarLibMode}
-          date={cursor}
-          weekStartsOn={1}
-          onPressEvent={e => select(e.workItem.id)}
-          onPressCell={pickDay}
-          onPressDateHeader={pickDay}
-          onSwipeEnd={setCursor}
-          renderEvent={renderEvent}
-          eventMinHeightForMonthView={EVENT_CELL_HEIGHT}
-          maxVisibleEventCount={roomy ? 3 : 2}
-          calendarCellStyle={{ overflow: 'hidden' }}
-          showAdjacentMonths
-          theme={{
-            palette: {
-              primary: { main: c.accent, contrastText: c.accentForeground },
-              gray: {
-                100: c.border,
-                200: c.border,
-                300: c.border,
-                500: c.subtle,
-                800: c.heading,
-              },
-              nowIndicator: c.accent,
-              moreLabel: c.text,
-            },
-            typography: {
-              xs: { fontSize: 11, fontWeight: '500' },
-              sm: { fontSize: 12, fontWeight: '500' },
-              xl: { fontSize: 15, fontWeight: '600' },
-            },
-          }}
-        />
-      ) : null}
-    </View>
-  );
-
-  // Full-bleed: no max-width, so the grid uses all the space the screen gives it.
   return (
-    <View className="flex-1 px-4 lg:px-6">
-      <View className="flex-row flex-wrap items-center gap-3 py-3">
-        <View className="flex-row items-center gap-1">
-          <IconButton
-            icon={ChevronLeft}
-            label={`Previous ${mode}`}
-            onPress={() => step(-1)}
-          />
-          <IconButton
-            icon={ChevronRight}
-            label={`Next ${mode}`}
-            onPress={() => step(1)}
-          />
-        </View>
-        <Text className="text-lg font-semibold text-text-heading">{title}</Text>
-        <View className="flex-1" />
-        <Button size="sm" onPress={goToday}>
-          Today
-        </Button>
-        <SegmentedControl options={MODES} value={mode} onChange={setMode} />
+    <View className="flex-1 overflow-hidden rounded-xl border border-border-main bg-bg-card">
+      <View className="flex-row border-b border-border-main bg-muted/60">
+        {weeks[0].map(d => (
+          <View key={d.toISOString()} className="flex-1 items-center py-2">
+            <Text className="text-2xs font-semibold uppercase tracking-wider text-text-subtle">
+              {format(d, narrow ? 'EEEEE' : 'EEE')}
+            </Text>
+          </View>
+        ))}
       </View>
-
-      {mode === 'year' ? (
-        <YearBody
-          items={items}
-          yearAnchor={cursor}
-          onSelectDay={openDayDetail}
-        />
-      ) : mode === 'day' ? (
-        // A plain scrollable list, not the calendar library's day grid: our
-        // tasks are date ranges, not timed events, so every one of them is an
-        // "all-day" entry to it — its all-day row has no cap or scroll of its
-        // own, so a day with more than a couple of tasks overflows that fixed-
-        // height row and visually blocks the hour grid underneath. A list has
-        // no such ceiling.
-        <ScrollView contentContainerClassName="pb-8">
-          <AgendaPanel day={cursor} items={items} fields={fields} />
-        </ScrollView>
-      ) : mode === 'week' ? (
-        // Same reasoning as Day, one section per day of the week.
-        <WeekAgenda
-          weekStart={startOfWeek(cursor, { weekStartsOn: 1 })}
-          items={items}
-          fields={fields}
-        />
-      ) : split ? (
-        <View className="flex-1 flex-row items-stretch gap-4">
-          {calendarBox}
-          <ScrollView className="w-80 grow-0" contentContainerClassName="pb-8">
-            <AgendaPanel day={selected} items={items} fields={fields} />
-          </ScrollView>
-        </View>
-      ) : (
-        <View className="flex-1">
-          <View style={{ height: MONTH_MOBILE_HEIGHT }}>{calendarBox}</View>
-          <ScrollView className="flex-1" contentContainerClassName="pt-4 pb-8">
-            <AgendaPanel day={selected} items={items} fields={fields} />
-          </ScrollView>
-        </View>
-      )}
+      <View className="flex-1">
+        {weeks.map((week, wi) => (
+          <View
+            key={week[0].toISOString()}
+            onLayout={wi === 0 ? e => setRowH(e.nativeEvent.layout.height) : undefined}
+            className={`flex-1 ${wi > 0 ? 'border-t border-border-main' : ''}`}
+          >
+            <WeekRow
+              days={week}
+              occ={occ}
+              fields={fields}
+              month={cursor}
+              selected={selected}
+              height={rowH}
+              narrow={narrow}
+              onSelectDay={onSelectDay}
+              onOpenDay={onOpenDay}
+              onNewTask={onNewTask}
+            />
+          </View>
+        ))}
+      </View>
     </View>
   );
 }
 
-function WeekAgenda({
+function WeekRow({
+  days,
+  occ,
+  fields,
+  month,
+  selected,
+  height,
+  narrow,
+  onSelectDay,
+  onOpenDay,
+  onNewTask,
+}: {
+  days: Date[];
+  occ: Occ[];
+  fields?: ViewField[];
+  month: Date;
+  selected: Date;
+  height: number;
+  narrow: boolean;
+  onSelectDay: (d: Date) => void;
+  onOpenDay: (d: Date) => void;
+  onNewTask: (d: Date) => void;
+}) {
+  const c = useThemeColors();
+  const segments = layoutWeek(occ, days[0]);
+  const lanes = segments.reduce((m, s) => Math.max(m, s.lane + 1), 0);
+  const pitch = BAR_H + BAR_GAP;
+  const room = Math.max(0, height - DATE_ROW_H - 4);
+  // Show every lane if they fit; otherwise keep a line free for "+N more".
+  const maxLanes =
+    lanes * pitch <= room ? lanes : Math.max(0, Math.floor((room - MORE_H) / pitch));
+  const hiddenOn = (col: number) =>
+    segments.filter(s => s.lane >= maxLanes && s.col <= col && s.col + s.span > col).length;
+  const dimmed = mix(c.card, c.bg, c.dark ? 0.6 : 0.6);
+
+  return (
+    <View className="flex-1 flex-row">
+      {days.map((day, col) => {
+        const inMonth = isSameMonth(day, month);
+        const today = isToday(day);
+        const isSel = isSameDay(day, selected);
+        const hidden = hiddenOn(col);
+        const dayOcc = narrow ? onDay(occ, day) : [];
+        return (
+          <Press
+            key={day.toISOString()}
+            feedback="none"
+            accessibilityRole="button"
+            accessibilityLabel={format(day, 'EEEE, MMMM d')}
+            accessibilityState={{ selected: isSel }}
+            onPress={() => onSelectDay(day)}
+            onLongPress={() => onOpenDay(day)}
+            style={!isSel && (isWeekend(day) || !inMonth) ? { backgroundColor: dimmed } : undefined}
+            className={`group flex-1 ${col > 0 ? 'border-l border-border-main' : ''} ${
+              isSel ? 'bg-accent-soft' : 'hover:bg-hover/60'
+            }`}
+          >
+            <View
+              style={{ height: DATE_ROW_H }}
+              className={`flex-row items-center px-1.5 ${
+                narrow ? 'justify-center' : 'justify-between'
+              }`}
+            >
+              <View
+                className={`h-6 min-w-[24px] items-center justify-center rounded-full px-1.5 ${
+                  today ? 'bg-accent' : ''
+                }`}
+              >
+                <Text
+                  className={`text-xs ${
+                    today
+                      ? 'font-semibold text-accent-foreground'
+                      : inMonth
+                      ? 'font-medium text-text-heading'
+                      : 'text-text-subtle'
+                  }`}
+                >
+                  {day.getDate() === 1 && !narrow ? format(day, 'MMM d') : format(day, 'd')}
+                </Text>
+              </View>
+              {!narrow ? (
+                <View className="reveal-on-hover">
+                  <IconButton
+                    icon={Plus}
+                    size="sm"
+                    label={`New task on ${format(day, 'MMM d')}`}
+                    onPress={() => onNewTask(day)}
+                  />
+                </View>
+              ) : null}
+            </View>
+            {narrow ? (
+              <View className="flex-row flex-wrap justify-center gap-0.5 px-1">
+                {dayOcc.slice(0, 3).map(o => (
+                  <View
+                    key={o.key}
+                    style={{ backgroundColor: barColor(o.item, fields) }}
+                    className="h-1.5 w-1.5 rounded-full"
+                  />
+                ))}
+              </View>
+            ) : hidden > 0 ? (
+              <Press
+                feedback="none"
+                accessibilityRole="button"
+                accessibilityLabel={`${hidden} more on ${format(day, 'MMM d')}`}
+                onPress={() => onOpenDay(day)}
+                style={{ top: DATE_ROW_H + maxLanes * pitch }}
+                className="absolute left-1 right-1 h-4 justify-center rounded px-1.5 hover:bg-hover"
+              >
+                <Text className="text-2xs font-medium text-text-main">+{hidden} more</Text>
+              </Press>
+            ) : null}
+          </Press>
+        );
+      })}
+
+      {!narrow ? (
+        <View pointerEvents="box-none" className="absolute inset-0">
+          {segments
+            .filter(s => s.lane < maxLanes)
+            .map(s => (
+              <EventBar
+                key={`${s.occ.key}-${days[0].toISOString()}`}
+                seg={s}
+                fields={fields}
+                top={DATE_ROW_H + s.lane * pitch}
+                height={BAR_H}
+              />
+            ))}
+        </View>
+      ) : null}
+    </View>
+  );
+}
+
+const barColor = (item: WorkItem, fields?: ViewField[]) =>
+  showsField(fields, 'status') ? statusInfo(item.status).color : '#9ca3af';
+
+// One task bar across the columns of a week row. Continuations into the
+// previous/next week get square ends and a ‹ / › hint.
+function EventBar({
+  seg,
+  fields,
+  top,
+  height,
+  detailed = false,
+}: {
+  seg: Segment;
+  fields?: ViewField[];
+  top: number;
+  height: number;
+  detailed?: boolean;
+}) {
+  const select = useSetAtom(selectedItemIdAtom);
+  const toneOf = useTone();
+  const c = useThemeColors();
+  const { item } = seg.occ;
+  const color = barColor(item, fields);
+  const t = toneOf(color);
+  const r = 5;
+  return (
+    <View
+      pointerEvents="box-none"
+      style={{
+        position: 'absolute',
+        top,
+        height,
+        left: `${(seg.col / 7) * 100}%`,
+        width: `${(seg.span / 7) * 100}%`,
+        paddingLeft: seg.isStart ? 4 : 0,
+        paddingRight: seg.isEnd ? 4 : 0,
+      }}
+    >
+      <Tooltip
+        label={`${item.title} · ${format(seg.occ.start, 'MMM d')} – ${format(seg.occ.end, 'MMM d')}`}
+      >
+        <Press
+          feedback="subtle"
+          accessibilityRole="button"
+          accessibilityLabel={item.title}
+          onPress={() => select(item.id)}
+          style={{
+            flex: 1,
+            // Opaque (tint mixed into the card) so grid lines don't show through.
+            backgroundColor: mix(c.card, color, c.dark ? 0.24 : 0.14),
+            borderLeftWidth: seg.isStart ? 3 : 0,
+            borderLeftColor: color,
+            borderTopLeftRadius: seg.isStart ? r : 0,
+            borderBottomLeftRadius: seg.isStart ? r : 0,
+            borderTopRightRadius: seg.isEnd ? r : 0,
+            borderBottomRightRadius: seg.isEnd ? r : 0,
+          }}
+          className="flex-row items-center gap-1.5 px-1.5 hover:opacity-85"
+        >
+          {!seg.isStart ? <ChevronLeft size={10} color={t.fg} strokeWidth={2.5} /> : null}
+          <Text
+            numberOfLines={1}
+            style={{ color: t.fg }}
+            className={`flex-1 font-medium ${detailed ? 'text-xs' : 'text-2xs'}`}
+          >
+            {item.title}
+          </Text>
+          {item.recurrence ? <RecurrenceIcon freq={item.recurrence} size={10} /> : null}
+          {detailed && showsField(fields, 'priority') ? (
+            <PriorityIcon priority={item.priority} size={12} />
+          ) : null}
+          {detailed && showsField(fields, 'assignee') ? (
+            <AssigneeAvatars ids={item.assigneeIds} size={16} max={2} />
+          ) : null}
+          {!seg.isEnd ? <ChevronRight size={10} color={t.fg} strokeWidth={2.5} /> : null}
+        </Press>
+      </Tooltip>
+    </View>
+  );
+}
+
+// ── Week ─────────────────────────────────────────────────────────────────────
+
+const WEEK_BAR_H = 28;
+
+function WeekBody({
   weekStart,
   items,
   fields,
+  onOpenDay,
+  onNewTask,
 }: {
   weekStart: Date;
   items: WorkItem[];
   fields?: ViewField[];
+  onOpenDay: (d: Date) => void;
+  onNewTask: (d: Date) => void;
 }) {
-  const days = eachDayOfInterval({
-    start: weekStart,
-    end: addDays(weekStart, 6),
-  });
+  const c = useThemeColors();
+  const days = eachDayOfInterval({ start: weekStart, end: addDays(weekStart, 6) });
+  const occ = useMemo(
+    () => occurrencesBetween(items, weekStart, addDays(weekStart, 6)),
+    [items, weekStart],
+  );
+  const segments = layoutWeek(occ, weekStart);
+  const lanes = segments.reduce((m, s) => Math.max(m, s.lane + 1), 0);
+  const pitch = WEEK_BAR_H + 4;
+  const bodyH = Math.max(380, 12 + lanes * pitch + 48);
+  const dimmed = mix(c.card, c.bg, 0.6);
+
   return (
-    <ScrollView contentContainerClassName="gap-3 pb-10">
-      {days.map(day => {
-        const agenda = itemsOn(items, day);
-        const today = isToday(day);
-        return (
-          <View
-            key={day.toISOString()}
-            className={`flex-row gap-4 rounded-xl border bg-bg-card p-3 ${
-              today ? 'border-accent/40' : 'border-border-main'
-            }`}
-          >
-            <View className="w-14 items-center pt-0.5">
+    <View className="mb-4 flex-1 overflow-hidden rounded-xl border border-border-main bg-bg-card">
+      <View className="flex-row border-b border-border-main">
+        {days.map((d, col) => {
+          const today = isToday(d);
+          return (
+            <Press
+              key={d.toISOString()}
+              feedback="none"
+              accessibilityRole="button"
+              accessibilityLabel={`Open ${format(d, 'EEEE, MMMM d')}`}
+              onPress={() => onOpenDay(d)}
+              className={`flex-1 items-center gap-1 py-2.5 hover:bg-hover/60 ${
+                col > 0 ? 'border-l border-border-main' : ''
+              }`}
+            >
               <Text
                 className={`text-2xs font-semibold uppercase tracking-wider ${
                   today ? 'text-accent' : 'text-text-subtle'
                 }`}
               >
-                {format(day, 'EEE')}
+                {format(d, 'EEE')}
               </Text>
               <View
-                className={`mt-1 h-8 w-8 items-center justify-center rounded-full ${
+                className={`h-8 w-8 items-center justify-center rounded-full ${
                   today ? 'bg-accent' : ''
                 }`}
               >
@@ -348,53 +679,179 @@ function WeekAgenda({
                     today ? 'text-accent-foreground' : 'text-text-heading'
                   }`}
                 >
-                  {format(day, 'd')}
+                  {format(d, 'd')}
                 </Text>
               </View>
+            </Press>
+          );
+        })}
+      </View>
+      <ScrollView className="flex-1" contentContainerStyle={{ flexGrow: 1 }}>
+        <View style={{ minHeight: bodyH, flexGrow: 1 }} className="flex-row">
+          {days.map((d, col) => (
+            <View
+              key={d.toISOString()}
+              style={isWeekend(d) ? { backgroundColor: dimmed } : undefined}
+              className={`group flex-1 ${col > 0 ? 'border-l border-border-main' : ''}`}
+            >
+              <View className="reveal-on-hover absolute bottom-2 left-0 right-0 items-center">
+                <Button size="sm" variant="ghost" icon={Plus} onPress={() => onNewTask(d)}>
+                  Add
+                </Button>
+              </View>
             </View>
-            <View className="flex-1 justify-center gap-1.5">
-              {agenda.map(i => (
-                <ItemRow key={i.id} item={i} fields={fields} />
-              ))}
-              {agenda.length === 0 ? (
-                <Text className="text-sm text-text-subtle">Nothing scheduled</Text>
-              ) : null}
-            </View>
+          ))}
+          <View pointerEvents="box-none" className="absolute inset-0">
+            {segments.map(s => (
+              <EventBar
+                key={s.occ.key}
+                seg={s}
+                fields={fields}
+                top={12 + s.lane * pitch}
+                height={WEEK_BAR_H}
+                detailed
+              />
+            ))}
           </View>
-        );
-      })}
+          {segments.length === 0 ? (
+            <View pointerEvents="none" className="absolute inset-0 items-center justify-center">
+              <CalendarCheck2 size={20} color={c.subtle} />
+              <Text className="mt-2 text-sm text-text-subtle">Nothing scheduled this week</Text>
+            </View>
+          ) : null}
+        </View>
+      </ScrollView>
+    </View>
+  );
+}
+
+// ── Day ──────────────────────────────────────────────────────────────────────
+
+const occOnDay = (items: WorkItem[], day: Date) => {
+  const d = startOfDay(day);
+  return onDay(occurrencesBetween(items, d, d), d);
+};
+
+function DayBody({
+  day,
+  items,
+  fields,
+  onNewTask,
+}: {
+  day: Date;
+  items: WorkItem[];
+  fields?: ViewField[];
+  onNewTask: (d: Date) => void;
+}) {
+  const occ = occOnDay(items, day);
+  const c = useThemeColors();
+  return (
+    <ScrollView contentContainerClassName="pb-10">
+      <View className="mx-auto w-full max-w-[760px] gap-2">
+        {occ.map(o => (
+          <DayCard key={o.key} occ={o} day={day} fields={fields} />
+        ))}
+        {occ.length === 0 ? (
+          <View className="items-center rounded-xl border border-dashed border-border-strong px-6 py-14">
+            <CalendarCheck2 size={22} color={c.subtle} />
+            <Text className="mt-3 text-base font-medium text-text-heading">Nothing scheduled</Text>
+            <Text className="mt-1 text-sm text-text-main">
+              {isToday(day) ? 'Your day is clear.' : `No tasks on ${format(day, 'EEEE, MMM d')}.`}
+            </Text>
+          </View>
+        ) : null}
+        <View className="mt-1 items-start">
+          <Button variant="ghost" size="sm" icon={Plus} onPress={() => onNewTask(day)}>
+            {`Add task on ${format(day, 'MMM d')}`}
+          </Button>
+        </View>
+      </View>
     </ScrollView>
   );
 }
+
+function DayCard({ occ, day, fields }: { occ: Occ; day: Date; fields?: ViewField[] }) {
+  const select = useSetAtom(selectedItemIdAtom);
+  const { item } = occ;
+  const total = differenceInCalendarDays(occ.end, occ.start) + 1;
+  const nth = differenceInCalendarDays(startOfDay(day), occ.start) + 1;
+  const color = barColor(item, fields);
+  return (
+    <Press
+      feedback="subtle"
+      accessibilityRole="button"
+      accessibilityLabel={item.title}
+      onPress={() => select(item.id)}
+      style={{ borderLeftColor: color }}
+      className="flex-row items-center gap-3 rounded-xl border border-l-[3px] border-border-main bg-bg-card px-4 py-3 hover:border-border-strong hover:bg-hover"
+    >
+      {showsField(fields, 'status') ? <StatusIcon status={item.status} size={16} /> : null}
+      <View className="flex-1">
+        <View className="flex-row items-center gap-1.5">
+          <Text numberOfLines={1} className="shrink text-base font-medium text-text-heading">
+            {item.title}
+          </Text>
+          {item.recurrence ? <RecurrenceIcon freq={item.recurrence} /> : null}
+        </View>
+        <Text className="mt-0.5 text-xs text-text-subtle">
+          {showsField(fields, 'id') ? `${item.id} · ` : ''}
+          {total > 1
+            ? `${format(occ.start, 'MMM d')} – ${format(occ.end, 'MMM d')} · day ${nth} of ${total}`
+            : 'All day'}
+        </Text>
+      </View>
+      {total > 1 ? (
+        <View className="w-20">
+          <View className="h-1 overflow-hidden rounded-full bg-muted">
+            <View
+              style={{ width: `${(nth / total) * 100}%`, backgroundColor: color }}
+              className="h-1 rounded-full"
+            />
+          </View>
+        </View>
+      ) : null}
+      {showsField(fields, 'priority') ? <PriorityIcon priority={item.priority} /> : null}
+      {showsField(fields, 'assignee') ? (
+        <AssigneeAvatars ids={item.assigneeIds} size={22} />
+      ) : null}
+    </Press>
+  );
+}
+
+// ── Selected-day agenda (beside / below the month grid) ─────────────────────
 
 function AgendaPanel({
   day,
   items,
   fields,
+  onNewTask,
 }: {
   day: Date;
   items: WorkItem[];
   fields?: ViewField[];
+  onNewTask: (d: Date) => void;
 }) {
-  const agenda = itemsOn(items, day);
+  const agenda = occOnDay(items, day);
   const c = useThemeColors();
   return (
     <View>
-      <View className="mb-3 flex-row items-baseline justify-between">
-        <Text className="text-base font-semibold text-text-heading">
-          {isToday(day) ? 'Today' : format(day, 'EEEE')}
-          <Text className="font-normal text-text-subtle">
-            {'  '}
-            {format(day, 'MMM d')}
+      <View className="mb-3 flex-row items-center justify-between">
+        <View>
+          <Text className="text-2xs font-semibold uppercase tracking-wider text-text-subtle">
+            {isToday(day) ? 'Today' : format(day, 'EEEE')}
           </Text>
-        </Text>
-        <Text className="text-xs text-text-subtle">
-          {agenda.length} {agenda.length === 1 ? 'task' : 'tasks'}
-        </Text>
+          <Text className="text-lg font-semibold text-text-heading">{format(day, 'MMMM d')}</Text>
+        </View>
+        <IconButton
+          icon={Plus}
+          variant="outline"
+          label={`New task on ${format(day, 'MMM d')}`}
+          onPress={() => onNewTask(day)}
+        />
       </View>
       <View className="gap-1.5">
-        {agenda.map(i => (
-          <ItemRow key={i.id} item={i} fields={fields} />
+        {agenda.map(o => (
+          <ItemRow key={o.key} item={o.item} fields={fields} />
         ))}
         {agenda.length === 0 ? (
           <View className="items-center rounded-xl border border-dashed border-border-strong px-4 py-8">
@@ -403,88 +860,30 @@ function AgendaPanel({
           </View>
         ) : null}
       </View>
+      <View className="mt-5 flex-row flex-wrap items-center gap-x-3 gap-y-1.5">
+        <Hint keys={['←', '→']} label="navigate" />
+        <Hint keys={['T']} label="today" />
+        <Hint keys={['D', 'W', 'M', 'Y']} label="view" />
+      </View>
     </View>
   );
 }
 
-// Renders one task inside a calendar cell — a status-tinted, left-accented bar
-// with the title, a subtask count, and its assignees. `touchableOpacityProps`
-// carries the library's own press handling plus (for multi-day bars in Month
-// view) the absolute position/width it computed, which we keep and layer our
-// look on top of.
-function EventCell({
-  event,
-  touchableOpacityProps,
-  compact,
-  fields,
-}: {
-  event: CalEvent;
-  touchableOpacityProps: CalendarTouchableOpacityProps;
-  compact: boolean;
-  fields?: ViewField[];
-}) {
-  const { key, style, onPress, disabled } = touchableOpacityProps;
-  const { workItem } = event;
-  const toneOf = useTone();
-  const color = showsField(fields, 'status')
-    ? statusInfo(workItem.status).color
-    : '#9ca3af';
-  const t = toneOf(color);
+function Hint({ keys, label }: { keys: string[]; label: string }) {
   return (
-    <Pressable
-      key={key}
-      accessibilityRole="button"
-      accessibilityLabel={workItem.title}
-      onPress={onPress}
-      disabled={disabled}
-      style={[
-        style,
-        {
-          height: compact ? EVENT_CELL_HEIGHT : undefined,
-          backgroundColor: t.bg,
-          borderLeftColor: color,
-          borderLeftWidth: 2.5,
-          borderRadius: 4,
-          paddingHorizontal: 5,
-          paddingVertical: compact ? 0 : 3,
-          justifyContent: 'center',
-        },
-      ]}
-      className="hover:opacity-80"
-    >
-      <View className="flex-row items-center gap-1">
-        <Text
-          numberOfLines={1}
-          style={{ color: t.fg }}
-          className="shrink text-2xs font-medium"
-        >
-          {workItem.title}
-        </Text>
-        {workItem.recurrence ? (
-          <RecurrenceIcon freq={workItem.recurrence} size={9} />
-        ) : null}
-      </View>
-      {!compact ? (
-        <View className="mt-0.5 flex-row items-center gap-1.5">
-          {showsField(fields, 'id') ? (
-            <Text className="text-2xs text-text-subtle">{workItem.id}</Text>
-          ) : null}
-          {showsField(fields, 'priority') ? (
-            <PriorityIcon priority={workItem.priority} size={11} />
-          ) : null}
-          {showsField(fields, 'assignee') ? (
-            <AssigneeAvatars ids={workItem.assigneeIds} size={14} max={2} />
-          ) : null}
-          <SubtaskBadge id={workItem.id} />
-        </View>
-      ) : null}
-    </Pressable>
+    <View className="flex-row items-center gap-1">
+      {keys.map(k => (
+        <Kbd key={k}>{k}</Kbd>
+      ))}
+      <Text className="text-2xs text-text-subtle">{label}</Text>
+    </View>
   );
 }
 
-// 12 compact months in a wrapping grid. Days with tasks get an accent dot;
-// tapping a day jumps straight to its Day view. Kept custom since the calendar
-// library has no year mode.
+// ── Year ─────────────────────────────────────────────────────────────────────
+
+// 12 compact months. Days with tasks get a dot that deepens with how busy the
+// day is; tapping a day opens it in Day view.
 function YearBody({
   items,
   yearAnchor,
@@ -494,19 +893,23 @@ function YearBody({
   yearAnchor: Date;
   onSelectDay: (day: Date) => void;
 }) {
-  const months = eachMonthOfInterval({
-    start: startOfYear(yearAnchor),
-    end: endOfYear(yearAnchor),
-  });
+  const year = yearAnchor.getFullYear();
+  const months = useMemo(
+    () =>
+      eachMonthOfInterval({
+        start: new Date(year, 0, 1),
+        end: new Date(year, 11, 31),
+      }),
+    [year],
+  );
+  const occ = useMemo(
+    () => occurrencesBetween(items, new Date(year, 0, 1), new Date(year, 11, 31)),
+    [items, year],
+  );
   return (
     <ScrollView contentContainerClassName="flex-row flex-wrap gap-3 pb-10">
       {months.map(m => (
-        <MiniMonth
-          key={m.toISOString()}
-          month={m}
-          items={items}
-          onSelectDay={onSelectDay}
-        />
+        <MiniMonth key={m.toISOString()} month={m} occ={occ} onSelectDay={onSelectDay} />
       ))}
     </ScrollView>
   );
@@ -514,17 +917,19 @@ function YearBody({
 
 function MiniMonth({
   month,
-  items,
+  occ,
   onSelectDay,
 }: {
   month: Date;
-  items: WorkItem[];
+  occ: Occ[];
   onSelectDay: (day: Date) => void;
 }) {
-  const days = eachDayOfInterval({
-    start: startOfWeek(startOfMonth(month), { weekStartsOn: 1 }),
-    end: endOfWeek(endOfMonth(month), { weekStartsOn: 1 }),
-  });
+  const weeks = chunkWeeks(
+    eachDayOfInterval({
+      start: startOfWeek(startOfMonth(month), WEEK),
+      end: endOfWeek(endOfMonth(month), WEEK),
+    }),
+  );
   const current = isSameMonth(month, new Date());
   return (
     <View
@@ -541,61 +946,56 @@ function MiniMonth({
         {format(month, 'MMMM')}
       </Text>
       <View className="flex-row">
-        {WEEKDAYS.map(w => (
+        {weeks[0].map(d => (
           <Text
-            key={w}
+            key={d.toISOString()}
             className="flex-1 pb-1 text-center text-2xs font-medium text-text-subtle"
           >
-            {w[0]}
+            {format(d, 'EEEEE')}
           </Text>
         ))}
       </View>
-      <View>
-        {chunkWeeks(days).map(week => (
-          <View key={week[0].toISOString()} className="flex-row">
-            {week.map(day => {
-              const count = itemsOn(items, day).length;
-              const inMonth = isSameMonth(day, month);
-              const today = isToday(day);
-              return (
-                <Press
-                  key={day.toISOString()}
-                  feedback="scale"
-                  accessibilityRole="button"
-                  accessibilityLabel={`${format(day, 'EEEE, MMMM d')}${
-                    count ? `, ${count} tasks` : ''
+      {weeks.map(week => (
+        <View key={week[0].toISOString()} className="flex-row">
+          {week.map(day => {
+            const inMonth = isSameMonth(day, month);
+            const count = inMonth ? onDay(occ, day).length : 0;
+            const today = isToday(day);
+            return (
+              <Press
+                key={day.toISOString()}
+                accessibilityRole="button"
+                accessibilityLabel={`${format(day, 'EEEE, MMMM d')}${count ? `, ${count} tasks` : ''}`}
+                onPress={() => onSelectDay(day)}
+                style={{ flex: 1, minWidth: 0 }}
+                className="items-center py-0.5"
+              >
+                <View
+                  className={`h-6 w-6 items-center justify-center rounded-full ${
+                    today ? 'bg-accent' : 'hover:bg-hover'
                   }`}
-                  onPress={() => onSelectDay(day)}
-                  style={{ flex: 1, minWidth: 0 }}
-                  className="items-center py-0.5"
                 >
-                  <View
-                    className={`h-6 w-6 items-center justify-center rounded-full ${
-                      today ? 'bg-accent' : 'hover:bg-hover'
+                  <Text
+                    className={`text-2xs ${
+                      today
+                        ? 'font-semibold text-accent-foreground'
+                        : inMonth
+                        ? 'text-text-heading'
+                        : 'text-text-subtle opacity-40'
                     }`}
                   >
-                    <Text
-                      className={`text-2xs ${
-                        today
-                          ? 'font-semibold text-accent-foreground'
-                          : inMonth
-                          ? 'text-text-heading'
-                          : 'text-text-subtle opacity-40'
-                      }`}
-                    >
-                      {format(day, 'd')}
-                    </Text>
-                  </View>
-                  <View
-                    style={{ opacity: count > 0 && inMonth ? 1 : 0 }}
-                    className="mt-px h-1 w-1 rounded-full bg-accent"
-                  />
-                </Press>
-              );
-            })}
-          </View>
-        ))}
-      </View>
+                    {format(day, 'd')}
+                  </Text>
+                </View>
+                <View
+                  style={{ opacity: count === 0 ? 0 : count === 1 ? 0.45 : count === 2 ? 0.7 : 1 }}
+                  className="mt-px h-1 w-1 rounded-full bg-accent"
+                />
+              </Press>
+            );
+          })}
+        </View>
+      ))}
     </View>
   );
 }

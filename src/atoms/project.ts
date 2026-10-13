@@ -25,7 +25,8 @@ export const projectHydratedAtom = atom(false);
 
 // Which item form is open: creating (optionally into a status column), editing one, or closed.
 export type ItemFormState =
-  | { mode: 'new'; status?: Status; parentId?: string }
+  // `start` ('yyyy-MM-dd'): prefill the dates, e.g. from a calendar day.
+  | { mode: 'new'; status?: Status; parentId?: string; start?: string }
   | { mode: 'edit'; id: string }
   | null;
 export const itemFormAtom = atom<ItemFormState>(null);
