@@ -155,8 +155,18 @@ export function ItemFormModal() {
     setPriority(editing?.priority ?? 'medium');
     setTag(editing?.tag ?? 'other');
     setAssigneeIds(editing ? editing.assigneeIds : parent?.assigneeIds ?? []);
-    setStart(editing?.start ?? parent?.start ?? format(today, DATE_FMT));
-    setEnd(editing?.end ?? parent?.end ?? format(addDays(today, 2), DATE_FMT));
+    const presetStart =
+      form.mode === 'new' && form.start ? parseDate(form.start) : null;
+    setStart(
+      editing?.start ??
+        parent?.start ??
+        format(presetStart ?? today, DATE_FMT),
+    );
+    setEnd(
+      editing?.end ??
+        parent?.end ??
+        format(addDays(presetStart ?? today, presetStart ? 0 : 2), DATE_FMT),
+    );
     setLabels(editing?.labels.join(', ') ?? '');
     const savedRule = migrateRecurrence(editing?.recurrence);
     setRecurrence(savedRule);
