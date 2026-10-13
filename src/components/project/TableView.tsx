@@ -18,8 +18,10 @@ import {
   selectedItemIdAtom,
   tasksLoadingAtom,
 } from '../../atoms/project';
-import { childrenOf, flattenTree } from '../../data/tree';
+import { flattenTree, hasSubtasks } from '../../data/tree';
 import { showsField } from '../../data/viewFields';
+import { useTaskMutations } from '../../hooks/useTaskMutations';
+import { errorMessage, toast } from '../../atoms/feedback';
 import type { ProjectView, WorkItem } from '../../data/types';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { Button, EmptyState, Press, Skeleton } from '../ui';
@@ -87,12 +89,18 @@ export function TableView({ view }: { view: ProjectView }) {
     c => c.key === 'title' || showsField(view.fields, c.key),
   );
   const select = useSetAtom(selectedItemIdAtom);
+  const { loadChildren } = useTaskMutations();
   const c = useThemeColors();
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({
     key: 'id',
     dir: 1,
   });
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // Rows whose children have been fetched at least once this mount — expanding
+  // one again (e.g. after collapsing it) doesn't re-fetch. Subtasks load lazily
+  // (see useTasksSync's header comment); this is what actually triggers that
+  // fetch, the first time a row with subtasks is opened.
+  const [loadedRows, setLoadedRows] = useState<Set<string>>(new Set());
 
   // Sorting applies among siblings, so subtasks stay under their parent.
   const sorted = [...items].sort((a, b) => {
@@ -101,18 +109,35 @@ export function TableView({ view }: { view: ProjectView }) {
     return (x < y ? -1 : x > y ? 1 : 0) * sort.dir;
   });
   const rows = flattenTree(sorted, collapsed);
-  const parents = items.filter(i => childrenOf(items, i.id).length > 0);
+  const parents = items.filter(hasSubtasks);
 
   const toggleSort = (key: SortKey) =>
     setSort(s => ({ key, dir: s.key === key && s.dir === 1 ? -1 : 1 }));
-  const toggleRow = (id: string) =>
+
+  const fetchRowChildren = (id: string) => {
+    if (loadedRows.has(id)) {
+      return;
+    }
+    setLoadedRows(prev => new Set(prev).add(id));
+    loadChildren(id).catch(err =>
+      toast.error('Couldn’t load subtasks', {
+        description: errorMessage(err, 'Please try again.'),
+      }),
+    );
+  };
+
+  const toggleRow = (id: string) => {
     setCollapsed(prev => {
       const next = new Set(prev);
-      if (!next.delete(id)) {
+      if (next.delete(id)) {
+        // Was collapsed, now expanded — make sure its children are loaded.
+        fetchRowChildren(id);
+      } else {
         next.add(id);
       }
       return next;
     });
+  };
   const allCollapsed = parents.length > 0 && collapsed.size >= parents.length;
 
   if (!loading && items.length === 0) {
@@ -139,7 +164,7 @@ export function TableView({ view }: { view: ProjectView }) {
           </Text>
         );
       case 'title': {
-        const hasKids = childrenOf(items, i.id).length > 0;
+        const hasKids = hasSubtasks(i);
         return (
           <View
             style={{ paddingLeft: (depth - 1) * INDENT }}
@@ -175,7 +200,7 @@ export function TableView({ view }: { view: ProjectView }) {
               {i.title}
             </Text>
             {i.recurrence ? <RecurrenceIcon freq={i.recurrence} /> : null}
-            <SubtaskBadge id={i.id} />
+            <SubtaskBadge item={i} />
           </View>
         );
       }
@@ -215,11 +240,14 @@ export function TableView({ view }: { view: ProjectView }) {
             variant="ghost"
             size="sm"
             icon={allCollapsed ? ChevronsUpDown : ChevronsDownUp}
-            onPress={() =>
-              setCollapsed(
-                allCollapsed ? new Set() : new Set(parents.map(p => p.id)),
-              )
-            }
+            onPress={() => {
+              if (allCollapsed) {
+                parents.forEach(p => fetchRowChildren(p.id));
+                setCollapsed(new Set());
+              } else {
+                setCollapsed(new Set(parents.map(p => p.id)));
+              }
+            }}
           >
             {allCollapsed ? 'Expand all' : 'Collapse all'}
           </Button>

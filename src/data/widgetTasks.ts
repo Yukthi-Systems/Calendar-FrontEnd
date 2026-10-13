@@ -13,6 +13,10 @@ export const widgetTasks = (items: WorkItem[], now: Date): WidgetTask[] =>
   items
     .filter(
       i =>
+        // Top-level tasks only — subtasks load lazily now (useTasksSync's
+        // header comment), so the widget would otherwise list whatever
+        // subtasks happen to already be loaded rather than a stable set.
+        !i.parentId &&
         i.status !== 'completed' &&
         i.status !== 'rejected' &&
         occurrencesInRange(

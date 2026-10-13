@@ -43,6 +43,12 @@ export function KanbanView() {
   const select = useSetAtom(selectedItemIdAtom);
   const setForm = useSetAtom(itemFormAtom);
   const { editItem } = useTaskMutations();
+  // Top-level tasks only — subtasks load lazily (useTasksSync's header comment),
+  // so showing them as their own cards here would mean the board's contents
+  // depend on whatever happened to get fetched elsewhere. `items` itself (used
+  // by `move`/`reorder` below) stays unfiltered, so reordering a column doesn't
+  // drop any subtask this device has already loaded.
+  const rootItems = items.filter(i => !i.parentId);
 
   const move = (id: string, status: Status) => {
     const item = items.find(i => i.id === id);
@@ -73,7 +79,7 @@ export function KanbanView() {
         contentContainerClassName="gap-3 p-4 lg:px-6"
       >
         {STATUSES.map((col, colIdx) => {
-          const list = items.filter(i => i.status === col.key);
+          const list = rootItems.filter(i => i.status === col.key);
           return (
             <View
               key={col.key}
@@ -234,7 +240,7 @@ function KanbanCard({
       <View className="mt-0.5 flex-row items-center gap-2.5">
         <AssigneeAvatars ids={item.assigneeIds} size={20} />
         <DueDate item={item} className="text-xs" />
-        <SubtaskBadge id={item.id} />
+        <SubtaskBadge item={item} />
         <View className="flex-1" />
         <View className={`flex-row ${HOVER_REVEAL}`}>
           <IconButton

@@ -18,7 +18,11 @@ import { Button, EmptyState, IconButton } from '../ui';
 import { InitialsAvatar, ItemRow, PAGE_STYLE } from './shared';
 
 export function TeamPlanningView() {
-  const items = useAtomValue(itemsAtom);
+  // Top-level tasks only — subtasks load lazily (useTasksSync's header comment),
+  // so counting whatever's loaded would make a person's workload depend on
+  // whether someone happened to expand their subtasks elsewhere, rather than
+  // being a stable count.
+  const items = useAtomValue(itemsAtom).filter(i => !i.parentId);
   const members = useAtomValue(membersAtom);
   const c = useThemeColors();
   const [weekStart, setWeekStart] = useState(() =>

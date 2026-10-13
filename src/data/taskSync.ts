@@ -1,4 +1,4 @@
-import { addYears, format, parseISO } from 'date-fns';
+import { addYears, format } from 'date-fns';
 import {
   BACKEND_STATUS,
   BACKEND_TAG,
@@ -26,7 +26,14 @@ const DATE_FMT = 'yyyy-MM-dd';
 // midnight UTC on that date — stable across the server's and every client's
 // timezone, never drifting a day in either direction.
 const toTimestamp = (date: string) => `${date}T00:00:00.000Z`;
-const fromTimestamp = (ts: string) => format(parseISO(ts), DATE_FMT);
+// Reads the date digits straight off the ISO string instead of going through
+// `parseISO` + `format`, which was the bug: date-fns' `format` renders in the
+// *local* system timezone, not UTC, so a task stored at e.g.
+// "2026-10-14T00:00:00.000Z" came back as "2026-10-13" for anyone west of UTC
+// (any negative offset) — every task a day early (or, east of UTC, a day
+// late). The backend always sends a full ISO 8601 timestamp with the date
+// first, so slicing is exact and has no timezone to get wrong.
+const fromTimestamp = (ts: string) => ts.slice(0, 10);
 
 interface TaskDetails {
   priority?: Priority;
@@ -51,6 +58,7 @@ export function taskFromServer(dto: TaskInfoDto): WorkItem {
     // owner is the next most sensible "who can manage this" fallback.
     createdById: dto.created_by ?? dto.owner_id,
     parentId: dto.parent_task_id === null ? null : String(dto.parent_task_id),
+    totalSubtasks: dto.total_sub_tasks,
     start: fromTimestamp(dto.start_at),
     end: fromTimestamp(dto.end_at),
     labels: details.labels ?? [],
@@ -68,7 +76,7 @@ const detailsPayload = (item: DetailFields): Record<string, unknown> => ({
 });
 
 export function taskToCreatePayload(
-  item: Omit<WorkItem, 'id' | 'createdById' | 'assigneeIds'>,
+  item: Omit<WorkItem, 'id' | 'createdById' | 'assigneeIds' | 'totalSubtasks'>,
 ): CreateTaskPayload {
   return {
     parent_task_id: item.parentId ? Number(item.parentId) : null,
