@@ -19,13 +19,10 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './src/services/queryClient';
 import { bootAuth } from './src/services/authStore';
-import { bootProject } from './src/services/projectStore';
 import { bootNotifications } from './src/services/notificationStore';
 import { bootWidgetSync } from './src/services/widgetSync';
 import { useAuth } from './src/hooks/useAuth';
 import { useSsoAutoLogin } from './src/hooks/useSsoAutoLogin';
-import { useUserInfo } from './src/hooks/useUserInfo';
-import { useSettingsSync } from './src/hooks/useSettingsSync';
 import { useAccentColor } from './src/hooks/useAccentColor';
 import { useResolvedTheme } from './src/hooks/useResolvedTheme';
 import { LoginScreen } from './src/components/LoginScreen';
@@ -40,7 +37,6 @@ function App() {
   useEffect(() => {
     const signal = { cancelled: false };
     bootAuth(signal);
-    bootProject();
     bootNotifications();
     bootWidgetSync();
     seedDemoIfRequested();
@@ -91,8 +87,6 @@ function AppContent() {
     clearError,
   });
   const accent = useAccentColor();
-  useUserInfo();
-  useSettingsSync();
 
   // While a sign-in window is open, keep the login screen (and its status) up.
   if (SSO_ENABLED && authLoading && !sso.ssoPending) {

@@ -1,4 +1,3 @@
-// No-op: there's no address bar on iOS/Android, and the last-open view already
-// survives a relaunch via the local-storage persistence in projectStore.ts.
+// No-op: there's no address bar on iOS/Android; the app opens on the first view.
 // Web counterpart: useViewUrlSync.web.ts.
 export function useViewUrlSync() {}

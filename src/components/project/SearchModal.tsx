@@ -10,7 +10,8 @@ import {
   selectedItemIdAtom,
 } from '../../atoms/project';
 import { STATUSES } from '../../data/constants';
-import { currentUserIdAtom, membersAtom } from '../../atoms/members';
+import { currentUserIdAtom } from '../../atoms/members';
+import { useMyProfile, usePerson, useUserSearch } from '../../hooks/useUsers';
 import type { SearchCriteria } from '../../data/search';
 import { searchItems } from '../../data/search';
 import type { WorkItem } from '../../data/types';
@@ -38,7 +39,6 @@ export function SearchModal() {
   const [open, setOpen] = useAtom(searchOpenAtom);
   const items = useAtomValue(itemsAtom);
   const CURRENT_USER_ID = useAtomValue(currentUserIdAtom);
-  const MEMBERS = useAtomValue(membersAtom);
   const setSelectedId = useSetAtom(selectedItemIdAtom);
   const c = useThemeColors();
 
@@ -95,10 +95,16 @@ export function SearchModal() {
     dateError,
   ]);
 
-  const assigneeOptions = MEMBERS.filter(m =>
-    m.name.toLowerCase().includes(assigneeQuery.trim().toLowerCase()),
+  // Me first, then org email-search hits for what's typed (GET /user/search).
+  const me = useMyProfile();
+  const { people: searchHits } = useUserSearch(assigneeQuery);
+  const assigneeOptions = [me, ...searchHits.filter(p => p.id !== me.id)].filter(
+    p =>
+      !assigneeQuery.trim() ||
+      p.id !== me.id ||
+      p.name.toLowerCase().includes(assigneeQuery.trim().toLowerCase()),
   );
-  const selectedAssignee = MEMBERS.find(m => m.id === assigneeId);
+  const selectedAssignee = usePerson(assigneeId);
 
   return (
     <Sheet visible={open} onClose={close} size="lg">
@@ -195,7 +201,7 @@ export function SearchModal() {
                 icon={Search}
                 value={assigneeQuery}
                 onChangeText={setAssigneeQuery}
-                placeholder="Filter people"
+                placeholder="Search people by email…"
                 autoFocus
               />
               <ScrollView className="mt-1.5 max-h-48">
@@ -269,7 +275,6 @@ export function SearchModal() {
                   <Text numberOfLines={1} className="text-sm font-medium text-text-heading">
                     {item.title}
                   </Text>
-                  <Text className="text-xs text-text-subtle">{item.id}</Text>
                 </View>
                 <DueDate item={item} className="text-xs" />
                 <AssigneeAvatars ids={item.assigneeIds} size={20} />

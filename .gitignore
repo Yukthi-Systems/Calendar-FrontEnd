@@ -93,3 +93,4 @@ CLAUDE.md
 # Tests and Jest mocks (kept local)
 __tests__/
 __mocks__/
+/docs

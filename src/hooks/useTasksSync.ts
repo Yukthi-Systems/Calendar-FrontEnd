@@ -11,7 +11,6 @@ import {
   isServerTaskId,
   taskFromServer,
 } from '../data/taskSync';
-import { isServerViewId } from '../data/viewSync';
 import { TASKS_API_ENABLED } from '../config/features';
 import { withAuthRetry } from '../services/authRetry';
 import type { ProjectView } from '../data/types';
@@ -60,25 +59,31 @@ export async function drainPages(
 // every component that needs to write a task doesn't also need to re-run this
 // fetch.
 //
-// Signed out, the active view isn't server-backed yet (a local-only view, or
-// still mid-migration — see useViewsSync), or TASKS_API_ENABLED is off (see that
-// constant's comment) — itemsAtom is left exactly as it is (projectStore.ts
+// Signed out, no view loaded yet, or TASKS_API_ENABLED is off (see that
+// constant's comment) — itemsAtom is left exactly as it is (nothing
 // deliberately never persists tasks locally, so that's an empty list unless
 // something else has already written to it this session).
+// The cache key of a view's root-level task list — shared with useTaskMutations,
+// which refetches exactly this after every write.
+export const rootTasksKey = (view: ProjectView | undefined) =>
+  [
+    'tasks',
+    view ? Number(view.id) : undefined,
+    JSON.stringify(view?.statusFilter ?? []),
+    JSON.stringify(view?.tagFilter ?? []),
+  ] as const;
+
 export function useTasksSync(view: ProjectView | undefined) {
   const token = useAtomValue(tokenAtom);
   const [items, setItems] = useAtom(itemsAtom);
   const queryClient = useQueryClient();
 
   const viewId =
-    TASKS_API_ENABLED && view && isServerViewId(view.id)
+    TASKS_API_ENABLED && view
       ? Number(view.id)
       : undefined;
-  const statusKey = JSON.stringify(view?.statusFilter ?? []);
-  const tagKey = JSON.stringify(view?.tagFilter ?? []);
-
   const query = useQuery({
-    queryKey: ['tasks', viewId, statusKey, tagKey],
+    queryKey: rootTasksKey(view),
     queryFn: () => withAuthRetry(token, t => drainPages(t, viewId!, view!)),
     enabled: !!token && viewId !== undefined,
   });

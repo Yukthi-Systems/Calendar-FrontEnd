@@ -10,11 +10,8 @@ import {
   Phone,
   type LucideIcon,
 } from 'lucide-react-native';
-import {
-  profileAtom,
-  profileEditOpenAtom,
-  profileOpenAtom,
-} from '../../atoms/profile';
+import { profileEditOpenAtom, profileOpenAtom } from '../../atoms/profile';
+import { useMyProfile } from '../../hooks/useUsers';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { MenuItem, MenuSeparator, Sheet, SheetHeader } from '../ui';
 import { InitialsAvatar } from './shared';
@@ -26,7 +23,7 @@ import { ThemeModal } from './ThemeModal';
 export function ProfileModal({ onSignOut }: { onSignOut?: () => void }) {
   const [open, setOpen] = useAtom(profileOpenAtom);
   const setEditOpen = useSetAtom(profileEditOpenAtom);
-  const [profile] = useAtom(profileAtom);
+  const profile = useMyProfile();
   const [themeOpen, setThemeOpen] = useState(false);
   const close = () => setOpen(false);
 

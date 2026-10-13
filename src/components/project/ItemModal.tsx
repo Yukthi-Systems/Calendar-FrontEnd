@@ -18,9 +18,7 @@ import {
   selectedItemIdAtom,
 } from '../../atoms/project';
 import { STATUSES, tagInfo } from '../../data/constants';
-import { currentUserIdAtom } from '../../atoms/members';
 import { confirm, errorMessage, toast } from '../../atoms/feedback';
-import { canDelete, canEditFields, roleFor } from '../../data/permissions';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
 import { isServerTaskId } from '../../data/taskSync';
 import { describeRecurrence } from '../../data/rrule';
@@ -31,9 +29,11 @@ import {
   depthOf,
   descendantsOf,
   flattenTree,
+  hasSubtasks,
   subtaskProgress,
 } from '../../data/tree';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { useActiveView, useViewMutations } from '../../hooks/useViews';
 import {
   Badge,
   Button,
@@ -51,34 +51,58 @@ import {
   DueDate,
   PriorityBadge,
   StatusIcon,
-  assigneeNames,
+  AssigneeNames,
 } from './shared';
 
 // Detail sheet for any work item, opened from every view.
 export function ItemModal() {
   const [selectedId, setSelectedId] = useAtom(selectedItemIdAtom);
   const items = useAtomValue(itemsAtom);
-  const CURRENT_USER_ID = useAtomValue(currentUserIdAtom);
   const setForm = useSetAtom(itemFormAtom);
-  const { editItem, removeItem, loadSubtree, isServerBacked, unavailableReason } =
-    useTaskMutations();
+  const {
+    editItem,
+    removeItem,
+    loadSubtree,
+    isServerBacked,
+    unavailableReason,
+    subtasksEnabled,
+  } = useTaskMutations();
+  const activeView = useActiveView();
+  const { updateView } = useViewMutations();
+  const [enablingSubtasks, setEnablingSubtasks] = useState(false);
+  // Views with show_subtasks off: the server refuses subtasks through them. The
+  // owner can switch it on right here; anyone else just sees why.
+  const turnOnSubtasks = async () => {
+    if (!activeView) {
+      return;
+    }
+    setEnablingSubtasks(true);
+    try {
+      await updateView({ ...activeView, showSubtasks: true });
+      toast.success(`Subtasks turned on for “${activeView.name}”`);
+    } catch (err) {
+      toast.error('Couldn’t change the view', {
+        description: errorMessage(err, 'Please try again.'),
+      });
+    } finally {
+      setEnablingSubtasks(false);
+    }
+  };
   const c = useThemeColors();
   const item = items.find(i => i.id === selectedId);
   const close = () => setSelectedId(null);
   const open = (id: string) => setSelectedId(id);
 
-  // Subtasks load lazily (see useTasksSync's header comment) — a server-backed
-  // task's full nested subtree is fetched here, on open, rather than up front
-  // for the whole view. Local-only tasks already have everything in itemsAtom,
-  // so loadSubtree is a no-op for them.
+  // Subtasks load lazily, on open — and only when the server says this task has
+  // any (total_sub_tasks > 0), so opening a leaf task costs no request.
   const [loadingSubtasks, setLoadingSubtasks] = useState(false);
   useEffect(() => {
-    if (!item || !isServerTaskId(item.id)) {
+    if (!item || !isServerTaskId(item.id) || !hasSubtasks(item) || !subtasksEnabled) {
       return;
     }
     let active = true;
     setLoadingSubtasks(true);
-    loadSubtree(item.id)
+    loadSubtree(item)
       .catch(err =>
         toast.error('Couldn’t load subtasks', {
           description: errorMessage(err, 'Please try again.'),
@@ -93,18 +117,16 @@ export function ItemModal() {
       active = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when the open task changes, not on every loadSubtree identity change
-  }, [item?.id]);
+  }, [item?.id, subtasksEnabled]);
 
   const crumbs = item ? ancestorsOf(items, item) : [];
   const depth = item ? depthOf(items, item) : 1;
   const subtasks = item ? flattenTree(descendantsOf(items, item.id)) : [];
   const progress = item ? subtaskProgress(items, item) : null;
   const canAdd = item ? canAddSubtask(items, item) : false;
-  // An assignee who isn't also the creator is limited to status, comments and
-  // subtasks — Edit/Delete simply aren't offered to them.
-  const role = item ? roleFor(item, CURRENT_USER_ID) : 'other';
-  const editable = item ? canEditFields(item, CURRENT_USER_ID) : false;
-  const deletable = item ? canDelete(item, CURRENT_USER_ID) : false;
+  // Edit/Delete are always offered: the server decides (owner/creator + the
+  // view's permissions) and its refusal is shown as a toast. The client has no
+  // copy of those rules — docs/BACKEND.md §4.
 
   const setStatus = (status: (typeof STATUSES)[number]['key']) => {
     if (!item || item.status === status) {
@@ -123,7 +145,7 @@ export function ItemModal() {
     }
     const kids = progress?.total ?? 0;
     const ok = await confirm({
-      title: `Delete ${item.id}?`,
+      title: 'Delete this task?',
       message: kids
         ? `“${item.title}” and its ${kids} subtask${kids === 1 ? '' : 's'} will be deleted. This can’t be undone.`
         : `“${item.title}” will be deleted. This can’t be undone.`,
@@ -163,17 +185,19 @@ export function ItemModal() {
                       onPress={() => open(cr.id)}
                       className="rounded px-0.5"
                     >
-                      <Text className="text-xs font-medium text-text-main hover:text-accent">
-                        {cr.id}
+                      <Text
+                        numberOfLines={1}
+                        className="max-w-[160px] text-xs font-medium text-text-main hover:text-accent"
+                      >
+                        {cr.title}
                       </Text>
                     </Press>
                     <ChevronRight size={12} color={c.subtle} />
                   </View>
                 ))}
-                <Text className="text-xs font-medium text-text-subtle">{item.id}</Text>
                 {depth > 1 ? (
                   <Text className="text-xs text-text-subtle">
-                    {' '}· level {depth} of {MAX_DEPTH}
+                    Subtask · level {depth} of {MAX_DEPTH}
                   </Text>
                 ) : null}
               </View>
@@ -185,24 +209,20 @@ export function ItemModal() {
             }
             actions={
               <>
-                {editable ? (
-                  <IconButton
-                    icon={Pencil}
-                    label="Edit task"
-                    onPress={() => {
-                      setForm({ mode: 'edit', id: item.id });
-                      close();
-                    }}
-                  />
-                ) : null}
-                {deletable ? (
-                  <IconButton
-                    icon={Trash2}
-                    label="Delete task"
-                    color={c.destructive}
-                    onPress={remove}
-                  />
-                ) : null}
+                <IconButton
+                  icon={Pencil}
+                  label="Edit task"
+                  onPress={() => {
+                    setForm({ mode: 'edit', id: item.id });
+                    close();
+                  }}
+                />
+                <IconButton
+                  icon={Trash2}
+                  label="Delete task"
+                  color={c.destructive}
+                  onPress={remove}
+                />
               </>
             }
           />
@@ -214,14 +234,6 @@ export function ItemModal() {
             {!isServerBacked && unavailableReason ? (
               <View className="mb-4">
                 <Callout kind="warning">{unavailableReason}</Callout>
-              </View>
-            ) : null}
-            {role === 'assignee' ? (
-              <View className="mb-4">
-                <Callout kind="info">
-                  You’re assigned to this task — you can comment, change its status
-                  and manage subtasks. Only its creator can edit details or delete it.
-                </Callout>
               </View>
             ) : null}
 
@@ -247,9 +259,10 @@ export function ItemModal() {
               <Property label="Assignees">
                 <View className="flex-1 flex-row items-center gap-2">
                   <AssigneeAvatars ids={item.assigneeIds} size={22} max={5} />
-                  <Text numberOfLines={1} className="flex-1 text-sm text-text-heading">
-                    {assigneeNames(item.assigneeIds)}
-                  </Text>
+                  <AssigneeNames
+                    ids={item.assigneeIds}
+                    className="flex-1 text-sm text-text-heading"
+                  />
                 </View>
               </Property>
               <Property label="Dates">
@@ -289,15 +302,6 @@ export function ItemModal() {
                   </View>
                 </Property>
               ) : null}
-              {item.labels.length > 0 ? (
-                <Property label="Labels">
-                  <View className="flex-row flex-wrap gap-1">
-                    {item.labels.map(l => (
-                      <Badge key={l} label={l} />
-                    ))}
-                  </View>
-                </Property>
-              ) : null}
             </View>
 
             <View className="mb-6">
@@ -310,7 +314,7 @@ export function ItemModal() {
                   </Text>
                 ) : null}
                 <View className="flex-1" />
-                {canAdd ? (
+                {!subtasksEnabled ? null : canAdd ? (
                   <Button
                     size="sm"
                     variant="ghost"
@@ -328,7 +332,25 @@ export function ItemModal() {
                   </Text>
                 )}
               </View>
-              {progress && progress.total > 0 ? (
+              {!subtasksEnabled ? (
+                <Callout kind="info" title="Subtasks are turned off in this view">
+                  <View className="gap-2">
+                    <Text className="text-sm text-text-main">
+                      {activeView && !activeView.shared
+                        ? 'Turn them on to see and add subtasks here.'
+                        : 'Only the view’s owner can turn them on.'}
+                    </Text>
+                    {activeView && !activeView.shared ? (
+                      <View className="self-start">
+                        <Button size="sm" loading={enablingSubtasks} onPress={turnOnSubtasks}>
+                          Turn on for this view
+                        </Button>
+                      </View>
+                    ) : null}
+                  </View>
+                </Callout>
+              ) : null}
+              {subtasksEnabled && progress && progress.total > 0 ? (
                 <View className="mb-2 h-1 overflow-hidden rounded-full bg-muted">
                   <View
                     style={{ width: `${(progress.done / progress.total) * 100}%` }}
@@ -336,7 +358,7 @@ export function ItemModal() {
                   />
                 </View>
               ) : null}
-              {subtasks.length === 0 ? (
+              {!subtasksEnabled ? null : subtasks.length === 0 ? (
                 <Text className="py-1 text-sm text-text-subtle">
                   {loadingSubtasks ? 'Loading subtasks…' : 'No subtasks yet'}
                 </Text>
@@ -355,7 +377,6 @@ export function ItemModal() {
                       }`}
                     >
                       <StatusIcon status={s.status} size={14} />
-                      <Text className="text-2xs text-text-subtle">{s.id}</Text>
                       <Text numberOfLines={1} className="flex-1 text-sm text-text-heading">
                         {s.title}
                       </Text>
@@ -366,7 +387,7 @@ export function ItemModal() {
               )}
             </View>
 
-            <CommentsSection itemId={item.id} />
+            <CommentsSection />
           </SheetBody>
         </>
       ) : null}

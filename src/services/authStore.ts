@@ -7,6 +7,7 @@ import {
 } from './sso';
 import { apiLogout, fetchSession, refreshSession } from './auth';
 import { HttpError } from './apiClient';
+import { queryClient } from './queryClient';
 import {
   storage,
   sessionFlag,
@@ -38,7 +39,12 @@ export const AUTO_SSO_ATTEMPTED_KEY = 'ytc_sso_auto_attempted';
 
 // Reads the persisted session into the atoms, then keeps storage in step with them.
 let persisting = false;
+// Older builds kept views/comments/profile/theme on the device under this key.
+// All of that is server-side now — remove the leftover copy.
+const LEGACY_PROJECT_KEY = 'ytc_project_v4';
+
 const hydrateSession = async () => {
+  storage.removeItem(LEGACY_PROJECT_KEY);
   try {
     const raw = await storage.getItem(SESSION_KEY);
     if (raw) {
@@ -104,6 +110,9 @@ const persistPayload = (payload: AuthPayload) => {
 };
 
 const clearSession = () => {
+  // Every cached server response (profile, people, views, tasks) belonged to this
+  // session — drop it so the next sign-in starts from the server, not from them.
+  queryClient.clear();
   store.set(tokenAtom, null);
   store.set(refreshTokenAtom, null);
   store.set(userAtom, null);

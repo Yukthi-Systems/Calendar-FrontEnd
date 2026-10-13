@@ -337,7 +337,7 @@ function RoadmapTimeline({ items }: { items: WorkItem[] }) {
                             style={{ color: t.fg }}
                             className="text-2xs font-medium"
                           >
-                            {width >= 120 ? i.title : i.id}
+                            {i.title}
                           </Text>
                         ) : null}
                       </Press>

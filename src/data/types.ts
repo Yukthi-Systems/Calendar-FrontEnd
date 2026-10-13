@@ -5,7 +5,7 @@ export type Status =
   | 'rejected'
   | 'on_hold';
 export type Priority = 'low' | 'medium' | 'high';
-export type ViewType = 'table' | 'team' | 'kanban' | 'roadmap' | 'calendar';
+export type ViewType = 'table' | 'kanban' | 'roadmap' | 'calendar';
 
 // Mirrors Tasks-Main-API's task_tag enum — every task will need one once /tasks is
 // integrated, and a view can restrict itself to a subset (src/data/constants.ts
@@ -34,16 +34,6 @@ export interface Reminder {
   time: string;
 }
 
-export interface Member {
-  id: string;
-  name: string;
-  initials: string;
-  color: string;
-  role: string;
-  // Max number of items this person can carry at once, for the workload bar.
-  capacity: number;
-}
-
 export interface WorkItem {
   id: string;
   title: string;
@@ -58,7 +48,7 @@ export interface WorkItem {
   // itself — see ItemFormModal.
   assigneeIds: string[];
   // Whoever opened this task — the only one who can delete it. A member id
-  // (see src/data/permissions.ts for how roles/permissions read this).
+  // (the server enforces what each role may do — docs/BACKEND.md §4).
   createdById: string;
   // Parent task; null for top-level. Nesting is limited to MAX_DEPTH levels.
   parentId: string | null;
@@ -70,7 +60,6 @@ export interface WorkItem {
   // yyyy-MM-dd
   start: string;
   end: string;
-  labels: string[];
   // null/[] are the common case — most tasks don't repeat or have reminders.
   recurrence: string | null;
   reminders: Reminder[];
@@ -79,7 +68,6 @@ export interface WorkItem {
 // Optional per-field toggles for the Table and Calendar layouts (the task title
 // is always shown). Undefined means every field for that layout is shown.
 export type ViewField =
-  | 'id'
   | 'status'
   | 'assignee'
   | 'priority'
@@ -87,14 +75,19 @@ export type ViewField =
   | 'end';
 
 export interface ProjectView {
+  // The server's view_id (numeric string) — every view is a Tasks-Main-API row.
   id: string;
+  // Who owns it; `shared` = someone else shared it with me (GET /views/list/true),
+  // so only its owner can edit, delete or share it.
+  ownerId: string;
+  shared: boolean;
   name: string;
   type: ViewType;
   description?: string;
   fields?: ViewField[];
-  // Mirrors Tasks-Main-API's task_views row (status_filter/show_*) so a view is
-  // ready to actually filter once the /tasks API exists — inert until then.
-  // Empty/undefined statusFilter/tagFilter means "every status"/"every tag".
+  // Tasks-Main-API's task_views filters. The server enforces them on every task
+  // call made through this view. Empty/undefined = every status / every tag.
+  // showSubtasks off ⇒ the server refuses subtask list/create/edit in this view.
   statusFilter?: Status[];
   tagFilter?: TaskTag[];
   showRecurring?: boolean;
@@ -103,21 +96,3 @@ export interface ProjectView {
   showAssigned?: boolean;
 }
 
-// Author fields are captured at post time rather than referencing a member id —
-// the poster might be the account profile (not one of MEMBERS) or a member who's
-// since changed their name/color, and a comment should keep the attribution it
-// had when posted either way.
-export interface Comment {
-  id: string;
-  itemId: string;
-  // Who posted it, for edit/delete permission checks — only this id may
-  // change or remove the comment (see src/data/permissions.ts).
-  authorId: string;
-  authorName: string;
-  authorInitials: string;
-  authorColor: string;
-  text: string;
-  // ISO timestamps.
-  createdAt: string;
-  editedAt?: string;
-}

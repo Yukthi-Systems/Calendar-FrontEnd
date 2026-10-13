@@ -17,7 +17,6 @@ import {
 } from '../ui';
 import { STATUSES, TAGS, VIEW_TYPES } from '../../data/constants';
 import { fieldOptionsFor } from '../../data/viewFields';
-import { isServerViewId } from '../../data/viewSync';
 import type { ProjectView, Status, TaskTag, ViewField, ViewType } from '../../data/types';
 
 export interface ViewDraft {
@@ -54,18 +53,18 @@ export function ViewModal({
   const c = useThemeColors();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
-  const [type, setType] = useState<ViewType>('kanban');
+  const [type, setType] = useState<ViewType>('table');
   const [fields, setFields] = useState<ViewField[]>([]);
   const [statusFilter, setStatusFilter] = useState<Status[]>([]);
   const [tagFilter, setTagFilter] = useState<TaskTag[]>([]);
   const [showRecurring, setShowRecurring] = useState(false);
   const [showComments, setShowComments] = useState(false);
-  const [showSubtasks, setShowSubtasks] = useState(false);
+  const [showSubtasks, setShowSubtasks] = useState(true);
   const [showAssigned, setShowAssigned] = useState(false);
 
   useEffect(() => {
     if (visible) {
-      const nextType = view?.type ?? 'kanban';
+      const nextType = view?.type ?? 'table';
       setName(view?.name ?? '');
       setDescription(view?.description ?? '');
       setType(nextType);
@@ -74,7 +73,7 @@ export function ViewModal({
       setTagFilter(view?.tagFilter ?? []);
       setShowRecurring(view?.showRecurring ?? false);
       setShowComments(view?.showComments ?? false);
-      setShowSubtasks(view?.showSubtasks ?? false);
+      setShowSubtasks(view?.showSubtasks ?? true);
       setShowAssigned(view?.showAssigned ?? false);
     }
   }, [visible, view]);
@@ -108,11 +107,18 @@ export function ViewModal({
   const visibilityToggles: {
     key: string;
     label: string;
+    description?: string;
     on: boolean;
     set: (v: boolean) => void;
   }[] = [
     { key: 'recurring', label: 'Recurring tasks', on: showRecurring, set: setShowRecurring },
-    { key: 'subtasks', label: 'Subtasks', on: showSubtasks, set: setShowSubtasks },
+    {
+      key: 'subtasks',
+      label: 'Subtasks',
+      description: 'Off: subtasks can’t be listed, added or edited in this view.',
+      on: showSubtasks,
+      set: setShowSubtasks,
+    },
     { key: 'assigned', label: 'Tasks assigned to me', on: showAssigned, set: setShowAssigned },
     { key: 'comments', label: 'Comments', on: showComments, set: setShowComments },
   ];
@@ -248,7 +254,12 @@ export function ViewModal({
           <View className="rounded-xl border border-border-main px-3 py-1">
             {visibilityToggles.map((t, i) => (
               <View key={t.key} className={i > 0 ? 'border-t border-border-main' : ''}>
-                <Switch value={t.on} onChange={t.set} label={t.label} />
+                <Switch
+                  value={t.on}
+                  onChange={t.set}
+                  label={t.label}
+                  description={t.description}
+                />
               </View>
             ))}
           </View>
@@ -262,7 +273,7 @@ export function ViewModal({
               <Button variant="destructive-ghost" icon={Trash2} onPress={onDelete}>
                 Delete
               </Button>
-              {isServerViewId(view.id) ? (
+              {!view.shared ? (
                 <IconButton icon={Share2} label={`Share ${view.name}`} onPress={() => onShare(view)} />
               ) : null}
             </View>

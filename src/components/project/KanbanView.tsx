@@ -11,7 +11,7 @@ import {
   selectedItemIdAtom,
   tasksLoadingAtom,
 } from '../../atoms/project';
-import { STATUSES, statusInfo } from '../../data/constants';
+import { STATUSES, statusInfo, tagInfo } from '../../data/constants';
 import { errorMessage, toast } from '../../atoms/feedback';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
 import type { Status, WorkItem } from '../../data/types';
@@ -214,14 +214,15 @@ function KanbanCard({
         isActive ? 'border-accent' : 'border-border-main hover:border-border-strong'
       }`}
     >
-      <View className="flex-row items-center gap-1.5">
-        <Text className="flex-1 text-2xs font-medium text-text-subtle">{item.id}</Text>
-        {item.recurrence ? <RecurrenceIcon freq={item.recurrence} /> : null}
-        <PriorityIcon priority={item.priority} size={14} />
+      <View className="flex-row items-start gap-1.5">
+        <Text numberOfLines={3} className="flex-1 text-sm font-medium text-text-heading">
+          {item.title}
+        </Text>
+        <View className="flex-row items-center gap-1 pt-0.5">
+          {item.recurrence ? <RecurrenceIcon freq={item.recurrence} /> : null}
+          <PriorityIcon priority={item.priority} size={14} />
+        </View>
       </View>
-      <Text numberOfLines={3} className="text-sm font-medium text-text-heading">
-        {item.title}
-      </Text>
       {parent ? (
         <View className="flex-row items-center gap-1">
           <CornerDownRight size={12} color={c.subtle} />
@@ -230,13 +231,7 @@ function KanbanCard({
           </Text>
         </View>
       ) : null}
-      {item.labels.length > 0 ? (
-        <View className="flex-row flex-wrap gap-1">
-          {item.labels.map(l => (
-            <Badge key={l} label={l} size="sm" />
-          ))}
-        </View>
-      ) : null}
+      <Badge label={tagInfo(item.tag).label} color={tagInfo(item.tag).color} size="sm" dot />
       <View className="mt-0.5 flex-row items-center gap-2.5">
         <AssigneeAvatars ids={item.assigneeIds} size={20} />
         <DueDate item={item} className="text-xs" />

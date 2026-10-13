@@ -55,7 +55,7 @@ export function Chip({
   );
 }
 
-// Read-only tinted label: status, priority, tag, free-form labels.
+// Read-only tinted label: status, priority, tag.
 export function Badge({
   label,
   color,

@@ -3,29 +3,37 @@ import { ScrollView, Text, useWindowDimensions, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   CalendarCheck2,
+  CalendarDays,
   ChevronLeft,
+  CloudOff,
   Ellipsis,
   LayoutGrid,
   Plus,
   Search,
+  Table2,
 } from 'lucide-react-native';
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { useSetAtom } from 'jotai';
 import {
   activeViewIdAtom,
   itemFormAtom,
   searchOpenAtom,
-  viewsAtom,
 } from '../../atoms/project';
-import { profileAtom, profileOpenAtom } from '../../atoms/profile';
-import { toast } from '../../atoms/feedback';
+import { profileOpenAtom } from '../../atoms/profile';
+import { useMyProfile, usePerson } from '../../hooks/useUsers';
+import { errorMessage, toast } from '../../atoms/feedback';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { useViewUrlSync } from '../../hooks/useViewUrlSync';
-import { useViewsSync } from '../../hooks/useViewsSync';
+import {
+  useActiveView,
+  useViewList,
+  useViewMutations,
+  type ViewDraftFields,
+} from '../../hooks/useViews';
 import { useTasksSync } from '../../hooks/useTasksSync';
 import { useShortcuts } from '../../hooks/useShortcuts';
 import { VIEW_TYPES } from '../../data/constants';
 import type { ProjectView, ViewType } from '../../data/types';
-import { Button, EmptyState, IconButton, Kbd, Press } from '../ui';
+import { Badge, Button, EmptyState, IconButton, Kbd, Press, Skeleton } from '../ui';
 import { CalendarView } from './CalendarView';
 import { ItemFormModal } from './ItemFormModal';
 import { ItemModal } from './ItemModal';
@@ -37,8 +45,7 @@ import { RoadmapView } from './RoadmapView';
 import { SearchModal } from './SearchModal';
 import { InitialsAvatar } from './shared';
 import { TableView } from './TableView';
-import { TeamPlanningView } from './TeamPlanningView';
-import { ViewModal, type ViewDraft } from './ViewModal';
+import { ViewModal } from './ViewModal';
 import { ShareViewModal } from './ShareViewModal';
 import { ViewMenuModal } from './ViewMenuModal';
 
@@ -50,7 +57,6 @@ const VIEW_COMPONENTS: Record<
   (props: { view: ProjectView }) => React.JSX.Element
 > = {
   table: TableView,
-  team: TeamPlanningView,
   kanban: KanbanView,
   roadmap: RoadmapView,
   calendar: CalendarView,
@@ -63,12 +69,12 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   const setSearchOpen = useSetAtom(searchOpenAtom);
   const [mobileHome, setMobileHome] = useState(true);
   const setProfileOpen = useSetAtom(profileOpenAtom);
-  const profile = useAtomValue(profileAtom);
+  const profile = useMyProfile();
   const { width } = useWindowDimensions();
   const c = useThemeColors();
-  const [views, setViews] = useAtom(viewsAtom);
-  const [activeId, setActiveId] = useAtom(activeViewIdAtom);
-  const { addView, editView, removeView, restoreView } = useViewsSync();
+  const { views, myViews, sharedViews, ready, isLoading, error, refetch } = useViewList();
+  const setActiveId = useSetAtom(activeViewIdAtom);
+  const { createView, updateView, deleteView } = useViewMutations();
   useViewUrlSync();
   // undefined = closed, null = creating, ProjectView = editing.
   const [modalView, setModalView] = useState<ProjectView | null | undefined>(
@@ -78,7 +84,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   // Which view's "⋯" action sheet (Share/Edit/Delete) is open, if any.
   const [menuView, setMenuView] = useState<ProjectView | null>(null);
 
-  const active = views.find(v => v.id === activeId) ?? views[0];
+  const active = useActiveView();
   const ActiveView = active ? VIEW_COMPONENTS[active.type] : null;
   useTasksSync(active);
 
@@ -92,48 +98,64 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
     v: () => setModalView(null),
   });
 
-  const save = async (draft: ViewDraft) => {
-    setModalView(undefined);
-    if (modalView) {
-      await editView({ ...modalView, ...draft });
-      toast.success('View saved');
-    } else {
-      const id = await addView(draft);
-      setActiveId(id);
-      toast.success(`Created “${draft.name}”`);
-    }
-  };
-
-  const restore = async (view: ProjectView, index: number) => {
-    // The API has no restore — this recreates the view, so it gets a new id and
-    // (server-side) lands at the end rather than back at its original slot.
-    const id = await restoreView(view);
-    setViews(prev => {
-      if (prev.some(v => v.id === id)) {
-        return prev;
+  // Every write goes to the server; the list on screen is refetched from it.
+  const create = async (draft: ViewDraftFields) => {
+    try {
+      const id = await createView(draft);
+      if (id) {
+        setActiveId(id);
       }
-      const next = [...prev];
-      next.splice(Math.min(index, next.length), 0, { ...view, id });
-      return next;
-    });
-    setActiveId(id);
+      toast.success(`Created “${draft.name}”`);
+    } catch (err) {
+      toast.error('Couldn’t create the view', {
+        description: errorMessage(err, 'Please try again.'),
+      });
+    }
   };
 
-  // Takes the view explicitly — called from the ViewModal's own Delete button
-  // (editing that view) and from the "⋯" action sheet's Delete row (no modal
-  // open at all) alike.
-  const remove = async (removed: ProjectView) => {
-    const index = views.indexOf(removed);
-    const rest = views.filter(v => v.id !== removed.id);
-    setViews(rest);
-    if (activeId === removed.id) {
-      setActiveId(rest[0]?.id ?? '');
-    }
+  const save = async (draft: ViewDraftFields) => {
+    const editing = modalView;
     setModalView(undefined);
-    toast.info(`Deleted “${removed.name}”`, {
-      action: { label: 'Undo', onPress: () => restore(removed, index) },
-    });
-    await removeView(removed);
+    if (!editing) {
+      await create(draft);
+      return;
+    }
+    try {
+      await updateView({ ...editing, ...draft });
+      toast.success('View saved');
+    } catch (err) {
+      toast.error('Couldn’t save the view', {
+        description: errorMessage(err, 'Please try again.'),
+      });
+    }
+  };
+
+  // Called from the ViewModal's own Delete button and the "⋯" menu alike. The API
+  // has no restore — Undo recreates the view (it gets a new id).
+  const remove = async (removed: ProjectView) => {
+    setModalView(undefined);
+    try {
+      await deleteView(removed);
+      const draft: ViewDraftFields = {
+        name: removed.name,
+        type: removed.type,
+        description: removed.description,
+        fields: removed.fields,
+        statusFilter: removed.statusFilter,
+        tagFilter: removed.tagFilter,
+        showRecurring: removed.showRecurring,
+        showComments: removed.showComments,
+        showSubtasks: removed.showSubtasks,
+        showAssigned: removed.showAssigned,
+      };
+      toast.info(`Deleted “${removed.name}”`, {
+        action: { label: 'Undo', onPress: () => create(draft) },
+      });
+    } catch (err) {
+      toast.error('Couldn’t delete the view', {
+        description: errorMessage(err, 'Please try again.'),
+      });
+    }
   };
 
   const onShareView = (v: ProjectView) => {
@@ -145,6 +167,42 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   const viewIcon = (type: ViewType, color: string, size = 16) => {
     const Icon = VIEW_TYPES.find(t => t.key === type)?.icon;
     return Icon ? <Icon size={size} color={color} strokeWidth={2} /> : null;
+  };
+
+  const railItem = (v: ProjectView) => {
+    const isActive = v.id === active?.id;
+    return (
+      <View key={v.id} className="group flex-row items-center">
+        <Press
+          feedback="subtle"
+          accessibilityRole="tab"
+          accessibilityState={{ selected: isActive }}
+          onPress={() => setActiveId(v.id)}
+          className={`h-8 flex-1 flex-row items-center gap-2.5 rounded-lg pl-2.5 pr-8 ${
+            isActive ? 'bg-hover' : 'hover:bg-hover/70'
+          }`}
+        >
+          {viewIcon(v.type, isActive ? c.heading : c.text)}
+          <Text
+            numberOfLines={1}
+            className={`flex-1 text-sm ${
+              isActive ? 'font-medium text-text-heading' : 'text-text-main'
+            }`}
+          >
+            {v.name}
+          </Text>
+          {v.shared ? <OwnerAvatar ownerId={v.ownerId} /> : null}
+        </Press>
+        <View className={`absolute right-1 ${isActive ? '' : 'reveal-on-hover'}`}>
+          <IconButton
+            icon={Ellipsis}
+            label={`Options for ${v.name}`}
+            size="sm"
+            onPress={() => setMenuView(v)}
+          />
+        </View>
+      </View>
+    );
   };
 
   // ── Desktop: left rail ────────────────────────────────────────────────────
@@ -180,42 +238,21 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
       </View>
 
       <ScrollView className="flex-1" contentContainerClassName="gap-px px-3 pb-3">
-        {views.map(v => {
-          const isActive = v.id === active?.id;
-          return (
-            <View key={v.id} className="group flex-row items-center">
-              <Press
-                feedback="subtle"
-                accessibilityRole="tab"
-                accessibilityState={{ selected: isActive }}
-                onPress={() => setActiveId(v.id)}
-                className={`h-8 flex-1 flex-row items-center gap-2.5 rounded-lg pl-2.5 pr-8 ${
-                  isActive ? 'bg-hover' : 'hover:bg-hover/70'
-                }`}
-              >
-                {viewIcon(v.type, isActive ? c.heading : c.text)}
-                <Text
-                  numberOfLines={1}
-                  className={`flex-1 text-sm ${
-                    isActive ? 'font-medium text-text-heading' : 'text-text-main'
-                  }`}
-                >
-                  {v.name}
-                </Text>
-              </Press>
-              <View
-                className={`absolute right-1 ${isActive ? '' : 'reveal-on-hover'}`}
-              >
-                <IconButton
-                  icon={Ellipsis}
-                  label={`Options for ${v.name}`}
-                  size="sm"
-                  onPress={() => setMenuView(v)}
-                />
-              </View>
-            </View>
-          );
-        })}
+        {isLoading ? (
+          <View className="gap-2 px-1 pt-1">
+            <Skeleton className="h-6 w-40 rounded-md" />
+            <Skeleton className="h-6 w-32 rounded-md" />
+          </View>
+        ) : null}
+        {myViews.map(v => railItem(v))}
+        {sharedViews.length > 0 ? (
+          <>
+            <Text className="pb-1 pl-2 pt-4 text-2xs font-semibold uppercase tracking-wider text-text-subtle">
+              Shared with me
+            </Text>
+            {sharedViews.map(v => railItem(v))}
+          </>
+        ) : null}
       </ScrollView>
 
       <Press
@@ -248,6 +285,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
         <Text numberOfLines={1} className="text-base font-semibold text-text-heading">
           {active.name}
         </Text>
+        {active.shared ? <SharedByBadge ownerId={active.ownerId} /> : null}
         {active.description ? (
           <Text numberOfLines={1} className="flex-1 text-sm text-text-subtle">
             {active.description}
@@ -265,18 +303,49 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
     </View>
   ) : null;
 
+  const quickCreate = (type: 'table' | 'calendar') =>
+    create({
+      name: type === 'table' ? 'All tasks' : 'Calendar',
+      type,
+      showSubtasks: true,
+    });
+
   const content =
     ActiveView && active ? (
       <ActiveView key={active.id} view={active} />
+    ) : !ready ? (
+      <View className="flex-1 gap-3 p-6">
+        <Skeleton className="h-8 w-64 rounded-lg" />
+        <Skeleton className="h-64 w-full rounded-xl" />
+      </View>
+    ) : error ? (
+      <EmptyState
+        icon={CloudOff}
+        title="Couldn’t load your views"
+        description={errorMessage(error, 'The server didn’t respond.')}
+        action={
+          <Button variant="primary" onPress={() => refetch()}>
+            Try again
+          </Button>
+        }
+      />
     ) : (
       <EmptyState
         icon={LayoutGrid}
-        title="No views yet"
-        description="Views are saved layouts of your tasks — a board, a calendar, a table. Create one to get started."
+        title="Create your first view"
+        description="Views are saved layouts of your tasks — a table, a calendar, a board. Tasks always live inside a view."
         action={
-          <Button variant="primary" icon={Plus} onPress={() => setModalView(null)}>
-            Create a view
-          </Button>
+          <View className="flex-row flex-wrap justify-center gap-2">
+            <Button variant="primary" icon={Table2} onPress={() => quickCreate('table')}>
+              Task table
+            </Button>
+            <Button icon={CalendarDays} onPress={() => quickCreate('calendar')}>
+              Calendar
+            </Button>
+            <Button variant="ghost" icon={Plus} onPress={() => setModalView(null)}>
+              Custom…
+            </Button>
+          </View>
         }
       />
     );
@@ -401,4 +470,17 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
       <ProfileEditModal />
     </SafeAreaView>
   );
+}
+
+// Small avatar of whoever shared a view with me, in the rail.
+function OwnerAvatar({ ownerId }: { ownerId: string }) {
+  const owner = usePerson(ownerId);
+  return owner ? (
+    <InitialsAvatar color={owner.color} initials={owner.initials} size={18} />
+  ) : null;
+}
+
+function SharedByBadge({ ownerId }: { ownerId: string }) {
+  const owner = usePerson(ownerId);
+  return <Badge label={`Shared by ${owner?.name ?? '…'}`} size="sm" />;
 }
