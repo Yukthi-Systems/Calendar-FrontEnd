@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Text, View } from 'react-native';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { format, parseISO } from 'date-fns';
@@ -22,6 +22,7 @@ import { currentUserIdAtom } from '../../atoms/members';
 import { confirm, errorMessage, toast } from '../../atoms/feedback';
 import { canDelete, canEditFields, roleFor } from '../../data/permissions';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
+import { isServerTaskId } from '../../data/taskSync';
 import { describeRecurrence } from '../../data/rrule';
 import {
   MAX_DEPTH,
@@ -59,17 +60,45 @@ export function ItemModal() {
   const items = useAtomValue(itemsAtom);
   const CURRENT_USER_ID = useAtomValue(currentUserIdAtom);
   const setForm = useSetAtom(itemFormAtom);
-  const { editItem, removeItem, isServerBacked, unavailableReason } =
+  const { editItem, removeItem, loadSubtree, isServerBacked, unavailableReason } =
     useTaskMutations();
   const c = useThemeColors();
   const item = items.find(i => i.id === selectedId);
   const close = () => setSelectedId(null);
   const open = (id: string) => setSelectedId(id);
 
+  // Subtasks load lazily (see useTasksSync's header comment) — a server-backed
+  // task's full nested subtree is fetched here, on open, rather than up front
+  // for the whole view. Local-only tasks already have everything in itemsAtom,
+  // so loadSubtree is a no-op for them.
+  const [loadingSubtasks, setLoadingSubtasks] = useState(false);
+  useEffect(() => {
+    if (!item || !isServerTaskId(item.id)) {
+      return;
+    }
+    let active = true;
+    setLoadingSubtasks(true);
+    loadSubtree(item.id)
+      .catch(err =>
+        toast.error('Couldn’t load subtasks', {
+          description: errorMessage(err, 'Please try again.'),
+        }),
+      )
+      .finally(() => {
+        if (active) {
+          setLoadingSubtasks(false);
+        }
+      });
+    return () => {
+      active = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when the open task changes, not on every loadSubtree identity change
+  }, [item?.id]);
+
   const crumbs = item ? ancestorsOf(items, item) : [];
   const depth = item ? depthOf(items, item) : 1;
   const subtasks = item ? flattenTree(descendantsOf(items, item.id)) : [];
-  const progress = item ? subtaskProgress(items, item.id) : null;
+  const progress = item ? subtaskProgress(items, item) : null;
   const canAdd = item ? canAddSubtask(items, item) : false;
   // An assignee who isn't also the creator is limited to status, comments and
   // subtasks — Edit/Delete simply aren't offered to them.
@@ -308,7 +337,9 @@ export function ItemModal() {
                 </View>
               ) : null}
               {subtasks.length === 0 ? (
-                <Text className="py-1 text-sm text-text-subtle">No subtasks yet</Text>
+                <Text className="py-1 text-sm text-text-subtle">
+                  {loadingSubtasks ? 'Loading subtasks…' : 'No subtasks yet'}
+                </Text>
               ) : (
                 <View className="overflow-hidden rounded-xl border border-border-main">
                   {subtasks.map(({ item: s, depth: d }, idx) => (

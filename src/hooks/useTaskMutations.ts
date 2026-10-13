@@ -4,6 +4,7 @@ import { tokenAtom } from '../atoms/auth';
 import { activeViewIdAtom, commentsAtom, itemsAtom, viewsAtom } from '../atoms/project';
 import { createTask, deleteTask, updateTask, listTasks } from '../services/tasks';
 import { assignUserToTask, removeUserFromTask } from '../services/taskAssignees';
+import { drainPages } from './useTasksSync';
 import {
   buildTaskFilter,
   isServerTaskId,
@@ -11,7 +12,7 @@ import {
   taskToCreatePayload,
   taskToUpdatePayload,
 } from '../data/taskSync';
-import { descendantsOf } from '../data/tree';
+import { MAX_DEPTH, descendantsOf, hasSubtasks } from '../data/tree';
 import { isServerViewId } from '../data/viewSync';
 import { TASKS_API_ENABLED } from '../config/features';
 import { withAuthRetry } from '../services/authRetry';
@@ -121,7 +122,7 @@ export function useTaskMutations() {
   };
 
   const addItem = async (
-    draft: Omit<WorkItem, 'id' | 'createdById'>,
+    draft: Omit<WorkItem, 'id' | 'createdById' | 'totalSubtasks'>,
   ): Promise<string> => {
     if (!canMutate || viewId === undefined || !activeView) {
       throw new Error(reasonUnavailable());
@@ -243,12 +244,50 @@ export function useTaskMutations() {
     );
   };
 
+  // Fetches parentId's direct children (POST /tasks/list/{view_id}, scoped to
+  // that parent) and replaces whatever this device already had for them in
+  // itemsAtom — called on demand (TableView's row-expand, ItemModal's open),
+  // never eagerly; see useTasksSync's header comment for why. A local-only task
+  // (or TASKS_API_ENABLED off) has nothing to fetch — everything it has is
+  // already in itemsAtom — so this just returns what's there instead of hitting
+  // the network.
+  const loadChildren = async (parentId: string): Promise<WorkItem[]> => {
+    if (!canMutate || viewId === undefined || !isServerTaskId(parentId)) {
+      return items.filter(i => i.parentId === parentId);
+    }
+    const children = await withAuthRetry(token, t =>
+      drainPages(t, viewId, activeView!, Number(parentId)),
+    );
+    const fresh = children.map(taskFromServer);
+    setItems(prev => [...prev.filter(i => i.parentId !== parentId), ...fresh]);
+    return fresh;
+  };
+
+  // Recursively loads a task's whole subtree, depth-first — one loadChildren
+  // call per node that actually has subtasks (totalSubtasks/hasSubtasks says so
+  // without needing a request), skipping leaves entirely. Used by ItemModal,
+  // which shows a task's full nested subtask list, not just its direct
+  // children — bounded to the one task someone opened, not the whole view.
+  const loadSubtree = async (parentId: string, depth = 1): Promise<void> => {
+    const children = await loadChildren(parentId);
+    if (depth >= MAX_DEPTH) {
+      return;
+    }
+    for (const child of children) {
+      if (hasSubtasks(child)) {
+        await loadSubtree(child.id, depth + 1);
+      }
+    }
+  };
+
   return {
     addItem,
     editItem,
     removeItem,
     assignUser,
     unassignUser,
+    loadChildren,
+    loadSubtree,
     // Governs the Assignees field's read-only display for a task that can't
     // have assignees changed at all right now (nothing server-backed to assign
     // against) — true whenever this task is, or would be, a server-backed one.

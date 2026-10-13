@@ -53,14 +53,20 @@ export interface WorkItem {
   // Required by Tasks-Main-API (task_tag column, NOT NULL) once a task is
   // server-backed; defaults to 'other' for anything created before this existed.
   tag: TaskTag;
-  // Zero or more members; [] means unassigned. Read-only once server-backed — the
-  // API has no endpoint yet to set a task's assignees (see ItemFormModal).
+  // Zero or more members; [] means unassigned. Changed via useTaskMutations'
+  // assignUser/unassignUser (POST/DELETE /assignees/*), not by editing the task
+  // itself — see ItemFormModal.
   assigneeIds: string[];
   // Whoever opened this task — the only one who can delete it. A member id
   // (see src/data/permissions.ts for how roles/permissions read this).
   createdById: string;
   // Parent task; null for top-level. Nesting is limited to MAX_DEPTH levels.
   parentId: string | null;
+  // Direct children this task has on the server, whether or not they're loaded
+  // into the items list right now (tasks load lazily — see useTasksSync's header
+  // comment) — the only reliable way to know a task has subtasks before fetching
+  // them. 0 for a purely local item. See hasSubtasks/subtaskProgress (src/data/tree.ts).
+  totalSubtasks: number;
   // yyyy-MM-dd
   start: string;
   end: string;

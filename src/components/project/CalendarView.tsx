@@ -101,7 +101,11 @@ const chunkWeeks = (days: Date[]) => {
 };
 
 export function CalendarView({ view }: { view: ProjectView }) {
-  const items = useAtomValue(itemsAtom);
+  // Top-level tasks only — subtasks load lazily (useTasksSync's header comment)
+  // and appear here only as whichever got fetched elsewhere happening to be in
+  // itemsAtom, which would make the calendar's contents depend on prior
+  // navigation. SubtaskBadge (shown inline on each event) covers them instead.
+  const items = useAtomValue(itemsAtom).filter(i => !i.parentId);
   const fields = view.fields;
   const select = useSetAtom(selectedItemIdAtom);
   const c = useThemeColors();
@@ -475,7 +479,7 @@ function EventCell({
           {showsField(fields, 'assignee') ? (
             <AssigneeAvatars ids={workItem.assigneeIds} size={14} max={2} />
           ) : null}
-          <SubtaskBadge id={workItem.id} />
+          <SubtaskBadge item={workItem} />
         </View>
       ) : null}
     </Pressable>

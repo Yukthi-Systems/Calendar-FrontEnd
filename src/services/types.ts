@@ -154,6 +154,9 @@ export interface SharedTaskViewDto {
 export interface TaskInfoDto {
   task_id: number;
   parent_task_id: number | null;
+  // Direct children count (not recursive) — lets the UI know a task has
+  // subtasks, and show how many, before fetching them (see src/data/tree.ts).
+  total_sub_tasks: number;
 
   owner_id: string;
   created_by: string | null;

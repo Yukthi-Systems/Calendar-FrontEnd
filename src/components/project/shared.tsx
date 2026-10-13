@@ -337,7 +337,7 @@ export function ItemRow({
             <Text className="text-2xs text-text-subtle">{item.id}</Text>
           ) : null}
           <DueDate item={item} className="text-2xs" />
-          <SubtaskBadge id={item.id} />
+          <SubtaskBadge item={item} />
         </View>
       </View>
       {showsField(fields, 'priority') ? (
@@ -488,20 +488,30 @@ export function MultiSelectDropdown({
   );
 }
 
-// "2/5" chip with a tree icon; renders nothing for tasks without subtasks.
-export function SubtaskBadge({ id }: { id: string }) {
+// "2/3" chip with a tree icon (direct children only); renders nothing for tasks
+// without subtasks. `total` is always known (item.totalSubtasks, straight from
+// the server); `done` only reflects children loaded so far — shows "–/3" rather
+// than a possibly-wrong "0/3" until they're actually fetched (expand the row, or
+// open the task).
+export function SubtaskBadge({ item }: { item: WorkItem }) {
   const items = useAtomValue(itemsAtom);
   const { subtle } = useThemeColors();
-  const { done, total } = subtaskProgress(items, id);
+  const { done, total, loaded } = subtaskProgress(items, item);
   if (total === 0) {
     return null;
   }
   return (
-    <Tooltip label={`${done} of ${total} subtasks done`}>
+    <Tooltip
+      label={
+        loaded
+          ? `${done} of ${total} subtasks done`
+          : `${total} subtask${total === 1 ? '' : 's'} — expand to load`
+      }
+    >
       <View className="flex-row items-center gap-1">
         <ListTree size={12} color={subtle} />
         <Text className="text-2xs text-text-subtle">
-          {done}/{total}
+          {loaded ? done : '–'}/{total}
         </Text>
       </View>
     </Tooltip>
