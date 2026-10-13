@@ -17,6 +17,7 @@ import type {
 // `ui_info` JSON column instead.
 
 const VIEW_TYPES: ViewType[] = ['table', 'kanban', 'roadmap', 'calendar'];
+const FIELD_KEYS: string[] = ['status', 'assignee', 'priority', 'start', 'end'];
 const isViewType = (v: unknown): v is ViewType =>
   typeof v === 'string' && (VIEW_TYPES as string[]).includes(v);
 
@@ -29,7 +30,9 @@ export function viewFromServer(dto: TaskViewDbDto, shared = false): ProjectView 
     name: dto.view_name,
     type: isViewType(ui.type) ? ui.type : 'table',
     description: dto.description || undefined,
-    fields: Array.isArray(ui.fields) ? (ui.fields as ViewField[]) : undefined,
+    fields: Array.isArray(ui.fields)
+      ? (ui.fields as string[]).filter((f): f is ViewField => FIELD_KEYS.includes(f))
+      : undefined,
     statusFilter: dto.status_filter
       .map(s => STATUS_FROM_BACKEND[s])
       .filter(Boolean),

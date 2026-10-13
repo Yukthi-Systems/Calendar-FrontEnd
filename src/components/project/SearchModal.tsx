@@ -275,7 +275,6 @@ export function SearchModal() {
                   <Text numberOfLines={1} className="text-sm font-medium text-text-heading">
                     {item.title}
                   </Text>
-                  <Text className="text-xs text-text-subtle">{item.id}</Text>
                 </View>
                 <DueDate item={item} className="text-xs" />
                 <AssigneeAvatars ids={item.assigneeIds} size={20} />

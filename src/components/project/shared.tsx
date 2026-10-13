@@ -347,9 +347,6 @@ export function ItemRow({
           ) : null}
         </View>
         <View className="mt-0.5 flex-row items-center gap-2">
-          {showsField(fields, 'id') ? (
-            <Text className="text-2xs text-text-subtle">{item.id}</Text>
-          ) : null}
           <DueDate item={item} className="text-2xs" />
           <SubtaskBadge item={item} />
         </View>
@@ -530,13 +527,13 @@ export function SubtaskBadge({ item }: { item: WorkItem }) {
       label={
         loaded
           ? `${done} of ${total} subtasks done`
-          : `${total} subtask${total === 1 ? '' : 's'} — expand to load`
+          : `${total} subtask${total === 1 ? '' : 's'}`
       }
     >
       <View className="flex-row items-center gap-1">
         <ListTree size={12} color={subtle} />
         <Text className="text-2xs text-text-subtle">
-          {loaded ? done : '–'}/{total}
+          {loaded ? `${done}/${total}` : total}
         </Text>
       </View>
     </Tooltip>

@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { useAtom, useAtomValue } from 'jotai';
 import { tokenAtom } from '../atoms/auth';
-import { commentsAtom, itemsAtom } from '../atoms/project';
+import { itemsAtom } from '../atoms/project';
 import { useActiveView } from './useViews';
 import { createTask, deleteTask, updateTask } from '../services/tasks';
 import { assignUserToTask, removeUserFromTask } from '../services/taskAssignees';
@@ -33,10 +33,12 @@ export function useTaskMutations() {
   const token = useAtomValue(tokenAtom);
   const activeView = useActiveView();
   const [items, setItems] = useAtom(itemsAtom);
-  const setComments = useSetAtom(commentsAtom);
   const queryClient = useQueryClient();
 
   const viewId = activeView ? Number(activeView.id) : undefined;
+  // A view with show_subtasks off: the server refuses every subtask list/create/
+  // edit through it, so don't ask.
+  const subtasksEnabled = activeView?.showSubtasks !== false;
   const canMutate = TASKS_API_ENABLED && !!token && viewId !== undefined;
 
   const reasonUnavailable = (): string => {
@@ -72,6 +74,9 @@ export function useTaskMutations() {
 
   // One parent's direct children (POST /tasks/list with parent_task_id).
   const loadChildren = async (parentId: string): Promise<WorkItem[]> => {
+    if (!subtasksEnabled) {
+      return [];
+    }
     if (!canMutate || viewId === undefined || !isServerTaskId(parentId)) {
       return items.filter(i => i.parentId === parentId);
     }
@@ -170,8 +175,6 @@ export function useTaskMutations() {
     await call(t => deleteTask(t, vid, Number(item.id)));
     const gone = new Set([item.id, ...descendantsOf(items, item.id).map(d => d.id)]);
     setItems(prev => prev.filter(i => !gone.has(i.id)));
-    // Comments are still device-only (docs/BACKEND.md §8) — drop the deleted ones.
-    setComments(prev => prev.filter(c => !gone.has(c.itemId)));
     await refreshLevelOf(item.parentId);
   };
 
@@ -197,6 +200,7 @@ export function useTaskMutations() {
     loadChildren,
     loadSubtree,
     isServerBacked: viewId !== undefined,
+    subtasksEnabled,
     // Why writes are unavailable right now — null when they aren't.
     unavailableReason: !canMutate ? reasonUnavailable() : null,
   };

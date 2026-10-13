@@ -68,7 +68,6 @@ export interface WorkItem {
 // Optional per-field toggles for the Table and Calendar layouts (the task title
 // is always shown). Undefined means every field for that layout is shown.
 export type ViewField =
-  | 'id'
   | 'status'
   | 'assignee'
   | 'priority'
@@ -97,21 +96,3 @@ export interface ProjectView {
   showAssigned?: boolean;
 }
 
-// Author fields are captured at post time rather than referencing a member id —
-// the poster might be the account profile (not one of MEMBERS) or a member who's
-// since changed their name/color, and a comment should keep the attribution it
-// had when posted either way.
-export interface Comment {
-  id: string;
-  itemId: string;
-  // Who posted it, for edit/delete permission checks — only this id may
-  // change or remove the comment.
-  authorId: string;
-  authorName: string;
-  authorInitials: string;
-  authorColor: string;
-  text: string;
-  // ISO timestamps.
-  createdAt: string;
-  editedAt?: string;
-}

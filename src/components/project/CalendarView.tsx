@@ -799,7 +799,6 @@ function DayCard({ occ, day, fields }: { occ: Occ; day: Date; fields?: ViewField
           {item.recurrence ? <RecurrenceIcon freq={item.recurrence} /> : null}
         </View>
         <Text className="mt-0.5 text-xs text-text-subtle">
-          {showsField(fields, 'id') ? `${item.id} · ` : ''}
           {total > 1
             ? `${format(occ.start, 'MMM d')} – ${format(occ.end, 'MMM d')} · day ${nth} of ${total}`
             : 'All day'}

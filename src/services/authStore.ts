@@ -39,7 +39,12 @@ export const AUTO_SSO_ATTEMPTED_KEY = 'ytc_sso_auto_attempted';
 
 // Reads the persisted session into the atoms, then keeps storage in step with them.
 let persisting = false;
+// Older builds kept views/comments/profile/theme on the device under this key.
+// All of that is server-side now — remove the leftover copy.
+const LEGACY_PROJECT_KEY = 'ytc_project_v4';
+
 const hydrateSession = async () => {
+  storage.removeItem(LEGACY_PROJECT_KEY);
   try {
     const raw = await storage.getItem(SESSION_KEY);
     if (raw) {

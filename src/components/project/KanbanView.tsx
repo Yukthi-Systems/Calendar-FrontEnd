@@ -214,14 +214,15 @@ function KanbanCard({
         isActive ? 'border-accent' : 'border-border-main hover:border-border-strong'
       }`}
     >
-      <View className="flex-row items-center gap-1.5">
-        <Text className="flex-1 text-2xs font-medium text-text-subtle">{item.id}</Text>
-        {item.recurrence ? <RecurrenceIcon freq={item.recurrence} /> : null}
-        <PriorityIcon priority={item.priority} size={14} />
+      <View className="flex-row items-start gap-1.5">
+        <Text numberOfLines={3} className="flex-1 text-sm font-medium text-text-heading">
+          {item.title}
+        </Text>
+        <View className="flex-row items-center gap-1 pt-0.5">
+          {item.recurrence ? <RecurrenceIcon freq={item.recurrence} /> : null}
+          <PriorityIcon priority={item.priority} size={14} />
+        </View>
       </View>
-      <Text numberOfLines={3} className="text-sm font-medium text-text-heading">
-        {item.title}
-      </Text>
       {parent ? (
         <View className="flex-row items-center gap-1">
           <CornerDownRight size={12} color={c.subtle} />

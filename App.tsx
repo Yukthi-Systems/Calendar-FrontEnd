@@ -19,7 +19,6 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './src/services/queryClient';
 import { bootAuth } from './src/services/authStore';
-import { bootProject } from './src/services/projectStore';
 import { bootNotifications } from './src/services/notificationStore';
 import { bootWidgetSync } from './src/services/widgetSync';
 import { useAuth } from './src/hooks/useAuth';
@@ -38,7 +37,6 @@ function App() {
   useEffect(() => {
     const signal = { cancelled: false };
     bootAuth(signal);
-    bootProject();
     bootNotifications();
     bootWidgetSync();
     seedDemoIfRequested();

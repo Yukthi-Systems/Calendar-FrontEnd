@@ -339,9 +339,9 @@ export function ItemFormModal() {
     ? 'New subtask'
     : 'New task';
   const subtitle = editing
-    ? editing.id
+    ? undefined
     : parent
-    ? `Under ${parent.id} · ${parent.title}`
+    ? `Under “${parent.title}”`
     : undefined;
 
   return (

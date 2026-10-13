@@ -60,7 +60,7 @@ export async function drainPages(
 // fetch.
 //
 // Signed out, no view loaded yet, or TASKS_API_ENABLED is off (see that
-// constant's comment) — itemsAtom is left exactly as it is (projectStore.ts
+// constant's comment) — itemsAtom is left exactly as it is (nothing
 // deliberately never persists tasks locally, so that's an empty list unless
 // something else has already written to it this session).
 // The cache key of a view's root-level task list — shared with useTaskMutations,

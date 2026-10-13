@@ -1,6 +1,6 @@
 import { AppState, Linking } from 'react-native';
 import { getDefaultStore } from 'jotai';
-import { itemFormAtom, itemsAtom, projectHydratedAtom } from '../atoms/project';
+import { itemFormAtom, itemsAtom } from '../atoms/project';
 import { activeViewFromCache } from '../hooks/useViews';
 import { tokenAtom } from '../atoms/auth';
 import { widgetTasks } from '../data/widgetTasks';
@@ -61,28 +61,13 @@ const openNewTaskFromLink = (url: string | null | undefined) => {
   }
 };
 
-const waitForHydration = () =>
-  new Promise<void>(resolve => {
-    if (store.get(projectHydratedAtom)) {
-      resolve();
-      return;
-    }
-    const unsub = store.sub(projectHydratedAtom, () => {
-      if (store.get(projectHydratedAtom)) {
-        unsub();
-        resolve();
-      }
-    });
-  });
-
-// Waits for the saved project to load first, so the seed data never overwrites
-// completions the widget recorded.
+// Tasks only ever come from the server (never device storage), so there's nothing
+// to wait for before draining widget completions.
 export const bootWidgetSync = async () => {
   if (booted) {
     return;
   }
   booted = true;
-  await waitForHydration();
   await applyWidgetCompletions();
   push();
   store.sub(itemsAtom, push);
