@@ -4,7 +4,7 @@ import { useAtom, useAtomValue } from 'jotai';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { MessageSquare, Pencil, Trash2 } from 'lucide-react-native';
 import { commentsAtom } from '../../atoms/project';
-import { profileAtom } from '../../atoms/profile';
+import { useMyProfile } from '../../hooks/useUsers';
 import { currentUserIdAtom } from '../../atoms/members';
 import { toast } from '../../atoms/feedback';
 import { canDeleteComment, canEditComment } from '../../data/permissions';
@@ -22,7 +22,7 @@ const HOVER_REVEAL = 'reveal-on-hover';
 // posted it (src/data/permissions.ts).
 export function CommentsSection({ itemId }: { itemId: string }) {
   const [comments, setComments] = useAtom(commentsAtom);
-  const profile = useAtomValue(profileAtom);
+  const profile = useMyProfile();
   const CURRENT_USER_ID = useAtomValue(currentUserIdAtom);
   const c = useThemeColors();
   const [text, setText] = useState('');

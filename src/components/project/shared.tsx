@@ -20,7 +20,7 @@ import { differenceInCalendarDays, format, parseISO } from 'date-fns';
 import { itemsAtom, selectedItemIdAtom } from '../../atoms/project';
 import { PRIORITY_COLOR, statusInfo } from '../../data/constants';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { memberById } from '../../atoms/members';
+import { usePeople, usePerson, type Person } from '../../hooks/useUsers';
 import { describeRecurrence } from '../../data/rrule';
 import { subtaskProgress } from '../../data/tree';
 import { showsField } from '../../data/viewFields';
@@ -81,7 +81,7 @@ export function Avatar({
   size?: number;
   ring?: boolean;
 }) {
-  const m = memberById(id);
+  const m = usePerson(id);
   return (
     <Tooltip label={m?.name ?? 'Unassigned'}>
       <InitialsAvatar
@@ -105,6 +105,7 @@ export function AssigneeAvatars({
   size?: number;
   max?: number;
 }) {
+  const people = usePeople(ids.slice(max));
   if (ids.length === 0) {
     return (
       <Tooltip label="Unassigned">
@@ -132,10 +133,7 @@ export function AssigneeAvatars({
       ))}
       {rest > 0 ? (
         <Tooltip
-          label={ids
-            .slice(max)
-            .map(id => memberById(id)?.name ?? '?')
-            .join(', ')}
+          label={namesOf(ids.slice(max), people)}
         >
           <View
             style={{
@@ -160,11 +158,27 @@ export function AssigneeAvatars({
   );
 }
 
-// Comma-separated names for an assignee list, e.g. for table cells.
-export const assigneeNames = (ids: string[]) =>
+// Comma-separated names for an assignee list, given people resolved with
+// usePeople (table sorting, detail sheet).
+export const namesOf = (ids: string[], people: Map<string, Person>) =>
   ids.length === 0
     ? 'Unassigned'
-    : ids.map(id => memberById(id)?.name ?? '?').join(', ');
+    : ids.map(id => people.get(id)?.name ?? '…').join(', ');
+
+export function AssigneeNames({
+  ids,
+  className = 'text-sm text-text-heading',
+}: {
+  ids: string[];
+  className?: string;
+}) {
+  const people = usePeople(ids);
+  return (
+    <Text numberOfLines={1} className={className}>
+      {namesOf(ids, people)}
+    </Text>
+  );
+}
 
 // Small badge marking a task as recurring — used anywhere a title shows
 // (ItemRow, Table, Kanban). Wrapped in a Tooltip naming the frequency, since
@@ -384,6 +398,8 @@ export function MultiSelectDropdown({
     color?: string;
     locked?: boolean;
     lockedLabel?: string;
+    // Secondary line (an email) — also matched by the search box.
+    hint?: string;
   }[];
   selectedIds: string[];
   onToggle: (id: string) => void;
@@ -399,7 +415,9 @@ export function MultiSelectDropdown({
     return q
       ? options.filter(
           o =>
-            o.label.toLowerCase().includes(q) || o.id.toLowerCase().includes(q),
+            o.label.toLowerCase().includes(q) ||
+            (o.hint ?? '').toLowerCase().includes(q) ||
+            o.id.toLowerCase().includes(q),
         )
       : options;
   }, [options, query]);
@@ -440,7 +458,7 @@ export function MultiSelectDropdown({
               setQuery(q);
               onQueryChange?.(q);
             }}
-            placeholder="Search people…"
+            placeholder="Search people by name or email…"
             autoFocus
           />
         </View>
@@ -463,7 +481,14 @@ export function MultiSelectDropdown({
               >
                 <CheckboxBox checked={checked} locked={o.locked} />
                 <Avatar id={o.id} size={22} />
-                <Text className="flex-1 text-sm text-text-heading">{o.label}</Text>
+                <View className="flex-1">
+                  <Text className="text-sm text-text-heading">{o.label}</Text>
+                  {o.hint ? (
+                    <Text numberOfLines={1} className="text-xs text-text-subtle">
+                      {o.hint}
+                    </Text>
+                  ) : null}
+                </View>
                 {o.locked ? (
                   <Text className="text-xs text-text-subtle">
                     {o.lockedLabel ?? 'You'}

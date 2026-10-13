@@ -1,7 +1,8 @@
 import { getDefaultStore } from 'jotai';
 import { addDays, format } from 'date-fns';
 import { itemsAtom } from '../atoms/project';
-import { directoryAtom } from '../atoms/userInfo';
+import { queryClient } from '../services/queryClient';
+import { userKey } from '../hooks/useUsers';
 import { currentUserIdAtom } from '../atoms/members';
 import type { Priority, Status, TaskTag, WorkItem } from '../data/types';
 
@@ -56,14 +57,20 @@ export function seedDemoIfRequested() {
     return;
   }
   const store = getDefaultStore();
-  store.set(
-    directoryAtom,
-    TEAM.map(t => ({
+  // Sample teammates go into the same per-user query cache real lookups use
+  // (GET /user/info/{id}), so avatars and names resolve like they would live.
+  for (const t of TEAM) {
+    queryClient.setQueryData(userKey(t.user_id), {
       user_id: t.user_id,
-      email: `${t.user_id}@example.com`,
+      email: `${t.user_id.replace('demo-', '')}@example.com`,
+      domain: 'example.com',
+      organization_id: 'demo-org',
+      organization_name: 'Demo Org',
       public_info: { name: t.name, role: t.role },
-    })) as never,
-  );
+      is_external_sharing_enabled: false,
+      created_at: new Date().toISOString(),
+    });
+  }
 
   const seed = () => {
     const me = store.get(currentUserIdAtom) || 'me';

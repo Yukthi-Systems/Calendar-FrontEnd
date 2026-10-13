@@ -5,12 +5,11 @@ import {
   projectHydratedAtom,
   viewsAtom,
 } from '../atoms/project';
-import { profileOverridesAtom } from '../atoms/profile';
-import { themeAtom } from '../atoms/theme';
 import { storage } from './runtime';
 
-// Local persistence for the project workspace (views, comments, active tab,
-// profile, theme), ported from authStore.ts's session pattern: hydrate the atoms
+// Local persistence for the project workspace (views, comments, active tab) —
+// all of it slated for removal (docs/BACKEND.md chunks B and D). Profile and theme
+// already moved to the server (src/hooks/useUsers.ts). Ported from authStore.ts's session pattern: hydrate the atoms
 // from storage once at boot, then keep storage in step with every change.
 //
 // Tasks are deliberately NOT part of this — they're never written to local
@@ -39,8 +38,6 @@ const persistedProjectAtom = atom(get => ({
   views: get(viewsAtom),
   activeViewId: get(activeViewIdAtom),
   comments: get(commentsAtom),
-  profile: get(profileOverridesAtom),
-  theme: get(themeAtom),
 }));
 
 let persisting = false;
@@ -91,14 +88,6 @@ function applySaved(saved: unknown) {
         ? s.activeViewId
         : views[0]?.id ?? '',
     );
-  }
-  if (s.profile && typeof s.profile === 'object') {
-    const savedProfile = s.profile;
-    store.set(profileOverridesAtom, prev => ({ ...prev, ...savedProfile }));
-  }
-  if (s.theme && typeof s.theme === 'object') {
-    const savedTheme = s.theme;
-    store.set(themeAtom, prev => ({ ...prev, ...savedTheme }));
   }
 }
 

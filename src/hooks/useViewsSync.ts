@@ -3,8 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { tokenAtom, userAtom } from '../atoms/auth';
 import { activeViewIdAtom, viewsAtom } from '../atoms/project';
-import { userInfoAtom } from '../atoms/userInfo';
-import { useUpdateUserInfo } from './useUpdateUserInfo';
+import { useMe, useUpdateMyInfo } from './useUsers';
 import {
   createTaskView,
   deleteTaskView,
@@ -25,8 +24,8 @@ import type { ProjectView } from '../data/types';
 // Query. On sign-in the server's list replaces the local one. A brand-new account
 // has no server views yet, so whatever is local (the three built-in defaults, or
 // anything made before this sync existed) is pushed up once, so it isn't lost —
-// guarded by a `viewsMigrated` flag kept in `private_info.settings` (see
-// useSettingsSync) so a deliberate "delete everything" doesn't get silently undone
+// guarded by a `viewsMigrated` flag kept in `private_info.settings` (written via
+// useUpdateMyInfo) so a deliberate "delete everything" doesn't get silently undone
 // by the same migration on the next sign-in.
 //
 // addView/editView/removeView below are what the UI should call instead of touching
@@ -36,12 +35,12 @@ import type { ProjectView } from '../data/types';
 export function useViewsSync() {
   const token = useAtomValue(tokenAtom);
   const userId = useAtomValue(userAtom)?.user_id;
-  const info = useAtomValue(userInfoAtom);
+  const info = useMe().data ?? null;
   const [views, setViews] = useAtom(viewsAtom);
   const setActiveId = useSetAtom(activeViewIdAtom);
   const [ready, setReady] = useState(false);
   const queryClient = useQueryClient();
-  const updateUserInfo = useUpdateUserInfo();
+  const updateUserInfo = useUpdateMyInfo();
 
   const viewsQuery = useQuery({
     queryKey: ['views', userId],
@@ -124,7 +123,7 @@ export function useViewsSync() {
       updateUserInfo.mutate(
         {
           isPublic: false,
-          info: { ...info.private_info, settings: { ...settings, viewsMigrated: true } },
+          patch: { settings: { ...settings, viewsMigrated: true } },
         },
         {
           onError: err =>

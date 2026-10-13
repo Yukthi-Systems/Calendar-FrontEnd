@@ -1,7 +1,7 @@
-import { useAtom } from 'jotai';
 import { Text, View } from 'react-native';
 import { Check, Monitor, Moon, Sun } from 'lucide-react-native';
-import { themeAtom, type ThemeMode } from '../../atoms/theme';
+import type { ThemeMode } from '../../atoms/theme';
+import { useSetTheme, useTheme } from '../../hooks/useUsers';
 import { PALETTES, type Palette } from '../../data/palettes';
 import { useResolvedTheme } from '../../hooks/useResolvedTheme';
 import { useThemeColors } from '../../hooks/useThemeColors';
@@ -31,7 +31,8 @@ export function ThemeModal({
   visible: boolean;
   onClose: () => void;
 }) {
-  const [settings, setSettings] = useAtom(themeAtom);
+  const settings = useTheme();
+  const setTheme = useSetTheme();
   const { dark } = useResolvedTheme();
 
   return (
@@ -47,7 +48,7 @@ export function ThemeModal({
           <SegmentedControl
             options={MODES}
             value={settings.mode}
-            onChange={mode => setSettings(s => ({ ...s, mode }))}
+            onChange={mode => setTheme({ ...settings, mode })}
           />
         </View>
 
@@ -59,7 +60,7 @@ export function ThemeModal({
               palette={p}
               dark={dark}
               active={settings.paletteKey === p.key}
-              onPress={() => setSettings(s => ({ ...s, paletteKey: p.key }))}
+              onPress={() => setTheme({ ...settings, paletteKey: p.key })}
             />
           ))}
         </View>

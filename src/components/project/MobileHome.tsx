@@ -4,7 +4,7 @@ import { useAtomValue } from 'jotai';
 import { endOfDay, format, parseISO, startOfDay } from 'date-fns';
 import { AlertCircle, CalendarClock, ChevronRight, Plus, Search } from 'lucide-react-native';
 import { itemsAtom } from '../../atoms/project';
-import { profileAtom } from '../../atoms/profile';
+import { useMyProfile } from '../../hooks/useUsers';
 import { VIEW_TYPES } from '../../data/constants';
 import { occurrencesInRange } from '../../data/recurrence';
 import type { ProjectView } from '../../data/types';
@@ -32,7 +32,7 @@ export function MobileHome({
   // so counting whatever's loaded would make this summary depend on prior
   // navigation rather than being a stable "today at a glance" figure.
   const items = useAtomValue(itemsAtom).filter(i => !i.parentId);
-  const profile = useAtomValue(profileAtom);
+  const profile = useMyProfile();
   const c = useThemeColors();
 
   const summary = useMemo(() => {

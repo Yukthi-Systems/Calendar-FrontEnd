@@ -16,7 +16,7 @@ import type {
 // view, not what it means to the backend — so they ride in the open-schema
 // `ui_info` JSON column instead.
 
-const VIEW_TYPES: ViewType[] = ['table', 'team', 'kanban', 'roadmap', 'calendar'];
+const VIEW_TYPES: ViewType[] = ['table', 'kanban', 'roadmap', 'calendar'];
 const isViewType = (v: unknown): v is ViewType =>
   typeof v === 'string' && (VIEW_TYPES as string[]).includes(v);
 

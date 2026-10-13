@@ -9,14 +9,15 @@ import {
   Plus,
   Search,
 } from 'lucide-react-native';
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { useAtom, useSetAtom } from 'jotai';
 import {
   activeViewIdAtom,
   itemFormAtom,
   searchOpenAtom,
   viewsAtom,
 } from '../../atoms/project';
-import { profileAtom, profileOpenAtom } from '../../atoms/profile';
+import { profileOpenAtom } from '../../atoms/profile';
+import { useMyProfile } from '../../hooks/useUsers';
 import { toast } from '../../atoms/feedback';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { useViewUrlSync } from '../../hooks/useViewUrlSync';
@@ -37,7 +38,6 @@ import { RoadmapView } from './RoadmapView';
 import { SearchModal } from './SearchModal';
 import { InitialsAvatar } from './shared';
 import { TableView } from './TableView';
-import { TeamPlanningView } from './TeamPlanningView';
 import { ViewModal, type ViewDraft } from './ViewModal';
 import { ShareViewModal } from './ShareViewModal';
 import { ViewMenuModal } from './ViewMenuModal';
@@ -50,7 +50,6 @@ const VIEW_COMPONENTS: Record<
   (props: { view: ProjectView }) => React.JSX.Element
 > = {
   table: TableView,
-  team: TeamPlanningView,
   kanban: KanbanView,
   roadmap: RoadmapView,
   calendar: CalendarView,
@@ -63,7 +62,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   const setSearchOpen = useSetAtom(searchOpenAtom);
   const [mobileHome, setMobileHome] = useState(true);
   const setProfileOpen = useSetAtom(profileOpenAtom);
-  const profile = useAtomValue(profileAtom);
+  const profile = useMyProfile();
   const { width } = useWindowDimensions();
   const c = useThemeColors();
   const [views, setViews] = useAtom(viewsAtom);

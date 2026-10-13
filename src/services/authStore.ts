@@ -7,6 +7,7 @@ import {
 } from './sso';
 import { apiLogout, fetchSession, refreshSession } from './auth';
 import { HttpError } from './apiClient';
+import { queryClient } from './queryClient';
 import {
   storage,
   sessionFlag,
@@ -104,6 +105,9 @@ const persistPayload = (payload: AuthPayload) => {
 };
 
 const clearSession = () => {
+  // Every cached server response (profile, people, views, tasks) belonged to this
+  // session — drop it so the next sign-in starts from the server, not from them.
+  queryClient.clear();
   store.set(tokenAtom, null);
   store.set(refreshTokenAtom, null);
   store.set(userAtom, null);

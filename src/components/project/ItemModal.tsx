@@ -51,7 +51,7 @@ import {
   DueDate,
   PriorityBadge,
   StatusIcon,
-  assigneeNames,
+  AssigneeNames,
 } from './shared';
 
 // Detail sheet for any work item, opened from every view.
@@ -247,9 +247,10 @@ export function ItemModal() {
               <Property label="Assignees">
                 <View className="flex-1 flex-row items-center gap-2">
                   <AssigneeAvatars ids={item.assigneeIds} size={22} max={5} />
-                  <Text numberOfLines={1} className="flex-1 text-sm text-text-heading">
-                    {assigneeNames(item.assigneeIds)}
-                  </Text>
+                  <AssigneeNames
+                    ids={item.assigneeIds}
+                    className="flex-1 text-sm text-text-heading"
+                  />
                 </View>
               </Property>
               <Property label="Dates">

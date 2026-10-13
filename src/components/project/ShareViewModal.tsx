@@ -4,7 +4,6 @@ import { CircleCheck, Search } from 'lucide-react-native';
 import { useAtomValue } from 'jotai';
 import { tokenAtom } from '../../atoms/auth';
 import { currentUserIdAtom } from '../../atoms/members';
-import { directoryAtom } from '../../atoms/userInfo';
 import { createSharedTaskView } from '../../services/views';
 import { withAuthRetry } from '../../services/authRetry';
 import { useThemeColors } from '../../hooks/useThemeColors';
@@ -22,9 +21,8 @@ import {
   SheetHeader,
 } from '../ui';
 import { InitialsAvatar } from './shared';
-import { useUserSearch } from '../../hooks/useUserSearch';
+import { useUserSearch, type Person } from '../../hooks/useUsers';
 import type { ProjectView } from '../../data/types';
-import type { UserSearchResult } from '../../services/types';
 
 // Shares one of the caller's own views with a colleague (POST /shared/create) —
 // opened from ViewModal's Share button. Picking a colleague searches GET
@@ -41,11 +39,10 @@ export function ShareViewModal({
 }) {
   const token = useAtomValue(tokenAtom);
   const currentUserId = useAtomValue(currentUserIdAtom);
-  const directory = useAtomValue(directoryAtom);
   const c = useThemeColors();
 
   const [query, setQuery] = useState('');
-  const [picked, setPicked] = useState<UserSearchResult | null>(null);
+  const [picked, setPicked] = useState<Person | null>(null);
   const [notes, setNotes] = useState('');
   const [canCreate, setCanCreate] = useState(false);
   const [canEdit, setCanEdit] = useState(false);
@@ -53,7 +50,7 @@ export function ShareViewModal({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
-  useUserSearch(query);
+  const { people: searchHits, isSearching } = useUserSearch(query);
 
   const reset = () => {
     setQuery('');
@@ -77,11 +74,8 @@ export function ShareViewModal({
     setPicked(null);
   };
 
-  const matches = directory.filter(
-    u =>
-      u.user_id !== currentUserId &&
-      u.email.toLowerCase().includes(query.trim().toLowerCase()),
-  );
+  // GET /user/search hits for what's typed, minus yourself.
+  const matches = searchHits.filter(u => u.id !== currentUserId);
 
   const share = async () => {
     if (!token || !view || !picked) {
@@ -93,7 +87,7 @@ export function ShareViewModal({
       await withAuthRetry(token, t =>
         createSharedTaskView(t, {
           view_id: Number(view.id),
-          user_id: picked.user_id,
+          user_id: picked.id,
           share_notes: notes.trim(),
           ui_info: {},
           can_create: canCreate,
@@ -102,7 +96,7 @@ export function ShareViewModal({
         }),
       );
       setDone(true);
-      toast.success(`Shared with ${picked.email}`);
+      toast.success(`Shared with ${picked.name}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not share the view');
     } finally {
@@ -132,8 +126,10 @@ export function ShareViewModal({
           <Field label="Colleague">
             {picked ? (
               <View className="h-10 flex-row items-center gap-2.5 rounded-lg border border-accent/50 bg-accent-soft px-3">
-                <InitialsAvatar color={c.accent} initials={picked.email[0]?.toUpperCase() ?? '?'} size={22} />
-                <Text numberOfLines={1} className="flex-1 text-sm text-text-heading">{picked.email}</Text>
+                <InitialsAvatar color={picked.color} initials={picked.initials} size={22} />
+                <Text numberOfLines={1} className="flex-1 text-sm text-text-heading">
+                  {picked.name} <Text className="text-text-subtle">· {picked.email}</Text>
+                </Text>
                 <Button size="sm" variant="ghost" onPress={() => setPicked(null)}>Change</Button>
               </View>
             ) : (
@@ -151,20 +147,27 @@ export function ShareViewModal({
               <View className="mt-1.5 overflow-hidden rounded-lg border border-border-main bg-bg-card">
                 {matches.length === 0 ? (
                   <Text className="px-3 py-3 text-sm text-text-subtle">
-                    No matches yet — keep typing, or they may not be in this organization.
+                    {isSearching
+                      ? 'Searching…'
+                      : 'No one found — they may not be in your organization.'}
                   </Text>
                 ) : (
                   <ScrollView className="max-h-44">
                     {matches.map(u => (
                       <Press
-                        key={u.user_id}
+                        key={u.id}
                         feedback="none"
                         accessibilityRole="button"
                         onPress={() => setPicked(u)}
                         className="flex-row items-center gap-2.5 px-3 py-2 hover:bg-hover"
                       >
-                        <InitialsAvatar color={c.borderStrong} initials={u.email[0]?.toUpperCase() ?? '?'} size={22} />
-                        <Text className="text-sm text-text-heading">{u.email}</Text>
+                        <InitialsAvatar color={u.color} initials={u.initials} size={24} />
+                        <View className="flex-1">
+                          <Text className="text-sm text-text-heading">{u.name}</Text>
+                          <Text numberOfLines={1} className="text-xs text-text-subtle">
+                            {u.email}
+                          </Text>
+                        </View>
                       </Press>
                     ))}
                   </ScrollView>

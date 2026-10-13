@@ -23,7 +23,7 @@ import type { TaskInfoDto } from '../services/types';
 // KanbanView) — independent of useTasksSync, which only owns the list query (see
 // its header comment for why they're split).
 //
-// Unlike this session's other write hooks (useViewsSync, useUpdateUserInfo), these
+// Unlike useViewsSync (still to be reworked — docs/BACKEND.md chunk B), these
 // never touch itemsAtom until the server has actually confirmed the write — and
 // if a write can't be reached or is refused, the relevant function throws instead
 // of keeping a local copy. A task only ever exists here because the server said

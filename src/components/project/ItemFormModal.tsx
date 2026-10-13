@@ -15,8 +15,8 @@ import {
   selectedItemIdAtom,
 } from '../../atoms/project';
 import { PRIORITY_COLOR, STATUSES, TAGS } from '../../data/constants';
-import { currentUserIdAtom, membersAtom } from '../../atoms/members';
-import { useUserSearch } from '../../hooks/useUserSearch';
+import { currentUserIdAtom } from '../../atoms/members';
+import { useMyProfile, usePeople, useUserSearch, type Person } from '../../hooks/useUsers';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
 import { yearlyRecurrenceNeedsLeapWarning } from '../../data/recurrence';
 import {
@@ -71,11 +71,11 @@ export function ItemFormModal() {
   const [form, setForm] = useAtom(itemFormAtom);
   const items = useAtomValue(itemsAtom);
   const CURRENT_USER_ID = useAtomValue(currentUserIdAtom);
-  const MEMBERS = useAtomValue(membersAtom);
-  // Org-wide email search; hits join the assignee options above (membersAtom reads
-  // the same directoryAtom this populates).
+  // Assignee options: whoever is already picked (resolved by id) plus the current
+  // org email-search hits — nothing accumulated between searches.
   const [assigneeQuery, setAssigneeQuery] = useState('');
-  useUserSearch(assigneeQuery);
+  const { people: searchHits } = useUserSearch(assigneeQuery);
+  const me = useMyProfile();
   const setSelected = useSetAtom(selectedItemIdAtom);
   const {
     addItem,
@@ -101,6 +101,12 @@ export function ItemFormModal() {
   const [priority, setPriority] = useState<Priority>('medium');
   const [tag, setTag] = useState<TaskTag>('other');
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
+  const selectedPeople = usePeople(assigneeIds);
+  const pickablePeople: Person[] = [
+    ...new Map(
+      [me, ...selectedPeople.values(), ...searchHits].map(p => [p.id, p] as const),
+    ).values(),
+  ];
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
   const [labels, setLabels] = useState('');
@@ -463,11 +469,12 @@ export function ItemFormModal() {
         >
           <MultiSelectDropdown
             label="Assignees"
-            options={MEMBERS.filter(
+            options={pickablePeople.filter(
               m => !isServerBacked || m.id !== CURRENT_USER_ID,
             ).map(m => ({
               id: m.id,
               label: m.name,
+              hint: m.email,
               color: m.color,
               locked: !isServerBacked && m.id === CURRENT_USER_ID,
               lockedLabel: 'You',

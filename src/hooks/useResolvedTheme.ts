@@ -1,6 +1,5 @@
 import { useColorScheme } from 'react-native';
-import { useAtomValue } from 'jotai';
-import { themeAtom } from '../atoms/theme';
+import { useTheme } from './useUsers';
 import { paletteByKey, type Palette } from '../data/palettes';
 
 // Resolves the user's theme setting ('light' | 'dark' | 'system') against the
@@ -8,7 +7,7 @@ import { paletteByKey, type Palette } from '../data/palettes';
 // NativeWind vars (ThemeRoot) and the raw-hex hooks (useThemeColors) read from,
 // so they can never disagree.
 export function useResolvedTheme(): { dark: boolean; palette: Palette } {
-  const { mode, paletteKey } = useAtomValue(themeAtom);
+  const { mode, paletteKey } = useTheme();
   const system = useColorScheme();
   const dark = mode === 'system' ? system === 'dark' : mode === 'dark';
   return { dark, palette: paletteByKey(paletteKey) };

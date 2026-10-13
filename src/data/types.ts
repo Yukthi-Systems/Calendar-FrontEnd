@@ -5,7 +5,7 @@ export type Status =
   | 'rejected'
   | 'on_hold';
 export type Priority = 'low' | 'medium' | 'high';
-export type ViewType = 'table' | 'team' | 'kanban' | 'roadmap' | 'calendar';
+export type ViewType = 'table' | 'kanban' | 'roadmap' | 'calendar';
 
 // Mirrors Tasks-Main-API's task_tag enum — every task will need one once /tasks is
 // integrated, and a view can restrict itself to a subset (src/data/constants.ts
@@ -32,16 +32,6 @@ export interface Reminder {
   offsetDays: number;
   // 'HH:mm', 24-hour.
   time: string;
-}
-
-export interface Member {
-  id: string;
-  name: string;
-  initials: string;
-  color: string;
-  role: string;
-  // Max number of items this person can carry at once, for the workload bar.
-  capacity: number;
 }
 
 export interface WorkItem {

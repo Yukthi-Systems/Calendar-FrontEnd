@@ -3,7 +3,6 @@ import {
   Columns3,
   Map as MapIcon,
   Table2,
-  Users,
   type LucideIcon,
 } from 'lucide-react-native';
 import type { Priority, Status, TaskTag, ViewType } from './types';
@@ -96,12 +95,6 @@ export const VIEW_TYPES: {
     label: 'Table',
     icon: Table2,
     blurb: 'Sortable spreadsheet of all items',
-  },
-  {
-    key: 'team',
-    label: 'Team planning',
-    icon: Users,
-    blurb: 'Workload per person, week by week',
   },
   {
     key: 'kanban',

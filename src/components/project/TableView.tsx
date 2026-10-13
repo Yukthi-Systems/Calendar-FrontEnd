@@ -24,6 +24,7 @@ import { useTaskMutations } from '../../hooks/useTaskMutations';
 import { errorMessage, toast } from '../../atoms/feedback';
 import type { ProjectView, WorkItem } from '../../data/types';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { usePeople, type Person } from '../../hooks/useUsers';
 import { Button, EmptyState, Press, Skeleton } from '../ui';
 import {
   AssigneeAvatars,
@@ -32,7 +33,7 @@ import {
   RecurrenceIcon,
   StatusBadge,
   SubtaskBadge,
-  assigneeNames,
+  namesOf,
 } from './shared';
 
 type SortKey =
@@ -64,14 +65,18 @@ const COLUMNS: { key: SortKey; label: string; width?: number }[] = [
   { key: 'end', label: 'Due', width: 88 },
 ];
 
-const sortValue = (i: WorkItem, key: SortKey): string | number => {
+const sortValue = (
+  i: WorkItem,
+  key: SortKey,
+  people: Map<string, Person>,
+): string | number => {
   switch (key) {
     case 'status':
       return STATUS_RANK[i.status] ?? 0;
     case 'priority':
       return PRIORITY_RANK[i.priority];
     case 'assignee':
-      return assigneeNames(i.assigneeIds);
+      return namesOf(i.assigneeIds, people);
     default:
       return i[key];
   }
@@ -83,6 +88,7 @@ const cellStyle = (width?: number) =>
 
 export function TableView({ view }: { view: ProjectView }) {
   const items = useAtomValue(itemsAtom);
+  const people = usePeople(items.flatMap(i => i.assigneeIds));
   const loading = useAtomValue(tasksLoadingAtom);
   const setForm = useSetAtom(itemFormAtom);
   const columns = COLUMNS.filter(
@@ -104,8 +110,8 @@ export function TableView({ view }: { view: ProjectView }) {
 
   // Sorting applies among siblings, so subtasks stay under their parent.
   const sorted = [...items].sort((a, b) => {
-    const x = sortValue(a, sort.key);
-    const y = sortValue(b, sort.key);
+    const x = sortValue(a, sort.key, people);
+    const y = sortValue(b, sort.key, people);
     return (x < y ? -1 : x > y ? 1 : 0) * sort.dir;
   });
   const rows = flattenTree(sorted, collapsed);

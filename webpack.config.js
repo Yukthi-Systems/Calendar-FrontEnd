@@ -102,7 +102,7 @@ module.exports = (_env, argv) => {
       }),
     ],
     devServer: {
-      port: 5174,
+      port: 5173,
       host: '0.0.0.0',
       // Dev-only: lets the server be reached by hostname/IP other than localhost
       // (proxy, tunnel, LAN device) without webpack-dev-server's Host-header check
