@@ -7,7 +7,6 @@ import { commentsAtom } from '../../atoms/project';
 import { useMyProfile } from '../../hooks/useUsers';
 import { currentUserIdAtom } from '../../atoms/members';
 import { toast } from '../../atoms/feedback';
-import { canDeleteComment, canEditComment } from '../../data/permissions';
 import type { Comment } from '../../data/types';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { Button, IconButton, Input } from '../ui';
@@ -19,7 +18,7 @@ const HOVER_REVEAL = 'reveal-on-hover';
 // A comment thread for one task or subtask — filtered by `itemId`, so it works
 // unchanged for both; each item's comments are its own, regardless of depth.
 // Sorted oldest first; editing/deleting a comment is restricted to whoever
-// posted it (src/data/permissions.ts).
+// posted it.
 export function CommentsSection({ itemId }: { itemId: string }) {
   const [comments, setComments] = useAtom(commentsAtom);
   const profile = useMyProfile();
@@ -101,7 +100,9 @@ export function CommentsSection({ itemId }: { itemId: string }) {
 
       <View className="gap-4">
         {thread.map(x => {
-          const mine = canEditComment(x, CURRENT_USER_ID);
+          // Comments are device-only until the backend has /comments (docs/BACKEND.md
+          // §8); only the author edits or deletes their own.
+          const mine = x.authorId === CURRENT_USER_ID;
           const isEditing = editingId === x.id;
           return (
             <View key={x.id} className="group flex-row gap-2.5">
@@ -118,7 +119,7 @@ export function CommentsSection({ itemId }: { itemId: string }) {
                   {mine && !isEditing ? (
                     <View className={`flex-row ${HOVER_REVEAL}`}>
                       <IconButton icon={Pencil} size="sm" label="Edit comment" onPress={() => startEdit(x)} />
-                      {canDeleteComment(x, CURRENT_USER_ID) ? (
+                      {mine ? (
                         <IconButton
                           icon={Trash2}
                           size="sm"

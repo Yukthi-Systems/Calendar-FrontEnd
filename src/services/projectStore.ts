@@ -1,15 +1,10 @@
 import { atom, getDefaultStore } from 'jotai';
-import {
-  activeViewIdAtom,
-  commentsAtom,
-  projectHydratedAtom,
-  viewsAtom,
-} from '../atoms/project';
+import { commentsAtom, projectHydratedAtom } from '../atoms/project';
 import { storage } from './runtime';
 
-// Local persistence for the project workspace (views, comments, active tab) —
-// all of it slated for removal (docs/BACKEND.md chunks B and D). Profile and theme
-// already moved to the server (src/hooks/useUsers.ts). Ported from authStore.ts's session pattern: hydrate the atoms
+// Local persistence for task comments only — slated for removal once the backend
+// has /comments (docs/BACKEND.md chunk D). Profile, theme and views already come
+// from the server (src/hooks/useUsers.ts, useViews.ts). Ported from authStore.ts's session pattern: hydrate the atoms
 // from storage once at boot, then keep storage in step with every change.
 //
 // Tasks are deliberately NOT part of this — they're never written to local
@@ -21,8 +16,7 @@ import { storage } from './runtime';
 // useTaskMutations.ts). When the server is unavailable, a task action fails
 // visibly instead of quietly succeeding into a local-only copy.
 //
-// Comments/views still stay on-device — Tasks-Main-API has no /comments endpoint
-// yet, and views are synced but keep a local cache for instant load.
+// Comments still stay on-device — Tasks-Main-API has no /comments endpoint yet.
 
 const store = getDefaultStore();
 
@@ -35,8 +29,6 @@ const store = getDefaultStore();
 const PROJECT_KEY = 'ytc_project_v4';
 
 const persistedProjectAtom = atom(get => ({
-  views: get(viewsAtom),
-  activeViewId: get(activeViewIdAtom),
   comments: get(commentsAtom),
 }));
 
@@ -74,20 +66,8 @@ function applySaved(saved: unknown) {
     return;
   }
   const s = saved as Record<string, unknown>;
-  if (Array.isArray(s.views) && s.views.length > 0) {
-    store.set(viewsAtom, s.views);
-  }
   if (Array.isArray(s.comments)) {
     store.set(commentsAtom, s.comments);
-  }
-  if (typeof s.activeViewId === 'string') {
-    const views = store.get(viewsAtom);
-    store.set(
-      activeViewIdAtom,
-      views.some(v => v.id === s.activeViewId)
-        ? s.activeViewId
-        : views[0]?.id ?? '',
-    );
   }
 }
 

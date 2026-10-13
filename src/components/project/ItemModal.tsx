@@ -18,9 +18,7 @@ import {
   selectedItemIdAtom,
 } from '../../atoms/project';
 import { STATUSES, tagInfo } from '../../data/constants';
-import { currentUserIdAtom } from '../../atoms/members';
 import { confirm, errorMessage, toast } from '../../atoms/feedback';
-import { canDelete, canEditFields, roleFor } from '../../data/permissions';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
 import { isServerTaskId } from '../../data/taskSync';
 import { describeRecurrence } from '../../data/rrule';
@@ -31,6 +29,7 @@ import {
   depthOf,
   descendantsOf,
   flattenTree,
+  hasSubtasks,
   subtaskProgress,
 } from '../../data/tree';
 import { useThemeColors } from '../../hooks/useThemeColors';
@@ -58,7 +57,6 @@ import {
 export function ItemModal() {
   const [selectedId, setSelectedId] = useAtom(selectedItemIdAtom);
   const items = useAtomValue(itemsAtom);
-  const CURRENT_USER_ID = useAtomValue(currentUserIdAtom);
   const setForm = useSetAtom(itemFormAtom);
   const { editItem, removeItem, loadSubtree, isServerBacked, unavailableReason } =
     useTaskMutations();
@@ -67,18 +65,16 @@ export function ItemModal() {
   const close = () => setSelectedId(null);
   const open = (id: string) => setSelectedId(id);
 
-  // Subtasks load lazily (see useTasksSync's header comment) — a server-backed
-  // task's full nested subtree is fetched here, on open, rather than up front
-  // for the whole view. Local-only tasks already have everything in itemsAtom,
-  // so loadSubtree is a no-op for them.
+  // Subtasks load lazily, on open — and only when the server says this task has
+  // any (total_sub_tasks > 0), so opening a leaf task costs no request.
   const [loadingSubtasks, setLoadingSubtasks] = useState(false);
   useEffect(() => {
-    if (!item || !isServerTaskId(item.id)) {
+    if (!item || !isServerTaskId(item.id) || !hasSubtasks(item)) {
       return;
     }
     let active = true;
     setLoadingSubtasks(true);
-    loadSubtree(item.id)
+    loadSubtree(item)
       .catch(err =>
         toast.error('Couldn’t load subtasks', {
           description: errorMessage(err, 'Please try again.'),
@@ -100,11 +96,9 @@ export function ItemModal() {
   const subtasks = item ? flattenTree(descendantsOf(items, item.id)) : [];
   const progress = item ? subtaskProgress(items, item) : null;
   const canAdd = item ? canAddSubtask(items, item) : false;
-  // An assignee who isn't also the creator is limited to status, comments and
-  // subtasks — Edit/Delete simply aren't offered to them.
-  const role = item ? roleFor(item, CURRENT_USER_ID) : 'other';
-  const editable = item ? canEditFields(item, CURRENT_USER_ID) : false;
-  const deletable = item ? canDelete(item, CURRENT_USER_ID) : false;
+  // Edit/Delete are always offered: the server decides (owner/creator + the
+  // view's permissions) and its refusal is shown as a toast. The client has no
+  // copy of those rules — docs/BACKEND.md §4.
 
   const setStatus = (status: (typeof STATUSES)[number]['key']) => {
     if (!item || item.status === status) {
@@ -185,24 +179,20 @@ export function ItemModal() {
             }
             actions={
               <>
-                {editable ? (
-                  <IconButton
-                    icon={Pencil}
-                    label="Edit task"
-                    onPress={() => {
-                      setForm({ mode: 'edit', id: item.id });
-                      close();
-                    }}
-                  />
-                ) : null}
-                {deletable ? (
-                  <IconButton
-                    icon={Trash2}
-                    label="Delete task"
-                    color={c.destructive}
-                    onPress={remove}
-                  />
-                ) : null}
+                <IconButton
+                  icon={Pencil}
+                  label="Edit task"
+                  onPress={() => {
+                    setForm({ mode: 'edit', id: item.id });
+                    close();
+                  }}
+                />
+                <IconButton
+                  icon={Trash2}
+                  label="Delete task"
+                  color={c.destructive}
+                  onPress={remove}
+                />
               </>
             }
           />
@@ -214,14 +204,6 @@ export function ItemModal() {
             {!isServerBacked && unavailableReason ? (
               <View className="mb-4">
                 <Callout kind="warning">{unavailableReason}</Callout>
-              </View>
-            ) : null}
-            {role === 'assignee' ? (
-              <View className="mb-4">
-                <Callout kind="info">
-                  You’re assigned to this task — you can comment, change its status
-                  and manage subtasks. Only its creator can edit details or delete it.
-                </Callout>
               </View>
             ) : null}
 
@@ -287,15 +269,6 @@ export function ItemModal() {
                         )
                         .join(' · ')}
                     </Text>
-                  </View>
-                </Property>
-              ) : null}
-              {item.labels.length > 0 ? (
-                <Property label="Labels">
-                  <View className="flex-row flex-wrap gap-1">
-                    {item.labels.map(l => (
-                      <Badge key={l} label={l} />
-                    ))}
                   </View>
                 </Property>
               ) : null}

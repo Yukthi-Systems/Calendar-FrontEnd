@@ -14,7 +14,7 @@ import type {
 } from '../services/types';
 
 // Converts between this app's WorkItem and Tasks-Main-API's `tasks` row. The API
-// has no columns for priority/labels/recurrence/reminders — only title,
+// has no columns for priority/recurrence/reminders — only title,
 // description, status, tag and the start/end dates are real columns — so those
 // ride in the open-schema `details` JSON, the same trick src/data/viewSync.ts uses
 // for a view's `ui_info`.
@@ -37,7 +37,6 @@ const fromTimestamp = (ts: string) => ts.slice(0, 10);
 
 interface TaskDetails {
   priority?: Priority;
-  labels?: string[];
   recurrence?: string | null;
   reminders?: Reminder[];
 }
@@ -61,18 +60,29 @@ export function taskFromServer(dto: TaskInfoDto): WorkItem {
     totalSubtasks: dto.total_sub_tasks,
     start: fromTimestamp(dto.start_at),
     end: fromTimestamp(dto.end_at),
-    labels: details.labels ?? [],
     recurrence: details.recurrence ?? null,
-    reminders: details.reminders ?? [],
+    // Stored without ids; give each a row key for the form's list.
+    reminders: (details.reminders ?? []).map((r, i) => ({
+      id: `rem-${dto.task_id}-${i}`,
+      offsetDays: r.offsetDays,
+      time: r.time,
+    })),
   };
 }
 
-type DetailFields = Pick<WorkItem, 'priority' | 'labels' | 'recurrence' | 'reminders'>;
+type DetailFields = Pick<WorkItem, 'priority' | 'recurrence' | 'reminders'>;
+
+// `details` (JSONB) carries only what the tasks table has no column for, and only
+// when set — every core field (title, description, status, tag, dates, parent)
+// is a top-level column. Contract (read back in taskFromServer):
+//   { priority?: 'low'|'medium'|'high',
+//     recurrence?: RRULE string, reminders?: { offsetDays, time }[] }
 const detailsPayload = (item: DetailFields): Record<string, unknown> => ({
-  priority: item.priority,
-  labels: item.labels,
-  recurrence: item.recurrence,
-  reminders: item.reminders,
+  ...(item.priority && item.priority !== 'medium' ? { priority: item.priority } : null),
+  ...(item.recurrence ? { recurrence: item.recurrence } : null),
+  ...(item.reminders.length
+    ? { reminders: item.reminders.map(r => ({ offsetDays: r.offsetDays, time: r.time })) }
+    : null),
 });
 
 export function taskToCreatePayload(

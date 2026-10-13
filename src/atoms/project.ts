@@ -1,11 +1,10 @@
 import { atom } from 'jotai';
-import { DEFAULT_VIEWS } from '../data/defaultViews';
-import type { Comment, ProjectView, Status, WorkItem } from '../data/types';
+import type { Comment, Status, WorkItem } from '../data/types';
 
-// Start empty; src/services/projectStore.ts fills these from local storage. The
-// Tasks-Main-API has no task/comment/view endpoints yet, so they stay on-device.
-export const viewsAtom = atom<ProjectView[]>(DEFAULT_VIEWS);
-export const activeViewIdAtom = atom<string>(DEFAULT_VIEWS[0].id);
+// Views themselves come from the server (src/hooks/useViews.ts). This is only
+// which one is selected — UI state, mirrored in the URL on web, never stored.
+// '' = none chosen yet → the first view.
+export const activeViewIdAtom = atom<string>('');
 export const itemsAtom = atom<WorkItem[]>([]);
 export const selectedItemIdAtom = atom<string | null>(null);
 export const searchOpenAtom = atom(false);

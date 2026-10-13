@@ -48,7 +48,7 @@ export interface WorkItem {
   // itself — see ItemFormModal.
   assigneeIds: string[];
   // Whoever opened this task — the only one who can delete it. A member id
-  // (see src/data/permissions.ts for how roles/permissions read this).
+  // (the server enforces what each role may do — docs/BACKEND.md §4).
   createdById: string;
   // Parent task; null for top-level. Nesting is limited to MAX_DEPTH levels.
   parentId: string | null;
@@ -60,7 +60,6 @@ export interface WorkItem {
   // yyyy-MM-dd
   start: string;
   end: string;
-  labels: string[];
   // null/[] are the common case — most tasks don't repeat or have reminders.
   recurrence: string | null;
   reminders: Reminder[];
@@ -77,14 +76,19 @@ export type ViewField =
   | 'end';
 
 export interface ProjectView {
+  // The server's view_id (numeric string) — every view is a Tasks-Main-API row.
   id: string;
+  // Who owns it; `shared` = someone else shared it with me (GET /views/list/true),
+  // so only its owner can edit, delete or share it.
+  ownerId: string;
+  shared: boolean;
   name: string;
   type: ViewType;
   description?: string;
   fields?: ViewField[];
-  // Mirrors Tasks-Main-API's task_views row (status_filter/show_*) so a view is
-  // ready to actually filter once the /tasks API exists — inert until then.
-  // Empty/undefined statusFilter/tagFilter means "every status"/"every tag".
+  // Tasks-Main-API's task_views filters. The server enforces them on every task
+  // call made through this view. Empty/undefined = every status / every tag.
+  // showSubtasks off ⇒ the server refuses subtask list/create/edit in this view.
   statusFilter?: Status[];
   tagFilter?: TaskTag[];
   showRecurring?: boolean;
@@ -101,7 +105,7 @@ export interface Comment {
   id: string;
   itemId: string;
   // Who posted it, for edit/delete permission checks — only this id may
-  // change or remove the comment (see src/data/permissions.ts).
+  // change or remove the comment.
   authorId: string;
   authorName: string;
   authorInitials: string;

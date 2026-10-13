@@ -1,15 +1,14 @@
 import { Text, View } from 'react-native';
-import { Pencil, Share2, Trash2 } from 'lucide-react-native';
-import { isServerViewId } from '../../data/viewSync';
+import { Pencil, Trash2, Users } from 'lucide-react-native';
 import { VIEW_TYPES } from '../../data/constants';
 import type { ProjectView } from '../../data/types';
+import { usePerson } from '../../hooks/useUsers';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { MenuItem, MenuSeparator, Sheet } from '../ui';
 
-// The "⋯" action sheet on a view: Share / Edit / Delete, each doing its thing
-// directly — no intermediate step through the full edit form. Tapping Edit still
-// opens ViewModal (editing is a whole form, not a one-tap action); Share and
-// Delete happen right from here (Delete is undoable from the toast).
+// The "⋯" action sheet on a view. My views: Share & access / Edit / Delete.
+// Views shared with me: who shared it — only the owner can change or share it
+// (the server refuses everything else), so no actions are offered.
 export function ViewMenuModal({
   visible,
   view,
@@ -26,9 +25,7 @@ export function ViewMenuModal({
   onDelete: (view: ProjectView) => void;
 }) {
   const c = useThemeColors();
-  // A view made while signed out (or not yet pushed to the server) has no row to
-  // share — sharing only makes sense once it's actually a server-backed view.
-  const canShare = !!view && isServerViewId(view.id);
+  const owner = usePerson(view?.shared ? view.ownerId : null);
   const type = VIEW_TYPES.find(t => t.key === view?.type);
   const Icon = type?.icon;
 
@@ -44,21 +41,35 @@ export function ViewMenuModal({
               <Text numberOfLines={1} className="text-sm font-semibold text-text-heading">
                 {view.name}
               </Text>
-              <Text className="text-xs text-text-subtle">{type?.label} view</Text>
+              <Text className="text-xs text-text-subtle">
+                {type?.label} view
+                {view.shared && owner ? ` · shared by ${owner.name}` : ''}
+              </Text>
             </View>
           </View>
           <MenuSeparator />
-          {canShare ? (
-            <MenuItem icon={Share2} label="Share" onPress={() => onShare(view)} />
-          ) : null}
-          <MenuItem icon={Pencil} label="Edit view" onPress={() => onEdit(view)} />
-          <MenuSeparator />
-          <MenuItem
-            icon={Trash2}
-            label="Delete view"
-            destructive
-            onPress={() => onDelete(view)}
-          />
+          {view.shared ? (
+            <Text className="px-2.5 py-2 text-sm text-text-main">
+              Only {owner?.name ?? 'the owner'} can edit, delete or share this view.
+            </Text>
+          ) : (
+            <>
+              <MenuItem
+                icon={Users}
+                label="Share & access"
+                description="Who can see this view"
+                onPress={() => onShare(view)}
+              />
+              <MenuItem icon={Pencil} label="Edit view" onPress={() => onEdit(view)} />
+              <MenuSeparator />
+              <MenuItem
+                icon={Trash2}
+                label="Delete view"
+                destructive
+                onPress={() => onDelete(view)}
+              />
+            </>
+          )}
         </View>
       ) : null}
     </Sheet>

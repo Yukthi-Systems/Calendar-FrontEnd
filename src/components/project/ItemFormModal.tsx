@@ -80,8 +80,6 @@ export function ItemFormModal() {
   const {
     addItem,
     editItem,
-    assignUser,
-    unassignUser,
     isServerBacked,
     unavailableReason,
   } = useTaskMutations();
@@ -109,7 +107,6 @@ export function ItemFormModal() {
   ];
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
-  const [labels, setLabels] = useState('');
   // Stored as an RRULE string. Presets set it directly; "Custom" edits the raw text.
   const [recurrence, setRecurrence] = useState<string | null>(null);
   const [customRule, setCustomRule] = useState(false);
@@ -125,16 +122,16 @@ export function ItemFormModal() {
   const [moreOpen, setMoreOpen] = useState(false);
   const c = useThemeColors();
 
-  // Server-backed: both adding and removing go through their own API call (see
-  // useTaskMutations.ts's assignUser/unassignUser), fired once the task itself
-  // has saved — so freely toggle here, and let Save reconcile the difference
+  // Server-backed: adding and removing are their own API calls
+  // (POST /assignees/create, DELETE /assignees/remove), sent by addItem/editItem
+  // right after the task itself saves — so freely toggle here, and let Save reconcile the difference
   // against what the task actually has. Nobody can touch their own assignment
   // either way (the server 403s a self-assign or self-remove), so the current
   // user is left out of the option list entirely below rather than offered and
   // then rejected.
   // Local-only (signed out, or the API unavailable): the old rule applies
   // instead — you can always add yourself, but never remove yourself, same as
-  // before any of this existed (see src/data/permissions.ts).
+  // before any of this existed.
   const confirmedAssigneeIds = isServerBacked ? editing?.assigneeIds ?? [] : [];
   const toggleAssignee = (id: string) =>
     setAssigneeIds(prev => {
@@ -173,7 +170,6 @@ export function ItemFormModal() {
         parent?.end ??
         format(addDays(presetStart ?? today, presetStart ? 0 : 2), DATE_FMT),
     );
-    setLabels(editing?.labels.join(', ') ?? '');
     const savedRule = migrateRecurrence(editing?.recurrence);
     setRecurrence(savedRule);
     setCustomRule(
@@ -185,8 +181,7 @@ export function ItemFormModal() {
     setAttempted(false);
     setMoreOpen(
       !!editing &&
-        (editing.labels.length > 0 ||
-          !!editing.recurrence ||
+        (!!editing.recurrence ||
           (editing.reminders ?? []).length > 0),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -299,55 +294,32 @@ export function ItemFormModal() {
       priority,
       tag,
       // Assignees are never part of the task's own payload — the API assigns/
-      // removes one person per call (syncAssignees below), separate from the
-      // task fields. Server-backed: keep whatever's already confirmed here;
+      // removes one person per call (`changes` below), separate from the task
+      // fields. Server-backed: keep whatever's already confirmed here;
       // local-only: assigneeIds IS the task's assignee list, same as before.
       assigneeIds: isServerBacked ? editing?.assigneeIds ?? [] : assigneeIds,
       start,
       end,
-      labels: labels
-        .split(',')
-        .map(l => l.trim())
-        .filter(Boolean),
       recurrence,
       reminders,
     };
-    // Best-effort, same as this form's other background follow-ups: the task
-    // itself already saved by the time this runs, so one failed assign/remove
-    // call is logged and skipped rather than undoing or blocking the rest.
-    const syncAssignees = async (taskId: string) => {
-      for (const id of toAssign) {
-        try {
-          await assignUser(taskId, id);
-        } catch (err) {
-          console.warn('Could not assign', id, 'to', taskId, err);
-        }
-      }
-      for (const id of toUnassign) {
-        try {
-          await unassignUser(taskId, id);
-        } catch (err) {
-          console.warn('Could not remove', id, 'from', taskId, err);
-        }
-      }
-    };
+    const changes = { add: toAssign, remove: toUnassign };
     setSaving(true);
     try {
-      if (editing) {
-        // createdById never changes via edit — who opened a task is fixed.
-        await editItem({ ...editing, ...fields });
-        await syncAssignees(editing.id);
-      } else {
-        const id = await addItem({
-          parentId: parent?.id ?? null,
-          ...fields,
-        });
-        // '' means it was created but can't be confirmed/shown yet (see
-        // addItem's own comment) — nothing to select or assign in that case.
-        if (id) {
-          setSelected(id);
-          await syncAssignees(id);
-        }
+      // Save, assign, then the list is re-read from the server (useTaskMutations).
+      const { failedAssignees } = editing
+        ? await editItem({ ...editing, ...fields }, changes)
+        : await addItem({ parentId: parent?.id ?? null, ...fields }, changes).then(r => {
+            setSelected(r.id);
+            return r;
+          });
+      if (failedAssignees.length > 0) {
+        toast.error(
+          `Saved, but ${failedAssignees.length} assignee change${
+            failedAssignees.length === 1 ? '' : 's'
+          } were refused`,
+          { description: 'You may not have permission to assign people on this task.' },
+        );
       }
       close();
       toast.success(editing ? 'Changes saved' : 'Task created');
@@ -526,11 +498,10 @@ export function ItemFormModal() {
             More options
           </Text>
           {!moreOpen &&
-          (labels.trim() || recurrence || reminders.length > 0) ? (
+          (recurrence || reminders.length > 0) ? (
             <Text className="text-xs text-text-subtle">
               ·{' '}
               {[
-                labels.trim() && 'labels',
                 recurrence && 'repeats',
                 reminders.length > 0 && 'reminders',
               ]
@@ -542,15 +513,6 @@ export function ItemFormModal() {
 
         {moreOpen ? (
           <View>
-            <Field label="Labels" hint="Comma-separated, e.g. frontend, bug">
-              <Input
-                value={labels}
-                onChangeText={setLabels}
-                placeholder="frontend, bug"
-                autoCapitalize="none"
-              />
-            </Field>
-
             <Field label="Repeats" error={show(errors.recurrence) ?? (customRule ? errors.recurrence : null)}>
               <View className="flex-row flex-wrap gap-1.5">
                 <Chip

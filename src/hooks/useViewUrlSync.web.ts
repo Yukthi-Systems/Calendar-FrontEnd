@@ -1,10 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { useAtom, useAtomValue } from 'jotai';
-import {
-  activeViewIdAtom,
-  projectHydratedAtom,
-  viewsAtom,
-} from '../atoms/project';
+import { useAtom } from 'jotai';
+import { activeViewIdAtom } from '../atoms/project';
+import { useViewList } from './useViews';
 
 const PARAM = 'view';
 
@@ -12,17 +9,14 @@ const PARAM = 'view';
 // sharing the link lands back on the same view, and Back/Forward move between
 // views already visited this session. Native counterpart: useViewUrlSync.native.ts.
 export function useViewUrlSync() {
-  const [views] = useAtom(viewsAtom);
-  const hydrated = useAtomValue(projectHydratedAtom);
+  const { views, ready } = useViewList();
   const [activeId, setActiveId] = useAtom(activeViewIdAtom);
   const appliedFromUrl = useRef(false);
 
-  // Once (per load): a `?view=` in the URL wins over whatever local storage
-  // restored — a deep link should go where it says, not where you left off.
-  // Waits for hydration so it's checking the real view list, not the mock
-  // seed the atoms start with before storage has been read.
+  // Once (per load): a `?view=` in the URL selects that view — after the server's
+  // view list has loaded, so it's checked against real views.
   useEffect(() => {
-    if (appliedFromUrl.current || !hydrated) {
+    if (appliedFromUrl.current || !ready) {
       return;
     }
     appliedFromUrl.current = true;
@@ -31,7 +25,7 @@ export function useViewUrlSync() {
       setActiveId(fromUrl);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hydrated]);
+  }, [ready]);
 
   // Keep the URL in step with the active tab (pushState, so Back/Forward work).
   useEffect(() => {

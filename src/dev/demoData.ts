@@ -3,6 +3,7 @@ import { addDays, format } from 'date-fns';
 import { itemsAtom } from '../atoms/project';
 import { queryClient } from '../services/queryClient';
 import { userKey } from '../hooks/useUsers';
+import { viewsKey } from '../hooks/useViews';
 import { currentUserIdAtom } from '../atoms/members';
 import type { Priority, Status, TaskTag, WorkItem } from '../data/types';
 
@@ -36,17 +37,17 @@ const SEEDS: Seed[] = [
   ['T-102', 'Audit current sign-up drop-off', 'completed', 'medium', 'work', -6, 3, ['demo-ana'], 'T-101'],
   ['T-103', 'Wireframes for new welcome screens', 'in_progress', 'high', 'work', -2, 5, ['demo-ana'], 'T-101'],
   ['T-104', 'Implement welcome carousel', 'not_started', 'medium', 'work', 3, 4, ['demo-kai'], 'T-101'],
-  ['T-105', 'Migrate task list endpoint to POST body', 'in_progress', 'high', 'urgent', -3, 6, ['demo-sam'], undefined, { labels: ['api', 'bug'] }],
+  ['T-105', 'Migrate task list endpoint to POST body', 'in_progress', 'high', 'urgent', -3, 6, ['demo-sam']],
   ['T-106', 'Calendar sync with Google', 'not_started', 'medium', 'important', 4, 10, ['demo-kai', 'demo-sam']],
   ['T-107', 'Weekly design review', 'not_started', 'low', 'work', 0, 0, ['me', 'demo-ana', 'demo-kai'], undefined, { recurrence: 'FREQ=WEEKLY;BYDAY=MO' }],
   ['T-108', 'Regression pass for release 2.4', 'on_hold', 'medium', 'work', -1, 3, ['demo-lea']],
-  ['T-109', 'Fix timezone bug in reminders', 'completed', 'high', 'urgent', -9, 2, ['demo-sam'], undefined, { labels: ['bug'] }],
+  ['T-109', 'Fix timezone bug in reminders', 'completed', 'high', 'urgent', -9, 2, ['demo-sam']],
   ['T-110', 'Dark mode contrast pass', 'in_progress', 'medium', 'work', -1, 4, ['me']],
   ['T-111', 'Drop legacy CSV export', 'rejected', 'low', 'optional', -12, 2, []],
   ['T-112', 'Accessibility audit (WCAG AA)', 'not_started', 'high', 'important', 6, 7, ['demo-lea', 'me']],
   ['T-113', 'Write release notes', 'not_started', 'low', 'work', 8, 1, []],
   ['T-114', 'Book team offsite venue', 'not_started', 'medium', 'personal', 1, 0, ['me']],
-  ['T-115', 'Performance budget for web bundle', 'not_started', 'medium', 'work', 10, 5, ['demo-kai'], undefined, { labels: ['perf'] }],
+  ['T-115', 'Performance budget for web bundle', 'not_started', 'medium', 'work', 10, 5, ['demo-kai']],
 ];
 
 export function seedDemoIfRequested() {
@@ -72,6 +73,30 @@ export function seedDemoIfRequested() {
     });
   }
 
+  // Sample views, in the same cache GET /views/list/* fills.
+  const view = (id: number, name: string, type: string) => ({
+    view_id: id,
+    owner_id: 'demo-me',
+    view_name: name,
+    description: '',
+    ui_info: { type },
+    status_filter: [],
+    task_tag_filter: [],
+    show_recurring: true,
+    show_comments: true,
+    show_subtasks: true,
+    show_assigned: true,
+  });
+  queryClient.setQueryData(viewsKey('mine'), [
+    view(9001, 'All tasks', 'table'),
+    view(9002, 'Board', 'kanban'),
+    view(9003, 'Calendar', 'calendar'),
+    view(9004, 'Roadmap', 'roadmap'),
+  ]);
+  queryClient.setQueryData(viewsKey('shared'), [
+    { ...view(9005, 'Design team', 'kanban'), owner_id: 'demo-ana' },
+  ]);
+
   const seed = () => {
     const me = store.get(currentUserIdAtom) || 'me';
     const today = new Date();
@@ -94,7 +119,6 @@ export function seedDemoIfRequested() {
         totalSubtasks: SEEDS.filter(s => s[8] === id).length,
         start: day(off),
         end: day(off + days),
-        labels: [],
         recurrence: null,
         reminders: [],
         ...extra,

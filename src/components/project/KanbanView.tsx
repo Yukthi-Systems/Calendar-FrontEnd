@@ -11,7 +11,7 @@ import {
   selectedItemIdAtom,
   tasksLoadingAtom,
 } from '../../atoms/project';
-import { STATUSES, statusInfo } from '../../data/constants';
+import { STATUSES, statusInfo, tagInfo } from '../../data/constants';
 import { errorMessage, toast } from '../../atoms/feedback';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
 import type { Status, WorkItem } from '../../data/types';
@@ -230,13 +230,7 @@ function KanbanCard({
           </Text>
         </View>
       ) : null}
-      {item.labels.length > 0 ? (
-        <View className="flex-row flex-wrap gap-1">
-          {item.labels.map(l => (
-            <Badge key={l} label={l} size="sm" />
-          ))}
-        </View>
-      ) : null}
+      <Badge label={tagInfo(item.tag).label} color={tagInfo(item.tag).color} size="sm" dot />
       <View className="mt-0.5 flex-row items-center gap-2.5">
         <AssigneeAvatars ids={item.assigneeIds} size={20} />
         <DueDate item={item} className="text-xs" />
