@@ -113,9 +113,14 @@ function buildColumns(
   );
 }
 
-// Timeline in tree order: each subtask sits under its parent, indented by level.
+// Timeline of top-level tasks. It used to also show subtasks indented under
+// their parent (flattenTree supports that), but subtasks load lazily now
+// (useTasksSync's header comment) — showing them here would mean the timeline's
+// contents depend on whatever happened to get fetched elsewhere (TableView's row
+// expand, or opening a task), rather than being complete on its own. Open a task
+// to see its subtasks until this view gets its own expand affordance.
 export function RoadmapView() {
-  const items = useAtomValue(itemsAtom);
+  const items = useAtomValue(itemsAtom).filter(i => !i.parentId);
   if (items.length === 0) {
     return <RoadmapEmpty />;
   }

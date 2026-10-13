@@ -3,7 +3,8 @@ import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { tokenAtom } from '../atoms/auth';
 import { activeViewIdAtom, commentsAtom, itemsAtom, viewsAtom } from '../atoms/project';
 import { createTask, deleteTask, updateTask, listTasks } from '../services/tasks';
-import { assignUserToTask } from '../services/taskAssignees';
+import { assignUserToTask, removeUserFromTask } from '../services/taskAssignees';
+import { drainPages } from './useTasksSync';
 import {
   buildTaskFilter,
   isServerTaskId,
@@ -11,7 +12,7 @@ import {
   taskToCreatePayload,
   taskToUpdatePayload,
 } from '../data/taskSync';
-import { descendantsOf } from '../data/tree';
+import { MAX_DEPTH, descendantsOf, hasSubtasks } from '../data/tree';
 import { isServerViewId } from '../data/viewSync';
 import { TASKS_API_ENABLED } from '../config/features';
 import { withAuthRetry } from '../services/authRetry';
@@ -89,6 +90,15 @@ export function useTaskMutations() {
         }),
       ),
   });
+  const unassignMutation = useMutation({
+    mutationFn: (args: { viewId: number; taskId: number; assigneeId: string }) =>
+      withAuthRetry(token, t =>
+        removeUserFromTask(t, args.viewId, {
+          task_id: args.taskId,
+          assignee_id: args.assigneeId,
+        }),
+      ),
+  });
 
   // Same key shape as useTasksSync's own query for this view — see its header
   // comment. Patching it (rather than invalidating) keeps it in step with
@@ -112,7 +122,7 @@ export function useTaskMutations() {
   };
 
   const addItem = async (
-    draft: Omit<WorkItem, 'id' | 'createdById'>,
+    draft: Omit<WorkItem, 'id' | 'createdById' | 'totalSubtasks'>,
   ): Promise<string> => {
     if (!canMutate || viewId === undefined || !activeView) {
       throw new Error(reasonUnavailable());
@@ -170,10 +180,14 @@ export function useTaskMutations() {
     patchTaskCache(prev => prev.filter(t => !gone.has(String(t.task_id))));
   };
 
-  // Adds one assignee to an existing task (POST /assignees/create/{view_id} —
-  // there's no bulk form, and no way to remove one once added; see
-  // services/taskAssignees.ts). Throws on self-assignment, on an org mismatch,
-  // or on the usual unavailable-right-now reasons, same as the other writes here.
+  // Adds/removes one assignee on an existing task (POST /assignees/create and
+  // DELETE /assignees/remove — no bulk form for either; see
+  // services/taskAssignees.ts). Assigning is the looser of the two (owner,
+  // creator or an existing assignee can do it); removing needs owner/creator.
+  // Neither accepts your own id — the server 403s a self-assign or
+  // self-remove before checking anything else. Both throw on failure, same as
+  // the other writes here, so a denied removal doesn't silently look like it
+  // worked.
   const assignUser = async (
     taskId: string,
     assigneeId: string,
@@ -202,11 +216,78 @@ export function useTaskMutations() {
     );
   };
 
+  const unassignUser = async (
+    taskId: string,
+    assigneeId: string,
+  ): Promise<void> => {
+    if (!canMutate || viewId === undefined || !isServerTaskId(taskId)) {
+      throw new Error(reasonUnavailable());
+    }
+    await unassignMutation.mutateAsync({
+      viewId,
+      taskId: Number(taskId),
+      assigneeId,
+    });
+    setItems(prev =>
+      prev.map(i =>
+        i.id === taskId
+          ? { ...i, assigneeIds: i.assigneeIds.filter(id => id !== assigneeId) }
+          : i,
+      ),
+    );
+    patchTaskCache(prev =>
+      prev.map(t =>
+        String(t.task_id) === taskId
+          ? { ...t, assignee_ids: t.assignee_ids.filter(id => id !== assigneeId) }
+          : t,
+      ),
+    );
+  };
+
+  // Fetches parentId's direct children (POST /tasks/list/{view_id}, scoped to
+  // that parent) and replaces whatever this device already had for them in
+  // itemsAtom — called on demand (TableView's row-expand, ItemModal's open),
+  // never eagerly; see useTasksSync's header comment for why. A local-only task
+  // (or TASKS_API_ENABLED off) has nothing to fetch — everything it has is
+  // already in itemsAtom — so this just returns what's there instead of hitting
+  // the network.
+  const loadChildren = async (parentId: string): Promise<WorkItem[]> => {
+    if (!canMutate || viewId === undefined || !isServerTaskId(parentId)) {
+      return items.filter(i => i.parentId === parentId);
+    }
+    const children = await withAuthRetry(token, t =>
+      drainPages(t, viewId, activeView!, Number(parentId)),
+    );
+    const fresh = children.map(taskFromServer);
+    setItems(prev => [...prev.filter(i => i.parentId !== parentId), ...fresh]);
+    return fresh;
+  };
+
+  // Recursively loads a task's whole subtree, depth-first — one loadChildren
+  // call per node that actually has subtasks (totalSubtasks/hasSubtasks says so
+  // without needing a request), skipping leaves entirely. Used by ItemModal,
+  // which shows a task's full nested subtask list, not just its direct
+  // children — bounded to the one task someone opened, not the whole view.
+  const loadSubtree = async (parentId: string, depth = 1): Promise<void> => {
+    const children = await loadChildren(parentId);
+    if (depth >= MAX_DEPTH) {
+      return;
+    }
+    for (const child of children) {
+      if (hasSubtasks(child)) {
+        await loadSubtree(child.id, depth + 1);
+      }
+    }
+  };
+
   return {
     addItem,
     editItem,
     removeItem,
     assignUser,
+    unassignUser,
+    loadChildren,
+    loadSubtree,
     // Governs the Assignees field's read-only display for a task that can't
     // have assignees changed at all right now (nothing server-backed to assign
     // against) — true whenever this task is, or would be, a server-backed one.

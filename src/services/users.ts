@@ -28,13 +28,17 @@ export const updateUserInfo = async (
 };
 
 // GET /user/search — email substring match within the caller's organization (max 10).
-// The API's `Query<String>` extractor wants the raw query string as the value.
+// The query param is `email` (a `SearchQuery { email: String }` struct) — it used
+// to be a bare `web::Query<String>`, which 400'd on every call ("invalid type:
+// map, expected a string": a query string always parses as a map, even a single
+// `?q=x`, so it could never bind to a bare String). Fixed server-side by giving it
+// a proper struct; `email` is that struct's field name, not a renamed `q`.
 export const searchUsersByEmail = async (
   accessToken: string,
   query: string,
 ): Promise<UserSearchResult[]> => {
   const { data } = await apiRequest<UserSearchResult[]>(
-    `/user/search?q=${encodeURIComponent(query)}`,
+    `/user/search?email=${encodeURIComponent(query)}`,
     { accessToken },
   );
   return data;

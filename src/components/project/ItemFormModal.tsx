@@ -77,8 +77,14 @@ export function ItemFormModal() {
   const [assigneeQuery, setAssigneeQuery] = useState('');
   useUserSearch(assigneeQuery);
   const setSelected = useSetAtom(selectedItemIdAtom);
-  const { addItem, editItem, assignUser, isServerBacked, unavailableReason } =
-    useTaskMutations();
+  const {
+    addItem,
+    editItem,
+    assignUser,
+    unassignUser,
+    isServerBacked,
+    unavailableReason,
+  } = useTaskMutations();
   const [saving, setSaving] = useState(false);
 
   const editing =
@@ -113,11 +119,13 @@ export function ItemFormModal() {
   const [moreOpen, setMoreOpen] = useState(false);
   const c = useThemeColors();
 
-  // Server-backed: once a person is actually assigned (i.e. was already on the
-  // task when this form opened), they can't be removed here — the API only has
-  // an endpoint to add an assignee, never to remove one (see
-  // useTaskMutations.ts's assignUser). Newly picked-but-not-yet-saved people
-  // stay freely removable until Save actually sends them.
+  // Server-backed: both adding and removing go through their own API call (see
+  // useTaskMutations.ts's assignUser/unassignUser), fired once the task itself
+  // has saved — so freely toggle here, and let Save reconcile the difference
+  // against what the task actually has. Nobody can touch their own assignment
+  // either way (the server 403s a self-assign or self-remove), so the current
+  // user is left out of the option list entirely below rather than offered and
+  // then rejected.
   // Local-only (signed out, or the API unavailable): the old rule applies
   // instead — you can always add yourself, but never remove yourself, same as
   // before any of this existed (see src/data/permissions.ts).
@@ -125,9 +133,7 @@ export function ItemFormModal() {
   const toggleAssignee = (id: string) =>
     setAssigneeIds(prev => {
       if (prev.includes(id)) {
-        const locked = isServerBacked
-          ? confirmedAssigneeIds.includes(id)
-          : id === CURRENT_USER_ID;
+        const locked = !isServerBacked && id === CURRENT_USER_ID;
         return locked ? prev : prev.filter(x => x !== id);
       }
       return [...prev, id];
@@ -257,13 +263,16 @@ export function ItemFormModal() {
     !Object.values(errors).some(Boolean) && (!needsLeapWarning || leapAck);
   const canSaveNow = !unavailableReason;
 
-  // Picked in this session but not yet actually assigned server-side — newly
-  // toggled-on people, minus whoever was already confirmed, minus yourself
-  // (the server rejects self-assignment outright).
+  // What Save needs to actually tell the API, in each direction — newly
+  // toggled-on people (minus yourself; the server rejects self-assignment
+  // outright) to add, and toggled-off previously-confirmed people to remove.
   const toAssign = isServerBacked
     ? assigneeIds.filter(
         id => !confirmedAssigneeIds.includes(id) && id !== CURRENT_USER_ID,
       )
+    : [];
+  const toUnassign = isServerBacked
+    ? confirmedAssigneeIds.filter(id => !assigneeIds.includes(id))
     : [];
 
   const save = async () => {
@@ -283,8 +292,8 @@ export function ItemFormModal() {
       status,
       priority,
       tag,
-      // Assignees are never part of the task's own payload — the API assigns
-      // one person per call (assignNewAssignees below), separate from the
+      // Assignees are never part of the task's own payload — the API assigns/
+      // removes one person per call (syncAssignees below), separate from the
       // task fields. Server-backed: keep whatever's already confirmed here;
       // local-only: assigneeIds IS the task's assignee list, same as before.
       assigneeIds: isServerBacked ? editing?.assigneeIds ?? [] : assigneeIds,
@@ -297,12 +306,22 @@ export function ItemFormModal() {
       recurrence,
       reminders,
     };
-    const assignNewAssignees = async (taskId: string) => {
+    // Best-effort, same as this form's other background follow-ups: the task
+    // itself already saved by the time this runs, so one failed assign/remove
+    // call is logged and skipped rather than undoing or blocking the rest.
+    const syncAssignees = async (taskId: string) => {
       for (const id of toAssign) {
         try {
           await assignUser(taskId, id);
         } catch (err) {
           console.warn('Could not assign', id, 'to', taskId, err);
+        }
+      }
+      for (const id of toUnassign) {
+        try {
+          await unassignUser(taskId, id);
+        } catch (err) {
+          console.warn('Could not remove', id, 'from', taskId, err);
         }
       }
     };
@@ -311,7 +330,7 @@ export function ItemFormModal() {
       if (editing) {
         // createdById never changes via edit — who opened a task is fixed.
         await editItem({ ...editing, ...fields });
-        await assignNewAssignees(editing.id);
+        await syncAssignees(editing.id);
       } else {
         const id = await addItem({
           parentId: parent?.id ?? null,
@@ -321,7 +340,7 @@ export function ItemFormModal() {
         // addItem's own comment) — nothing to select or assign in that case.
         if (id) {
           setSelected(id);
-          await assignNewAssignees(id);
+          await syncAssignees(id);
         }
       }
       close();
@@ -428,13 +447,16 @@ export function ItemFormModal() {
             ) : null
           }
           hint={
-            assigneeIds.length === 0
+            isServerBacked && (toAssign.length > 0 || toUnassign.length > 0)
+              ? `${[
+                  toAssign.length > 0 ? `${toAssign.length} to add` : null,
+                  toUnassign.length > 0 ? `${toUnassign.length} to remove` : null,
+                ]
+                  .filter(Boolean)
+                  .join(', ')} when you save. Removing someone needs permission on the task — it’ll be skipped (not blocked) if you don’t have it.`
+              : assigneeIds.length === 0
               ? 'Nobody selected — this task will be unassigned.'
-              : isServerBacked
-              ? toAssign.length > 0
-                ? `${toAssign.length} will be assigned when you save. Already-assigned people can’t be removed here.`
-                : 'Already-assigned people can’t be removed here — the API only has an endpoint to add one.'
-              : assigneeIds.includes(CURRENT_USER_ID)
+              : !isServerBacked && assigneeIds.includes(CURRENT_USER_ID)
               ? 'You’re on this task — you can add others, but not remove yourself.'
               : null
           }
@@ -447,10 +469,8 @@ export function ItemFormModal() {
               id: m.id,
               label: m.name,
               color: m.color,
-              locked: isServerBacked
-                ? confirmedAssigneeIds.includes(m.id)
-                : m.id === CURRENT_USER_ID && assigneeIds.includes(m.id),
-              lockedLabel: isServerBacked ? 'Assigned' : 'You',
+              locked: !isServerBacked && m.id === CURRENT_USER_ID,
+              lockedLabel: 'You',
             }))}
             selectedIds={assigneeIds}
             onToggle={toggleAssignee}

@@ -144,7 +144,12 @@ function layoutWeek(occ: Occ[], weekStart: Date): Segment[] {
 }
 
 export function CalendarView({ view }: { view: ProjectView }) {
-  const items = useAtomValue(itemsAtom);
+  // Top-level tasks only — subtasks load lazily (useTasksSync's header comment)
+  // and appear here only as whichever got fetched elsewhere happening to be in
+  // itemsAtom, which would make the calendar's contents depend on prior
+  // navigation. SubtaskBadge (shown inline on each event) covers them instead.
+  const allItems = useAtomValue(itemsAtom);
+  const items = useMemo(() => allItems.filter(i => !i.parentId), [allItems]);
   const fields = view.fields;
   const setForm = useSetAtom(itemFormAtom);
   const { width } = useWindowDimensions();

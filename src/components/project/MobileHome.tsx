@@ -28,7 +28,10 @@ export function MobileHome({
   onOpenProfile: () => void;
   onSearch: () => void;
 }) {
-  const items = useAtomValue(itemsAtom);
+  // Top-level tasks only — subtasks load lazily (useTasksSync's header comment),
+  // so counting whatever's loaded would make this summary depend on prior
+  // navigation rather than being a stable "today at a glance" figure.
+  const items = useAtomValue(itemsAtom).filter(i => !i.parentId);
   const profile = useAtomValue(profileAtom);
   const c = useThemeColors();
 

@@ -11,7 +11,6 @@ import {
   isServerTaskId,
   taskFromServer,
 } from '../data/taskSync';
-import { MAX_DEPTH } from '../data/tree';
 import { isServerViewId } from '../data/viewSync';
 import { TASKS_API_ENABLED } from '../config/features';
 import { withAuthRetry } from '../services/authRetry';
@@ -20,7 +19,10 @@ import type { TaskInfoDto } from '../services/types';
 
 // Drains every page of one POST /tasks/list/{view_id} call (root tasks, or one
 // parent's direct children when parentTaskId is given) via the cursor it returns.
-async function drainPages(
+// Exported for useTaskMutations.ts's loadChildren/loadSubtree (on-demand, one
+// subtree at a time) — this file only ever calls it for the active view's root
+// level now; see this file's own header comment for why.
+export async function drainPages(
   token: string,
   viewId: number,
   view: Pick<ProjectView, 'statusFilter' | 'tagFilter'>,
@@ -41,35 +43,22 @@ async function drainPages(
   return out;
 }
 
-// The API only lists one level at a time (root tasks, or one parent's direct
-// children) — there's no "give me a task and its whole subtree" endpoint — so a
-// full view's worth of tasks takes one list call per node that has children,
-// depth-first. Bounded by MAX_DEPTH (real trees are shallow; this is a guard
-// against anything unexpected, not an expected case).
-async function fetchViewTaskTree(
-  token: string,
-  viewId: number,
-  view: Pick<ProjectView, 'statusFilter' | 'tagFilter'>,
-  parentTaskId?: number,
-  depth = 1,
-): Promise<TaskInfoDto[]> {
-  const level = await drainPages(token, viewId, view, parentTaskId);
-  if (depth >= MAX_DEPTH) {
-    return level;
-  }
-  const out = [...level];
-  for (const task of level) {
-    out.push(
-      ...(await fetchViewTaskTree(token, viewId, view, task.task_id, depth + 1)),
-    );
-  }
-  return out;
-}
-
-// Populates itemsAtom from Tasks-Main-API's /tasks for the active view — call once,
-// from ProjectScreen (which already tracks the active view). Mutations
-// (create/update/delete) live in useTaskMutations instead, so every component that
-// needs to write a task doesn't also need to re-run this fetch.
+// Populates itemsAtom from Tasks-Main-API's /tasks for the active view's ROOT
+// tasks only — call once, from ProjectScreen (which already tracks the active
+// view). Subtasks load lazily instead of all up front: the API has no "give me a
+// task and its whole subtree" endpoint, only "list root tasks" or "list one
+// parent's direct children", so loading everything eagerly meant one request per
+// node that has children, depth-first, for every view opened whether or not
+// anyone ever looked at a subtask. `total_sub_tasks` on every task row (see
+// TaskInfoDto) makes the lazy version possible — a task says how many direct
+// children it has without them being loaded — so the UI can show the count and
+// an expand affordance, and only fetch on demand (useTaskMutations.ts's
+// loadChildren/loadSubtree, called from TableView's row-expand and ItemModal's
+// open).
+//
+// Mutations (create/update/delete/assign) live in useTaskMutations instead, so
+// every component that needs to write a task doesn't also need to re-run this
+// fetch.
 //
 // Signed out, the active view isn't server-backed yet (a local-only view, or
 // still mid-migration — see useViewsSync), or TASKS_API_ENABLED is off (see that
@@ -90,14 +79,25 @@ export function useTasksSync(view: ProjectView | undefined) {
 
   const query = useQuery({
     queryKey: ['tasks', viewId, statusKey, tagKey],
-    queryFn: () => withAuthRetry(token, t => fetchViewTaskTree(t, viewId!, view!)),
+    queryFn: () => withAuthRetry(token, t => drainPages(t, viewId!, view!)),
     enabled: !!token && viewId !== undefined,
   });
 
   useEffect(() => {
-    if (query.data) {
-      setItems(query.data.map(taskFromServer));
+    if (!query.data) {
+      return;
     }
+    const freshRoots = query.data.map(taskFromServer);
+    const freshRootIds = new Set(freshRoots.map(t => t.id));
+    setItems(prev => {
+      // A plain refresh of the root level shouldn't throw away subtrees someone
+      // already expanded on demand — keep any already-loaded subtask that isn't
+      // itself one of the roots just refetched.
+      const keep = prev.filter(
+        i => !freshRootIds.has(i.id) && i.parentId !== null,
+      );
+      return [...freshRoots, ...keep];
+    });
   }, [query.data, setItems]);
 
   useEffect(() => {
