@@ -14,20 +14,17 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
   ) -> Bool {
+    // Scene lifecycle is mandatory on this SDK (see Info.plist's
+    // UIApplicationSceneManifest): the window and the React Native factory's
+    // startReactNative call now happen in SceneDelegate, once UIKit actually
+    // connects a scene, not here. This method only builds the factory itself,
+    // which SceneDelegate reaches via `UIApplication.shared.delegate`.
     let delegate = ReactNativeDelegate()
     let factory = RCTReactNativeFactory(delegate: delegate)
     delegate.dependencyProvider = RCTAppDependencyProvider()
 
     reactNativeDelegate = delegate
     reactNativeFactory = factory
-
-    window = UIWindow(frame: UIScreen.main.bounds)
-
-    factory.startReactNative(
-      withModuleName: "YTCFronend",
-      in: window,
-      launchOptions: launchOptions
-    )
 
     return true
   }

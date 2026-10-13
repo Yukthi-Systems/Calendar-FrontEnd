@@ -60,6 +60,17 @@
             ReferencedContainer = "container:YTCFronend.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
+      <EnvironmentVariables>
+         <!-- Port 8081 is normally used by another project's Metro on this
+              machine, so this project's own Metro runs on 8082 instead (see
+              .xcode.env.local) — this tells the launched app, and the "Start
+              Packager" build phase, to actually fetch the JS bundle from it. -->
+         <EnvironmentVariable
+            key = "RCT_METRO_PORT"
+            value = "8082"
+            isEnabled = "YES">
+         </EnvironmentVariable>
+      </EnvironmentVariables>
    </LaunchAction>
    <ProfileAction
       buildConfiguration = "Release"
