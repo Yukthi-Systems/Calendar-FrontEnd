@@ -5,7 +5,7 @@ import {
   STATUS_FROM_BACKEND,
   TAG_FROM_BACKEND,
 } from './constants';
-import type { Priority, ProjectView, Reminder, Status, TaskTag, WorkItem } from './types';
+import type { ProjectView, Reminder, Status, TaskTag, WorkItem } from './types';
 import type {
   CreateTaskPayload,
   TaskFilterQuery,
@@ -14,7 +14,7 @@ import type {
 } from '../services/types';
 
 // Converts between this app's WorkItem and Tasks-Main-API's `tasks` row. The API
-// has no columns for priority/recurrence/reminders — only title,
+// has no columns for recurrence/reminders — only title,
 // description, status, tag and the start/end dates are real columns — so those
 // ride in the open-schema `details` JSON, the same trick src/data/viewSync.ts uses
 // for a view's `ui_info`.
@@ -36,7 +36,6 @@ const toTimestamp = (date: string) => `${date}T00:00:00.000Z`;
 const fromTimestamp = (ts: string) => ts.slice(0, 10);
 
 interface TaskDetails {
-  priority?: Priority;
   recurrence?: string | null;
   reminders?: Reminder[];
 }
@@ -48,7 +47,6 @@ export function taskFromServer(dto: TaskInfoDto): WorkItem {
     title: dto.title,
     description: dto.description,
     status: STATUS_FROM_BACKEND[dto.task_status],
-    priority: details.priority ?? 'medium',
     tag: TAG_FROM_BACKEND[dto.task_tag] ?? 'other',
     // Read-only: the API has no endpoint yet to set a task's assignees (no live
     // /assignees scope), so this only ever reflects what's already on the server.
@@ -70,15 +68,13 @@ export function taskFromServer(dto: TaskInfoDto): WorkItem {
   };
 }
 
-type DetailFields = Pick<WorkItem, 'priority' | 'recurrence' | 'reminders'>;
+type DetailFields = Pick<WorkItem, 'recurrence' | 'reminders'>;
 
 // `details` (JSONB) carries only what the tasks table has no column for, and only
 // when set — every core field (title, description, status, tag, dates, parent)
 // is a top-level column. Contract (read back in taskFromServer):
-//   { priority?: 'low'|'medium'|'high',
-//     recurrence?: RRULE string, reminders?: { offsetDays, time }[] }
+//   { recurrence?: RRULE string, reminders?: { offsetDays, time }[] }
 const detailsPayload = (item: DetailFields): Record<string, unknown> => ({
-  ...(item.priority && item.priority !== 'medium' ? { priority: item.priority } : null),
   ...(item.recurrence ? { recurrence: item.recurrence } : null),
   ...(item.reminders.length
     ? { reminders: item.reminders.map(r => ({ offsetDays: r.offsetDays, time: r.time })) }
@@ -174,6 +170,44 @@ export function buildTaskFilter(
     any_of_task_tag: tags,
     limit: FETCH_PAGE_LIMIT,
     ...wideTaskWindow(),
+    ...(cursor ?? {}),
+  };
+}
+
+// `title_contains` only accepts letters, digits and spaces (TaskFilterDto::
+// has_valid_title_filter — anything else is a 400), so punctuation becomes a
+// space. '' = nothing searchable; leave the title filter out.
+export const searchableTitle = (raw: string) =>
+  raw
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+export interface TaskSearch {
+  title: string;
+  statuses: Status[];
+  tags: TaskTag[];
+  // yyyy-MM-dd or ''. The API matches tasks lying wholly inside the range
+  // (start_at >= from AND end_at <= to); an open end uses the wide window.
+  from: string;
+  to: string;
+}
+
+// POST /tasks/list filter for a search: top-level tasks of the view, one page.
+export function buildSearchFilter(
+  s: TaskSearch,
+  limit: number,
+  cursor?: { cursor_start_at: string; cursor_task_id: number },
+): TaskFilterQuery {
+  const wide = wideTaskWindow();
+  const title = searchableTitle(s.title);
+  return {
+    ...(title ? { title_contains: title } : null),
+    any_of_task_status: s.statuses.map(k => BACKEND_STATUS[k]),
+    any_of_task_tag: s.tags.map(k => BACKEND_TAG[k]),
+    start_at: s.from ? toTimestamp(s.from) : wide.start_at,
+    end_at: s.to ? toTimestamp(s.to) : wide.end_at,
+    limit,
     ...(cursor ?? {}),
   };
 }

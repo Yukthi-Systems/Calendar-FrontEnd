@@ -4,7 +4,6 @@ export type Status =
   | 'completed'
   | 'rejected'
   | 'on_hold';
-export type Priority = 'low' | 'medium' | 'high';
 export type ViewType = 'table' | 'kanban' | 'roadmap' | 'calendar';
 
 // Mirrors Tasks-Main-API's task_tag enum — every task will need one once /tasks is
@@ -39,7 +38,6 @@ export interface WorkItem {
   title: string;
   description: string;
   status: Status;
-  priority: Priority;
   // Required by Tasks-Main-API (task_tag column, NOT NULL) once a task is
   // server-backed; defaults to 'other' for anything created before this existed.
   tag: TaskTag;
@@ -70,7 +68,6 @@ export interface WorkItem {
 export type ViewField =
   | 'status'
   | 'assignee'
-  | 'priority'
   | 'start'
   | 'end';
 

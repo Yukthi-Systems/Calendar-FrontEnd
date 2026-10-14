@@ -14,7 +14,7 @@ export const useThemeColors = () => {
   );
 };
 
-// Badge colours for a status/priority/tag hex, adjusted for the current theme.
+// Badge colours for a status/tag hex, adjusted for the current theme.
 export const useTone = () => {
   const { dark } = useResolvedTheme();
   return (color: string) => tone(color, dark);

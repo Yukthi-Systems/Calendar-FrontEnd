@@ -14,7 +14,8 @@ import {
   itemsAtom,
   selectedItemIdAtom,
 } from '../../atoms/project';
-import { PRIORITY_COLOR, STATUSES, TAGS } from '../../data/constants';
+import { allowedStatuses, allowedTags } from '../../data/constants';
+import { useActiveView } from '../../hooks/useViews';
 import { currentUserIdAtom } from '../../atoms/members';
 import { useMyProfile, usePeople, useUserSearch, type Person } from '../../hooks/useUsers';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
@@ -28,7 +29,7 @@ import {
   normalizeRRule,
   parseRRule,
 } from '../../data/rrule';
-import type { Priority, Reminder, Status, TaskTag } from '../../data/types';
+import type { Reminder, Status, TaskTag } from '../../data/types';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { errorMessage, toast } from '../../atoms/feedback';
 import {
@@ -46,10 +47,9 @@ import {
   SheetFooter,
   SheetHeader,
 } from '../ui';
-import { MultiSelectDropdown, PRIORITY_LABEL } from './shared';
+import { MultiSelectDropdown } from './shared';
 
 const DATE_FMT = 'yyyy-MM-dd';
-const PRIORITIES: Priority[] = ['low', 'medium', 'high'];
 const REMINDER_OFFSETS = [
   { days: 0, label: 'On due date' },
   { days: 1, label: '1 day before' },
@@ -88,6 +88,11 @@ export function ItemFormModal() {
   const editing =
     form?.mode === 'edit' ? items.find(i => i.id === form.id) : undefined;
 
+  // Only what the active view's filters allow — anything else the server refuses.
+  const activeView = useActiveView();
+  const statusOptions = allowedStatuses(activeView?.statusFilter);
+  const tagOptions = allowedTags(activeView?.tagFilter);
+
   const parent =
     form?.mode === 'new' && form.parentId
       ? items.find(i => i.id === form.parentId)
@@ -96,7 +101,6 @@ export function ItemFormModal() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState<Status>('not_started');
-  const [priority, setPriority] = useState<Priority>('medium');
   const [tag, setTag] = useState<TaskTag>('other');
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const selectedPeople = usePeople(assigneeIds);
@@ -150,13 +154,15 @@ export function ItemFormModal() {
     const today = new Date();
     setTitle(editing?.title ?? '');
     setDescription(editing?.description ?? '');
+    const pick = <K extends string>(wanted: K | undefined, options: { key: K }[]) =>
+      wanted && options.some(o => o.key === wanted) ? wanted : options[0].key;
     setStatus(
-      editing?.status ??
-        (form.mode === 'new' ? form.status : undefined) ??
-        'not_started',
+      pick(
+        editing?.status ?? (form.mode === 'new' ? form.status : undefined) ?? 'not_started',
+        statusOptions,
+      ),
     );
-    setPriority(editing?.priority ?? 'medium');
-    setTag(editing?.tag ?? 'other');
+    setTag(pick(editing?.tag ?? 'other', tagOptions));
     setAssigneeIds(editing ? editing.assigneeIds : parent?.assigneeIds ?? []);
     const presetStart =
       form.mode === 'new' && form.start ? parseDate(form.start) : null;
@@ -291,7 +297,6 @@ export function ItemFormModal() {
       title: title.trim(),
       description: description.trim(),
       status,
-      priority,
       tag,
       // Assignees are never part of the task's own payload — the API assigns/
       // removes one person per call (`changes` below), separate from the task
@@ -374,9 +379,16 @@ export function ItemFormModal() {
           />
         </Field>
 
-        <Field label="Status">
+        <Field
+          label="Status"
+          hint={
+            statusOptions.length < 5
+              ? `“${activeView?.name}” only shows these statuses.`
+              : null
+          }
+        >
           <View className="flex-row flex-wrap gap-1.5">
-            {STATUSES.map(s => (
+            {statusOptions.map(s => (
               <Chip
                 key={s.key}
                 label={s.label}
@@ -388,34 +400,25 @@ export function ItemFormModal() {
           </View>
         </Field>
 
-        <View className="flex-row flex-wrap gap-x-6">
-          <Field label="Priority">
-            <View className="flex-row flex-wrap gap-1.5">
-              {PRIORITIES.map(p => (
-                <Chip
-                  key={p}
-                  label={PRIORITY_LABEL[p]}
-                  color={PRIORITY_COLOR[p]}
-                  active={priority === p}
-                  onPress={() => setPriority(p)}
-                />
-              ))}
-            </View>
-          </Field>
-          <Field label="Tag" required>
-            <View className="flex-row flex-wrap gap-1.5">
-              {TAGS.map(t => (
-                <Chip
-                  key={t.key}
-                  label={t.label}
-                  color={t.color}
-                  active={tag === t.key}
-                  onPress={() => setTag(t.key)}
-                />
-              ))}
-            </View>
-          </Field>
-        </View>
+        <Field
+          label="Tag"
+          required
+          hint={
+            tagOptions.length < 6 ? `“${activeView?.name}” only shows these tags.` : null
+          }
+        >
+          <View className="flex-row flex-wrap gap-1.5">
+            {tagOptions.map(t => (
+              <Chip
+                key={t.key}
+                label={t.label}
+                color={t.color}
+                active={tag === t.key}
+                onPress={() => setTag(t.key)}
+              />
+            ))}
+          </View>
+        </Field>
 
         <Field
           label="Assignees"

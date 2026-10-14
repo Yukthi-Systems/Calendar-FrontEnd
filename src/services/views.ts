@@ -126,7 +126,8 @@ export const listSharedUsersForView = async (
   return data;
 };
 
-// GET /shared/info/{view_id}/{user_id} — one share record. Owner only.
+// GET /shared/info/{view_id}/{user_id} — one share record. The owner can read
+// anyone's; a shared user only their own (read from the DB, not the permission cache).
 export const getSharedTaskView = async (
   accessToken: string,
   viewId: number,

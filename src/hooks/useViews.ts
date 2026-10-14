@@ -2,11 +2,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDefaultStore, useAtomValue } from 'jotai';
 import { tokenAtom } from '../atoms/auth';
 import { activeViewIdAtom } from '../atoms/project';
+import { currentUserIdAtom } from '../atoms/members';
 import {
   createSharedTaskView,
   createTaskView,
   deleteSharedTaskView,
   deleteTaskView,
+  getSharedTaskView,
   listSharedUsersForView,
   listTaskViews,
   updateSharedTaskView,
@@ -135,6 +137,19 @@ export function useViewShares(view: ProjectView | null) {
     queryKey: sharesKey(view?.id ?? ''),
     queryFn: () => withAuthRetry(token, t => listSharedUsersForView(t, Number(view!.id))),
     enabled,
+  });
+}
+
+// My own access to a view someone shared with me — GET /shared/info/{view_id}/{me}.
+// Fetched fresh each time it's shown, so a change by the owner shows up.
+export function useMyShare(view: ProjectView | null) {
+  const token = useAtomValue(tokenAtom);
+  const me = useAtomValue(currentUserIdAtom);
+  return useQuery({
+    queryKey: ['myShare', view?.id ?? '', me],
+    queryFn: () => withAuthRetry(token, t => getSharedTaskView(t, Number(view!.id), me)),
+    enabled: !!token && !!me && !!view?.shared,
+    staleTime: 0,
   });
 }
 

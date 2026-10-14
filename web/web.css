@@ -65,6 +65,26 @@ body {
   }
 }
 
+/* The opposite: what a `reveal-on-hover` control replaces in the same spot (a
+   rail row's owner avatar under its "⋯"). Hidden while the row is hovered or
+   focused, and on touch screens, where the control is always shown. */
+.hide-on-hover {
+  transition: opacity 140ms ease-out;
+}
+
+@media (hover: hover) {
+  .group:hover .hide-on-hover,
+  .group:focus-within .hide-on-hover {
+    opacity: 0;
+  }
+}
+
+@media (hover: none) {
+  .hide-on-hover {
+    display: none;
+  }
+}
+
 input,
 textarea {
   transition: border-color 140ms ease-out, box-shadow 140ms ease-out,

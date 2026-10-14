@@ -5,7 +5,7 @@ import {
   Table2,
   type LucideIcon,
 } from 'lucide-react-native';
-import type { Priority, Status, TaskTag, ViewType } from './types';
+import type { Status, TaskTag, ViewType } from './types';
 import type { BackendTaskStatus, BackendTaskTag } from '../services/types';
 
 export const STATUSES: { key: Status; label: string; color: string }[] = [
@@ -52,6 +52,14 @@ export const TAG_BY_KEY = Object.fromEntries(
 
 export const tagInfo = (tag: TaskTag) => TAG_BY_KEY[tag] ?? TAGS[0];
 
+// What a view lets you use. The server refuses to create/update a task through a
+// view whose status/tag filter doesn't include the task's status/tag — so pickers
+// offer only these. Empty filter = everything.
+export const allowedStatuses = (filter?: Status[]) =>
+  filter?.length ? STATUSES.filter(s => filter.includes(s.key)) : STATUSES;
+export const allowedTags = (filter?: TaskTag[]) =>
+  filter?.length ? TAGS.filter(t => filter.includes(t.key)) : TAGS;
+
 export const BACKEND_TAG: Record<TaskTag, BackendTaskTag> = {
   work: 'WORK',
   important: 'IMPORTANT',
@@ -76,12 +84,6 @@ export const STATUS_FROM_BACKEND: Record<BackendTaskStatus, Status> = {
   COMPLETED: 'completed',
   CANCELLED: 'rejected',
   ON_HOLD: 'on_hold',
-};
-
-export const PRIORITY_COLOR: Record<Priority, string> = {
-  low: '#6b7280',
-  medium: '#f59e0b',
-  high: '#ef4444',
 };
 
 export const VIEW_TYPES: {

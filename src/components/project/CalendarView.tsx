@@ -28,6 +28,7 @@ import {
   isSameDay,
   isSameMonth,
   isToday,
+  isTomorrow,
   isWeekend,
   parseISO,
   startOfDay,
@@ -51,7 +52,6 @@ import { Button, IconButton, Kbd, Press, SegmentedControl } from '../ui';
 import {
   AssigneeAvatars,
   ItemRow,
-  PriorityIcon,
   RecurrenceIcon,
   StatusIcon,
 } from './shared';
@@ -291,7 +291,13 @@ export function CalendarView({ view }: { view: ProjectView }) {
               onNewTask={newTaskOn}
             />
             <ScrollView className="w-[300px] grow-0" contentContainerClassName="pb-8">
-              <AgendaPanel day={selected} items={items} fields={fields} onNewTask={newTaskOn} />
+              <AgendaPanel
+                day={selected}
+                items={items}
+                fields={fields}
+                onNewTask={newTaskOn}
+                onSelectDay={setSelected}
+              />
             </ScrollView>
           </View>
         ) : (
@@ -309,7 +315,13 @@ export function CalendarView({ view }: { view: ProjectView }) {
               />
             </View>
             <View className="pt-5">
-              <AgendaPanel day={selected} items={items} fields={fields} onNewTask={newTaskOn} />
+              <AgendaPanel
+                day={selected}
+                items={items}
+                fields={fields}
+                onNewTask={newTaskOn}
+                onSelectDay={setSelected}
+              />
             </View>
           </ScrollView>
         )}
@@ -609,9 +621,6 @@ function EventBar({
             {item.title}
           </Text>
           {item.recurrence ? <RecurrenceIcon freq={item.recurrence} size={10} /> : null}
-          {detailed && showsField(fields, 'priority') ? (
-            <PriorityIcon priority={item.priority} size={12} />
-          ) : null}
           {detailed && showsField(fields, 'assignee') ? (
             <AssigneeAvatars ids={item.assigneeIds} size={16} max={2} />
           ) : null}
@@ -814,7 +823,6 @@ function DayCard({ occ, day, fields }: { occ: Occ; day: Date; fields?: ViewField
           </View>
         </View>
       ) : null}
-      {showsField(fields, 'priority') ? <PriorityIcon priority={item.priority} /> : null}
       {showsField(fields, 'assignee') ? (
         <AssigneeAvatars ids={item.assigneeIds} size={22} />
       ) : null}
@@ -824,19 +832,46 @@ function DayCard({ occ, day, fields }: { occ: Occ; day: Date; fields?: ViewField
 
 // ── Selected-day agenda (beside / below the month grid) ─────────────────────
 
+// How far "Upcoming" looks ahead of the selected day.
+const UPCOMING_DAYS = 7;
+
+const dayLabel = (d: Date) =>
+  isToday(d) ? 'Today' : isTomorrow(d) ? 'Tomorrow' : format(d, 'EEE, MMM d');
+
+// The selected day's tasks, then the next week grouped by day. A task is listed
+// once: under the selected day if it covers it, else on its first day ahead.
 function AgendaPanel({
   day,
   items,
   fields,
   onNewTask,
+  onSelectDay,
 }: {
   day: Date;
   items: WorkItem[];
   fields?: ViewField[];
   onNewTask: (d: Date) => void;
+  onSelectDay: (d: Date) => void;
 }) {
-  const agenda = occOnDay(items, day);
   const c = useThemeColors();
+  const agenda = useMemo(() => occOnDay(items, day), [items, day]);
+  const upcoming = useMemo(() => {
+    const from = addDays(startOfDay(day), 1);
+    const to = addDays(from, UPCOMING_DAYS - 1);
+    const shown = new Set(agenda.map(o => o.key));
+    const groups = new Map<number, { day: Date; occ: Occ[] }>();
+    for (const o of occurrencesBetween(items, from, to)) {
+      if (shown.has(o.key) || o.end < from || o.start > to) {
+        continue;
+      }
+      const first = o.start < from ? from : o.start;
+      const g = groups.get(first.getTime()) ?? { day: first, occ: [] };
+      g.occ.push(o);
+      groups.set(first.getTime(), g);
+    }
+    return [...groups.values()].sort((a, b) => a.day.getTime() - b.day.getTime());
+  }, [items, day, agenda]);
+
   return (
     <View>
       <View className="mb-3 flex-row items-center justify-between">
@@ -858,13 +893,48 @@ function AgendaPanel({
           <ItemRow key={o.key} item={o.item} fields={fields} />
         ))}
         {agenda.length === 0 ? (
-          <View className="items-center rounded-xl border border-dashed border-border-strong px-4 py-8">
+          <View className="items-center rounded-xl border border-dashed border-border-strong px-4 py-6">
             <CalendarCheck2 size={18} color={c.subtle} />
-            <Text className="mt-2 text-sm text-text-subtle">Nothing scheduled</Text>
+            <Text className="mt-2 text-sm text-text-subtle">
+              Nothing on {format(day, 'MMM d')}
+            </Text>
+            <Text className="mt-0.5 text-center text-xs text-text-subtle">
+              Click a day in the calendar to see its tasks.
+            </Text>
           </View>
         ) : null}
       </View>
-      <View className="mt-5 flex-row flex-wrap items-center gap-x-3 gap-y-1.5">
+
+      <Text className="mb-2 mt-6 text-2xs font-semibold uppercase tracking-wider text-text-subtle">
+        Upcoming
+      </Text>
+      {upcoming.length === 0 ? (
+        <Text className="text-sm text-text-subtle">
+          Nothing in the {UPCOMING_DAYS} days after {format(day, 'MMM d')}.
+        </Text>
+      ) : (
+        <View className="gap-4">
+          {upcoming.map(g => (
+            <View key={g.day.getTime()} className="gap-1.5">
+              <Press
+                feedback="none"
+                accessibilityRole="button"
+                accessibilityLabel={`Show ${format(g.day, 'EEEE, MMMM d')}`}
+                onPress={() => onSelectDay(g.day)}
+                className="flex-row items-center justify-between self-stretch rounded-md px-1 py-0.5 hover:bg-hover"
+              >
+                <Text className="text-xs font-medium text-text-main">{dayLabel(g.day)}</Text>
+                <Text className="text-2xs text-text-subtle">{g.occ.length}</Text>
+              </Press>
+              {g.occ.map(o => (
+                <ItemRow key={o.key} item={o.item} fields={fields} />
+              ))}
+            </View>
+          ))}
+        </View>
+      )}
+
+      <View className="mt-6 flex-row flex-wrap items-center gap-x-3 gap-y-1.5">
         <Hint keys={['←', '→']} label="navigate" />
         <Hint keys={['T']} label="today" />
         <Hint keys={['D', 'W', 'M', 'Y']} label="view" />

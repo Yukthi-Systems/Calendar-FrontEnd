@@ -17,7 +17,7 @@ import {
   itemsAtom,
   selectedItemIdAtom,
 } from '../../atoms/project';
-import { STATUSES, tagInfo } from '../../data/constants';
+import { STATUSES, tagInfo, allowedStatuses } from '../../data/constants';
 import { confirm, errorMessage, toast } from '../../atoms/feedback';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
 import { isServerTaskId } from '../../data/taskSync';
@@ -49,7 +49,6 @@ import { CommentsSection } from './CommentsSection';
 import {
   AssigneeAvatars,
   DueDate,
-  PriorityBadge,
   StatusIcon,
   AssigneeNames,
 } from './shared';
@@ -238,7 +237,7 @@ export function ItemModal() {
             ) : null}
 
             <View className="mb-5 flex-row flex-wrap gap-1.5">
-              {STATUSES.map(s => (
+              {allowedStatuses(activeView?.statusFilter).map(s => (
                 <Chip
                   key={s.key}
                   label={s.label}
@@ -250,10 +249,7 @@ export function ItemModal() {
             </View>
 
             <View className="mb-6 rounded-xl border border-border-main">
-              <Property label="Priority" first>
-                <PriorityBadge priority={item.priority} />
-              </Property>
-              <Property label="Tag">
+              <Property label="Tag" first>
                 {tag ? <Badge label={tag.label} color={tag.color} dot /> : null}
               </Property>
               <Property label="Assignees">

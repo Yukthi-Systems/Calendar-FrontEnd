@@ -1,5 +1,11 @@
-import { useState } from 'react';
-import { ScrollView, Text, useWindowDimensions, View } from 'react-native';
+import { useRef, useState, type RefObject } from 'react';
+import {
+  ScrollView,
+  Text,
+  useWindowDimensions,
+  View,
+  type ViewInstance,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
   CalendarCheck2,
@@ -8,6 +14,7 @@ import {
   CloudOff,
   Ellipsis,
   LayoutGrid,
+  MessageSquareText,
   Plus,
   Search,
   Table2,
@@ -25,6 +32,7 @@ import { useThemeColors } from '../../hooks/useThemeColors';
 import { useViewUrlSync } from '../../hooks/useViewUrlSync';
 import {
   useActiveView,
+  useMyShare,
   useViewList,
   useViewMutations,
   type ViewDraftFields,
@@ -83,6 +91,12 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   const [shareView, setShareView] = useState<ProjectView | null>(null);
   // Which view's "⋯" action sheet (Share/Edit/Delete) is open, if any.
   const [menuView, setMenuView] = useState<ProjectView | null>(null);
+  // The ⋯ button the menu drops down from; null (phone long-press) = bottom sheet.
+  const [menuAnchor, setMenuAnchor] = useState<RefObject<ViewInstance | null> | null>(null);
+  const openMenu = (v: ProjectView, anchor: RefObject<ViewInstance | null> | null = null) => {
+    setMenuAnchor(anchor);
+    setMenuView(v);
+  };
 
   const active = useActiveView();
   const ActiveView = active ? VIEW_COMPONENTS[active.type] : null;
@@ -191,15 +205,15 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
           >
             {v.name}
           </Text>
-          {v.shared ? <OwnerAvatar ownerId={v.ownerId} /> : null}
+          {/* Same spot as the row's ⋯ — they take turns (see web.css). */}
+          {v.shared && !isActive ? (
+            <View className="hide-on-hover">
+              <OwnerAvatar ownerId={v.ownerId} />
+            </View>
+          ) : null}
         </Press>
         <View className={`absolute right-1 ${isActive ? '' : 'reveal-on-hover'}`}>
-          <IconButton
-            icon={Ellipsis}
-            label={`Options for ${v.name}`}
-            size="sm"
-            onPress={() => setMenuView(v)}
-          />
+          <MenuButton label={`Options for ${v.name}`} size="sm" onOpen={ref => openMenu(v, ref)} />
         </View>
       </View>
     );
@@ -213,7 +227,6 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
           <CalendarCheck2 size={16} color={c.accentForeground} strokeWidth={2.25} />
         </View>
         <Text className="flex-1 text-base font-semibold text-text-heading">YTC</Text>
-        <IconButton icon={Plus} label="New task (N)" onPress={newTask} variant="outline" />
       </View>
 
       <View className="px-3 pb-2">
@@ -292,11 +305,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
           </Text>
         ) : null}
       </View>
-      <IconButton
-        icon={Ellipsis}
-        label="View options"
-        onPress={() => setMenuView(active)}
-      />
+      <MenuButton label="View options" onOpen={ref => openMenu(active, ref)} />
       <Button variant="primary" icon={Plus} onPress={newTask}>
         New task
       </Button>
@@ -312,7 +321,10 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
 
   const content =
     ActiveView && active ? (
-      <ActiveView key={active.id} view={active} />
+      <>
+        {active.shared ? <SharedNote view={active} /> : null}
+        <ActiveView key={active.id} view={active} />
+      </>
     ) : !ready ? (
       <View className="flex-1 gap-3 p-6">
         <Skeleton className="h-8 w-64 rounded-lg" />
@@ -369,7 +381,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
               accessibilityRole="tab"
               accessibilityState={{ selected: isActive }}
               onPress={() => setActiveId(v.id)}
-              onLongPress={() => setMenuView(v)}
+              onLongPress={() => openMenu(v)}
               className={`h-9 flex-row items-center gap-1.5 rounded-lg px-3 ${
                 isActive ? 'bg-hover' : ''
               }`}
@@ -389,7 +401,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
       </ScrollView>
       <IconButton icon={Search} label="Search" onPress={openSearch} size="lg" />
       {active ? (
-        <IconButton icon={Ellipsis} label="View options" onPress={() => setMenuView(active)} size="lg" />
+        <MenuButton label="View options" size="lg" onOpen={ref => openMenu(active, ref)} />
       ) : null}
     </View>
   );
@@ -455,6 +467,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
       <ViewMenuModal
         visible={!!menuView}
         view={menuView}
+        anchorRef={menuAnchor}
         onClose={() => setMenuView(null)}
         onShare={v => onShareView(v)}
         onEdit={v => {
@@ -472,12 +485,53 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   );
 }
 
+// A ⋯ button that hands its own position to the view menu, so the menu can drop
+// down from it. (IconButton doesn't forward refs; the wrapper is what's measured.)
+function MenuButton({
+  label,
+  size,
+  onOpen,
+}: {
+  label: string;
+  size?: 'sm' | 'md' | 'lg';
+  onOpen: (ref: RefObject<ViewInstance | null>) => void;
+}) {
+  const ref = useRef<ViewInstance | null>(null);
+  return (
+    <View ref={ref} collapsable={false}>
+      <IconButton icon={Ellipsis} label={label} size={size} onPress={() => onOpen(ref)} />
+    </View>
+  );
+}
+
 // Small avatar of whoever shared a view with me, in the rail.
 function OwnerAvatar({ ownerId }: { ownerId: string }) {
   const owner = usePerson(ownerId);
   return owner ? (
     <InitialsAvatar color={owner.color} initials={owner.initials} size={18} />
   ) : null;
+}
+
+// The note the owner wrote when sharing this view with me, above the view.
+function SharedNote({ view }: { view: ProjectView }) {
+  const c = useThemeColors();
+  const owner = usePerson(view.ownerId);
+  const { data: share } = useMyShare(view);
+  const note = share?.share_notes?.trim();
+  if (!note) {
+    return null;
+  }
+  return (
+    <View className="flex-row items-start gap-2 border-b border-border-main bg-muted px-6 py-2">
+      <View className="pt-0.5">
+        <MessageSquareText size={14} color={c.subtle} />
+      </View>
+      <Text numberOfLines={2} className="flex-1 text-sm text-text-main">
+        <Text className="font-medium text-text-heading">{owner?.name ?? 'Owner'}: </Text>
+        {note}
+      </Text>
+    </View>
+  );
 }
 
 function SharedByBadge({ ownerId }: { ownerId: string }) {

@@ -10,21 +10,18 @@ import {
   ListTree,
   Repeat,
   Search,
-  SignalHigh,
-  SignalLow,
-  SignalMedium,
   type LucideIcon,
 } from 'lucide-react-native';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { differenceInCalendarDays, format, parseISO } from 'date-fns';
 import { itemsAtom, selectedItemIdAtom } from '../../atoms/project';
-import { PRIORITY_COLOR, statusInfo } from '../../data/constants';
+import { statusInfo } from '../../data/constants';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { usePeople, usePerson, type Person } from '../../hooks/useUsers';
 import { describeRecurrence } from '../../data/rrule';
 import { subtaskProgress } from '../../data/tree';
 import { showsField } from '../../data/viewFields';
-import type { Priority, Status, ViewField, WorkItem } from '../../data/types';
+import type { Status, ViewField, WorkItem } from '../../data/types';
 import { Tooltip } from './Tooltip';
 import {
   Badge,
@@ -238,44 +235,6 @@ export function StatusBadge({ status }: { status: Status }) {
   return <Badge label={s.label} color={s.color} dot />;
 }
 
-const PRIORITY_ICON: Record<Priority, LucideIcon> = {
-  low: SignalLow,
-  medium: SignalMedium,
-  high: SignalHigh,
-};
-
-export const PRIORITY_LABEL: Record<Priority, string> = {
-  low: 'Low',
-  medium: 'Medium',
-  high: 'High',
-};
-
-export function PriorityIcon({
-  priority,
-  size = 15,
-}: {
-  priority: Priority;
-  size?: number;
-}) {
-  const Icon = PRIORITY_ICON[priority] ?? SignalMedium;
-  return (
-    <Tooltip label={`${PRIORITY_LABEL[priority]} priority`}>
-      <Icon size={size} color={PRIORITY_COLOR[priority]} strokeWidth={2.5} />
-    </Tooltip>
-  );
-}
-
-export function PriorityBadge({ priority }: { priority: Priority }) {
-  return (
-    <View className="flex-row items-center gap-1.5">
-      <PriorityIcon priority={priority} size={14} />
-      <Text className="text-sm text-text-main">
-        {PRIORITY_LABEL[priority]}
-      </Text>
-    </View>
-  );
-}
-
 // "Oct 14", tinted red when it's past and the task isn't finished, amber when due
 // within a day.
 export function DueDate({
@@ -351,9 +310,6 @@ export function ItemRow({
           <SubtaskBadge item={item} />
         </View>
       </View>
-      {showsField(fields, 'priority') ? (
-        <PriorityIcon priority={item.priority} size={14} />
-      ) : null}
       {showAssignee && showsField(fields, 'assignee') ? (
         <AssigneeAvatars ids={item.assigneeIds} size={20} />
       ) : null}

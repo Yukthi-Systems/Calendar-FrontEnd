@@ -19,6 +19,14 @@ import { STATUSES, TAGS, VIEW_TYPES } from '../../data/constants';
 import { fieldOptionsFor } from '../../data/viewFields';
 import type { ProjectView, Status, TaskTag, ViewField, ViewType } from '../../data/types';
 
+const ALL_STATUSES = STATUSES.map(s => s.key);
+const ALL_TAGS = TAGS.map(t => t.key);
+
+const filterHint = (picked: number, total: number, one: string, many: string) =>
+  picked === total
+    ? `Every ${one} is shown.`
+    : `Only the selected ${picked === 1 ? one : many} ${picked === 1 ? 'is' : 'are'} shown.`;
+
 export interface ViewDraft {
   name: string;
   type: ViewType;
@@ -69,8 +77,10 @@ export function ViewModal({
       setDescription(view?.description ?? '');
       setType(nextType);
       setFields(view?.fields ?? allFieldKeys(nextType));
-      setStatusFilter(view?.statusFilter ?? []);
-      setTagFilter(view?.tagFilter ?? []);
+      // The server stores "everything" as an empty filter; the form shows it as
+      // every chip checked, which is what it means.
+      setStatusFilter(view?.statusFilter?.length ? view.statusFilter : ALL_STATUSES);
+      setTagFilter(view?.tagFilter?.length ? view.tagFilter : ALL_TAGS);
       setShowRecurring(view?.showRecurring ?? false);
       setShowComments(view?.showComments ?? false);
       setShowSubtasks(view?.showSubtasks ?? true);
@@ -80,6 +90,9 @@ export function ViewModal({
 
   const options = fieldOptionsFor(type);
   const trimmed = name.trim();
+  // A filter with nothing checked would show no tasks at all.
+  const filtersValid = statusFilter.length > 0 && tagFilter.length > 0;
+  const canSave = !!trimmed && filtersValid;
 
   const pickType = (next: ViewType) => {
     setType(next);
@@ -131,8 +144,14 @@ export function ViewModal({
       type,
       description: description.trim(),
       fields: options && !allSelected ? fields : undefined,
-      statusFilter: statusFilter.length > 0 ? statusFilter : undefined,
-      tagFilter: tagFilter.length > 0 ? tagFilter : undefined,
+      // All checked ⇒ no filter (saved as []), so statuses/tags added later are
+      // included too. Sent in the canonical order either way.
+      statusFilter:
+        statusFilter.length < ALL_STATUSES.length
+          ? ALL_STATUSES.filter(k => statusFilter.includes(k))
+          : undefined,
+      tagFilter:
+        tagFilter.length < ALL_TAGS.length ? ALL_TAGS.filter(k => tagFilter.includes(k)) : undefined,
       showRecurring,
       showComments,
       showSubtasks,
@@ -156,7 +175,7 @@ export function ViewModal({
             onChangeText={setName}
             placeholder="e.g. Sprint board"
             autoFocus={!view}
-            onSubmitEditing={() => trimmed && save()}
+            onSubmitEditing={() => canSave && save()}
           />
         </Field>
         <Field label="Description">
@@ -216,7 +235,8 @@ export function ViewModal({
 
         <Field
           label="Status filter"
-          hint={statusFilter.length === 0 ? 'Every status is shown.' : 'Only the selected statuses are shown.'}
+          hint={filterHint(statusFilter.length, ALL_STATUSES.length, 'status', 'statuses')}
+          error={statusFilter.length === 0 ? 'Pick at least one status.' : undefined}
         >
           <View className="flex-row flex-wrap gap-1.5">
             {STATUSES.map(st => (
@@ -234,7 +254,8 @@ export function ViewModal({
 
         <Field
           label="Tag filter"
-          hint={tagFilter.length === 0 ? 'Every tag is shown.' : 'Only the selected tags are shown.'}
+          hint={filterHint(tagFilter.length, ALL_TAGS.length, 'tag', 'tags')}
+          error={tagFilter.length === 0 ? 'Pick at least one tag.' : undefined}
         >
           <View className="flex-row flex-wrap gap-1.5">
             {TAGS.map(t => (
@@ -283,7 +304,7 @@ export function ViewModal({
         <Button variant="ghost" onPress={onClose}>
           Cancel
         </Button>
-        <Button variant="primary" disabled={!trimmed} onPress={save}>
+        <Button variant="primary" disabled={!canSave} onPress={save}>
           {view ? 'Save' : 'Create view'}
         </Button>
       </SheetFooter>

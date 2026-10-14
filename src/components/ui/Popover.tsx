@@ -22,24 +22,33 @@ type Anchor = { x: number; y: number; width: number; height: number };
 // date/time pickers, small menus. On phones it becomes a bottom Sheet instead,
 // since a dropdown under a field is cramped on a small screen.
 //
-// `children` is the trigger; it gets `open()` via `renderTrigger`.
+// The trigger is either rendered by the Popover (`renderTrigger`, which gets the
+// ref to attach) or lives elsewhere (`anchorRef` — e.g. one menu opened from
+// several buttons). With neither, or no element behind the ref, it shows as a
+// bottom Sheet. `variant="menu"`: tighter padding, full-width rows when docked.
 export function Popover({
   open,
   onClose,
   renderTrigger,
+  anchorRef,
   width = 300,
+  variant = 'panel',
   children,
 }: {
   open: boolean;
   onClose: () => void;
-  renderTrigger: (ref: React.RefObject<ViewInstance | null>) => ReactNode;
+  renderTrigger?: (ref: React.RefObject<ViewInstance | null>) => ReactNode;
+  anchorRef?: React.RefObject<ViewInstance | null> | null;
   width?: number;
+  variant?: 'panel' | 'menu';
   children: ReactNode;
 }) {
   const c = useThemeColors();
   const window = useWindowDimensions();
-  const docked = window.width < DOCK_BREAKPOINT;
-  const triggerRef = useRef<ViewInstance | null>(null);
+  const ownRef = useRef<ViewInstance | null>(null);
+  const triggerRef = anchorRef ?? ownRef;
+  const docked =
+    window.width < DOCK_BREAKPOINT || (!renderTrigger && !anchorRef?.current);
   const [anchor, setAnchor] = useState<Anchor | null>(null);
   const [panelH, setPanelH] = useState(0);
   const anim = useRef(new Animated.Value(0)).current;
@@ -54,7 +63,7 @@ export function Popover({
     triggerRef.current?.measureInWindow((x: number, y: number, w: number, h: number) =>
       setAnchor({ x, y, width: w, height: h }),
     );
-  }, [open, docked, anim]);
+  }, [open, docked, anim, triggerRef]);
 
   // Animate in once we know where it goes (anchor) and how tall it is (panelH).
   useEffect(() => {
@@ -72,9 +81,11 @@ export function Popover({
   if (docked) {
     return (
       <>
-        {renderTrigger(triggerRef)}
+        {renderTrigger?.(triggerRef)}
         <Sheet visible={open} onClose={onClose} size="sm">
-          <View className="items-center px-4 pb-4 pt-1">{children}</View>
+          <View className={variant === 'menu' ? 'p-2' : 'items-center px-4 pb-4 pt-1'}>
+            {children}
+          </View>
         </Sheet>
       </>
     );
@@ -96,7 +107,7 @@ export function Popover({
 
   return (
     <>
-      {renderTrigger(triggerRef)}
+      {renderTrigger?.(triggerRef)}
       <Modal visible={open} transparent animationType="none" onRequestClose={onClose}>
         <Pressable
           accessibilityLabel="Close"
@@ -135,7 +146,9 @@ export function Popover({
                     } as object)
                   : { elevation: 12 }
               }
-              className="overflow-hidden rounded-xl border border-border-main bg-bg-card p-3"
+              className={`overflow-hidden rounded-xl border border-border-main bg-bg-card ${
+                variant === 'menu' ? 'p-1.5' : 'p-3'
+              }`}
             >
               {children}
             </View>
