@@ -1,4 +1,4 @@
-import { Text, View } from 'react-native';
+import { Text, View, type ViewInstance } from 'react-native';
 import { Check, Pencil, Trash2, Users, X } from 'lucide-react-native';
 import { STATUSES, TAGS, VIEW_TYPES } from '../../data/constants';
 import type { ProjectView } from '../../data/types';
@@ -6,14 +6,16 @@ import { usePerson } from '../../hooks/useUsers';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { useMyShare } from '../../hooks/useViews';
 import { errorMessage } from '../../atoms/feedback';
-import { MenuItem, MenuLabel, MenuSeparator, Sheet, Skeleton } from '../ui';
+import { MenuItem, MenuLabel, MenuSeparator, Popover, Skeleton } from '../ui';
 
-// The "⋯" action sheet on a view. My views: Share & access / Edit / Delete.
+// The "⋯" menu on a view — a dropdown under the button that opened it
+// (`anchorRef`), a bottom sheet on phones. My views: Share & access / Edit / Delete.
 // Views shared with me: who shared it — only the owner can change or share it
 // (the server refuses everything else), so no actions are offered.
 export function ViewMenuModal({
   visible,
   view,
+  anchorRef,
   onClose,
   onShare,
   onEdit,
@@ -21,6 +23,7 @@ export function ViewMenuModal({
 }: {
   visible: boolean;
   view: ProjectView | null;
+  anchorRef?: React.RefObject<ViewInstance | null> | null;
   onClose: () => void;
   onShare: (view: ProjectView) => void;
   onEdit: (view: ProjectView) => void;
@@ -32,9 +35,9 @@ export function ViewMenuModal({
   const Icon = type?.icon;
 
   return (
-    <Sheet visible={visible} onClose={onClose} size="sm">
+    <Popover open={visible} onClose={onClose} anchorRef={anchorRef} width={264} variant="menu">
       {view ? (
-        <View className="p-2">
+        <View>
           <View className="flex-row items-center gap-3 px-2.5 pb-2 pt-2">
             <View className="h-8 w-8 items-center justify-center rounded-lg bg-muted">
               {Icon ? <Icon size={16} color={c.text} /> : null}
@@ -79,7 +82,7 @@ export function ViewMenuModal({
           )}
         </View>
       ) : null}
-    </Sheet>
+    </Popover>
   );
 }
 
