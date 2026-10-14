@@ -150,6 +150,19 @@ export interface SharedTaskViewDto {
   shared_at: string;
 }
 
+// GET /comments/list, GET /comments/get row shape. `reactions` maps an emoji to
+// the user ids who reacted with it (e.g. { "👍": ["<uuid>"] }) — never null, the
+// server COALESCEs a comment with no reactions to `{}`.
+export interface CommentDbDto {
+  comment_id: number;
+  task_id: number;
+  author_id: string;
+  content: string;
+  reactions: Record<string, string[]>;
+  created_at: string;
+  updated_at: string;
+}
+
 // GET /tasks/get, GET /tasks/list/{view_id} row shape.
 export interface TaskInfoDto {
   task_id: number;

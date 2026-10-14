@@ -387,7 +387,7 @@ export function ItemModal() {
               )}
             </View>
 
-            <CommentsSection />
+            <CommentsSection taskId={item.id} />
           </SheetBody>
         </>
       ) : null}
