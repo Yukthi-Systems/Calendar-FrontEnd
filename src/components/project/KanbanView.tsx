@@ -11,10 +11,10 @@ import {
   selectedItemIdAtom,
   tasksLoadingAtom,
 } from '../../atoms/project';
-import { STATUSES, statusInfo, tagInfo } from '../../data/constants';
+import { allowedStatuses, statusInfo, tagInfo } from '../../data/constants';
 import { errorMessage, toast } from '../../atoms/feedback';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
-import type { Status, WorkItem } from '../../data/types';
+import type { ProjectView, Status, WorkItem } from '../../data/types';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { Badge, IconButton, Press, Skeleton } from '../ui';
 import {
@@ -37,7 +37,10 @@ const HOVER_REVEAL = 'reveal-on-hover';
 // The library only reorders within one list; it doesn't support dragging
 // between two separate lists. So moving a card to a different status uses the
 // ‹ › buttons on the card.
-export function KanbanView() {
+export function KanbanView({ view }: { view: ProjectView }) {
+  // One column per status the view allows — a card can't be created in, or moved
+  // to, a status outside the view's filter (the server refuses it).
+  const COLUMNS = allowedStatuses(view.statusFilter);
   const [items, setItems] = useAtom(itemsAtom);
   const loading = useAtomValue(tasksLoadingAtom);
   const select = useSetAtom(selectedItemIdAtom);
@@ -78,7 +81,7 @@ export function KanbanView() {
         contentContainerStyle={{ minWidth: '100%', height: '100%' }}
         contentContainerClassName="gap-3 p-4 lg:px-6"
       >
-        {STATUSES.map((col, colIdx) => {
+        {COLUMNS.map((col, colIdx) => {
           const list = rootItems.filter(i => i.status === col.key);
           return (
             <View
@@ -146,18 +149,18 @@ export function KanbanView() {
                         isActive={isActive}
                         onOpen={() => select(item.id)}
                         onDrag={drag}
-                        prevLabel={colIdx > 0 ? STATUSES[colIdx - 1].label : undefined}
+                        prevLabel={colIdx > 0 ? COLUMNS[colIdx - 1].label : undefined}
                         nextLabel={
-                          colIdx < STATUSES.length - 1 ? STATUSES[colIdx + 1].label : undefined
+                          colIdx < COLUMNS.length - 1 ? COLUMNS[colIdx + 1].label : undefined
                         }
                         onPrev={
                           colIdx > 0
-                            ? () => move(item.id, STATUSES[colIdx - 1].key)
+                            ? () => move(item.id, COLUMNS[colIdx - 1].key)
                             : undefined
                         }
                         onNext={
-                          colIdx < STATUSES.length - 1
-                            ? () => move(item.id, STATUSES[colIdx + 1].key)
+                          colIdx < COLUMNS.length - 1
+                            ? () => move(item.id, COLUMNS[colIdx + 1].key)
                             : undefined
                         }
                       />

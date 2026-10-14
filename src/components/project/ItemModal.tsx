@@ -17,7 +17,7 @@ import {
   itemsAtom,
   selectedItemIdAtom,
 } from '../../atoms/project';
-import { STATUSES, tagInfo } from '../../data/constants';
+import { STATUSES, tagInfo, allowedStatuses } from '../../data/constants';
 import { confirm, errorMessage, toast } from '../../atoms/feedback';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
 import { isServerTaskId } from '../../data/taskSync';
@@ -238,7 +238,7 @@ export function ItemModal() {
             ) : null}
 
             <View className="mb-5 flex-row flex-wrap gap-1.5">
-              {STATUSES.map(s => (
+              {allowedStatuses(activeView?.statusFilter).map(s => (
                 <Chip
                   key={s.key}
                   label={s.label}

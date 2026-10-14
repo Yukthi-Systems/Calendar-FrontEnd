@@ -52,6 +52,14 @@ export const TAG_BY_KEY = Object.fromEntries(
 
 export const tagInfo = (tag: TaskTag) => TAG_BY_KEY[tag] ?? TAGS[0];
 
+// What a view lets you use. The server refuses to create/update a task through a
+// view whose status/tag filter doesn't include the task's status/tag — so pickers
+// offer only these. Empty filter = everything.
+export const allowedStatuses = (filter?: Status[]) =>
+  filter?.length ? STATUSES.filter(s => filter.includes(s.key)) : STATUSES;
+export const allowedTags = (filter?: TaskTag[]) =>
+  filter?.length ? TAGS.filter(t => filter.includes(t.key)) : TAGS;
+
 export const BACKEND_TAG: Record<TaskTag, BackendTaskTag> = {
   work: 'WORK',
   important: 'IMPORTANT',

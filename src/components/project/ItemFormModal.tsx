@@ -14,7 +14,8 @@ import {
   itemsAtom,
   selectedItemIdAtom,
 } from '../../atoms/project';
-import { PRIORITY_COLOR, STATUSES, TAGS } from '../../data/constants';
+import { PRIORITY_COLOR, allowedStatuses, allowedTags } from '../../data/constants';
+import { useActiveView } from '../../hooks/useViews';
 import { currentUserIdAtom } from '../../atoms/members';
 import { useMyProfile, usePeople, useUserSearch, type Person } from '../../hooks/useUsers';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
@@ -88,6 +89,11 @@ export function ItemFormModal() {
   const editing =
     form?.mode === 'edit' ? items.find(i => i.id === form.id) : undefined;
 
+  // Only what the active view's filters allow — anything else the server refuses.
+  const activeView = useActiveView();
+  const statusOptions = allowedStatuses(activeView?.statusFilter);
+  const tagOptions = allowedTags(activeView?.tagFilter);
+
   const parent =
     form?.mode === 'new' && form.parentId
       ? items.find(i => i.id === form.parentId)
@@ -150,13 +156,16 @@ export function ItemFormModal() {
     const today = new Date();
     setTitle(editing?.title ?? '');
     setDescription(editing?.description ?? '');
+    const pick = <K extends string>(wanted: K | undefined, options: { key: K }[]) =>
+      wanted && options.some(o => o.key === wanted) ? wanted : options[0].key;
     setStatus(
-      editing?.status ??
-        (form.mode === 'new' ? form.status : undefined) ??
-        'not_started',
+      pick(
+        editing?.status ?? (form.mode === 'new' ? form.status : undefined) ?? 'not_started',
+        statusOptions,
+      ),
     );
     setPriority(editing?.priority ?? 'medium');
-    setTag(editing?.tag ?? 'other');
+    setTag(pick(editing?.tag ?? 'other', tagOptions));
     setAssigneeIds(editing ? editing.assigneeIds : parent?.assigneeIds ?? []);
     const presetStart =
       form.mode === 'new' && form.start ? parseDate(form.start) : null;
@@ -374,9 +383,16 @@ export function ItemFormModal() {
           />
         </Field>
 
-        <Field label="Status">
+        <Field
+          label="Status"
+          hint={
+            statusOptions.length < 5
+              ? `“${activeView?.name}” only shows these statuses.`
+              : null
+          }
+        >
           <View className="flex-row flex-wrap gap-1.5">
-            {STATUSES.map(s => (
+            {statusOptions.map(s => (
               <Chip
                 key={s.key}
                 label={s.label}
@@ -402,9 +418,15 @@ export function ItemFormModal() {
               ))}
             </View>
           </Field>
-          <Field label="Tag" required>
+          <Field
+            label="Tag"
+            required
+            hint={
+              tagOptions.length < 6 ? `“${activeView?.name}” only shows these tags.` : null
+            }
+          >
             <View className="flex-row flex-wrap gap-1.5">
-              {TAGS.map(t => (
+              {tagOptions.map(t => (
                 <Chip
                   key={t.key}
                   label={t.label}
