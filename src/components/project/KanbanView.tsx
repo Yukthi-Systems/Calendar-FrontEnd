@@ -20,7 +20,6 @@ import { Badge, IconButton, Press, Skeleton } from '../ui';
 import {
   AssigneeAvatars,
   DueDate,
-  PriorityIcon,
   RecurrenceIcon,
   StatusIcon,
   SubtaskBadge,
@@ -221,10 +220,11 @@ function KanbanCard({
         <Text numberOfLines={3} className="flex-1 text-sm font-medium text-text-heading">
           {item.title}
         </Text>
-        <View className="flex-row items-center gap-1 pt-0.5">
-          {item.recurrence ? <RecurrenceIcon freq={item.recurrence} /> : null}
-          <PriorityIcon priority={item.priority} size={14} />
-        </View>
+        {item.recurrence ? (
+          <View className="pt-0.5">
+            <RecurrenceIcon freq={item.recurrence} />
+          </View>
+        ) : null}
       </View>
       {parent ? (
         <View className="flex-row items-center gap-1">

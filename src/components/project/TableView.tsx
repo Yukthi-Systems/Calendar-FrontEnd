@@ -28,16 +28,14 @@ import { Button, EmptyState, IconButton, Press, Skeleton } from '../ui';
 import {
   AssigneeAvatars,
   DueDate,
-  PriorityBadge,
   RecurrenceIcon,
   StatusBadge,
   SubtaskBadge,
   namesOf,
 } from './shared';
 
-type SortKey = 'title' | 'status' | 'assignee' | 'priority' | 'start' | 'end';
+type SortKey = 'title' | 'status' | 'assignee' | 'start' | 'end';
 
-const PRIORITY_RANK = { low: 0, medium: 1, high: 2 };
 const STATUS_RANK = {
   not_started: 0,
   in_progress: 1,
@@ -51,7 +49,6 @@ const COLUMNS: { key: SortKey; label: string; width?: number }[] = [
   { key: 'title', label: 'Title' },
   { key: 'status', label: 'Status', width: 136 },
   { key: 'assignee', label: 'Assignees', width: 120 },
-  { key: 'priority', label: 'Priority', width: 112 },
   { key: 'start', label: 'Start', width: 88 },
   { key: 'end', label: 'Due', width: 88 },
 ];
@@ -64,8 +61,6 @@ const sortValue = (
   switch (key) {
     case 'status':
       return STATUS_RANK[i.status] ?? 0;
-    case 'priority':
-      return PRIORITY_RANK[i.priority];
     case 'assignee':
       return namesOf(i.assigneeIds, people);
     default:
@@ -328,8 +323,6 @@ export function TableView({ view }: { view: ProjectView }) {
         return <StatusBadge status={i.status} />;
       case 'assignee':
         return <AssigneeAvatars ids={i.assigneeIds} size={22} max={4} />;
-      case 'priority':
-        return <PriorityBadge priority={i.priority} />;
       case 'end':
         return <DueDate item={i} />;
       default:

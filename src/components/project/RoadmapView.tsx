@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { GanttChart, Plus } from 'lucide-react-native';
-import type { WorkItem } from '../../data/types';
+import type { ProjectView, Status, WorkItem } from '../../data/types';
 import {
   addDays,
   differenceInCalendarDays,
@@ -23,7 +23,7 @@ import {
   startOfWeek,
 } from 'date-fns';
 import { itemFormAtom, itemsAtom, selectedItemIdAtom } from '../../atoms/project';
-import { STATUSES, statusInfo } from '../../data/constants';
+import { allowedStatuses, statusInfo } from '../../data/constants';
 import { flattenTree } from '../../data/tree';
 import { useThemeColors, useTone } from '../../hooks/useThemeColors';
 import { mix } from '../../theme/color';
@@ -119,12 +119,12 @@ function buildColumns(
 // contents depend on whatever happened to get fetched elsewhere (TableView's row
 // expand, or opening a task), rather than being complete on its own. Open a task
 // to see its subtasks until this view gets its own expand affordance.
-export function RoadmapView() {
+export function RoadmapView({ view }: { view: ProjectView }) {
   const items = useAtomValue(itemsAtom).filter(i => !i.parentId);
   if (items.length === 0) {
     return <RoadmapEmpty />;
   }
-  return <RoadmapTimeline items={items} />;
+  return <RoadmapTimeline items={items} statusFilter={view.statusFilter} />;
 }
 
 // Nothing to lay out yet — the timeline's date range comes from the tasks, so an
@@ -145,7 +145,13 @@ function RoadmapEmpty() {
   );
 }
 
-function RoadmapTimeline({ items }: { items: WorkItem[] }) {
+function RoadmapTimeline({
+  items,
+  statusFilter,
+}: {
+  items: WorkItem[];
+  statusFilter?: Status[];
+}) {
   const toneOf = useTone();
   const theme = useThemeColors();
   const headerRef = useRef<ScrollViewInstance>(null);
@@ -181,7 +187,7 @@ function RoadmapTimeline({ items }: { items: WorkItem[] }) {
     <View className="flex-1 px-4 pb-4 pt-3 lg:px-6">
       <View className="mb-3 flex-row flex-wrap items-center justify-between gap-3">
         <View className="flex-row flex-wrap items-center gap-x-4 gap-y-1">
-          {STATUSES.map(s => (
+          {allowedStatuses(statusFilter).map(s => (
             <View key={s.key} className="flex-row items-center gap-1.5">
               <StatusIcon status={s.key} size={13} />
               <Text className="text-xs text-text-main">{s.label}</Text>

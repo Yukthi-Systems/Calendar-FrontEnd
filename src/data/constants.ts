@@ -5,7 +5,7 @@ import {
   Table2,
   type LucideIcon,
 } from 'lucide-react-native';
-import type { Priority, Status, TaskTag, ViewType } from './types';
+import type { Status, TaskTag, ViewType } from './types';
 import type { BackendTaskStatus, BackendTaskTag } from '../services/types';
 
 export const STATUSES: { key: Status; label: string; color: string }[] = [
@@ -84,12 +84,6 @@ export const STATUS_FROM_BACKEND: Record<BackendTaskStatus, Status> = {
   COMPLETED: 'completed',
   CANCELLED: 'rejected',
   ON_HOLD: 'on_hold',
-};
-
-export const PRIORITY_COLOR: Record<Priority, string> = {
-  low: '#6b7280',
-  medium: '#f59e0b',
-  high: '#ef4444',
 };
 
 export const VIEW_TYPES: {

@@ -3,7 +3,6 @@ import type { ViewField, ViewType } from './types';
 export const TABLE_FIELDS: { key: ViewField; label: string }[] = [
   { key: 'status', label: 'Status' },
   { key: 'assignee', label: 'Assignees' },
-  { key: 'priority', label: 'Priority' },
   { key: 'start', label: 'Start date' },
   { key: 'end', label: 'Due date' },
 ];
@@ -13,7 +12,6 @@ export const TABLE_FIELDS: { key: ViewField; label: string }[] = [
 export const CALENDAR_FIELDS: { key: ViewField; label: string }[] = [
   { key: 'status', label: 'Status colour' },
   { key: 'assignee', label: 'Assignees' },
-  { key: 'priority', label: 'Priority' },
 ];
 
 export const fieldOptionsFor = (type: ViewType) =>

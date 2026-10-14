@@ -49,7 +49,6 @@ import { CommentsSection } from './CommentsSection';
 import {
   AssigneeAvatars,
   DueDate,
-  PriorityBadge,
   StatusIcon,
   AssigneeNames,
 } from './shared';
@@ -250,10 +249,7 @@ export function ItemModal() {
             </View>
 
             <View className="mb-6 rounded-xl border border-border-main">
-              <Property label="Priority" first>
-                <PriorityBadge priority={item.priority} />
-              </Property>
-              <Property label="Tag">
+              <Property label="Tag" first>
                 {tag ? <Badge label={tag.label} color={tag.color} dot /> : null}
               </Property>
               <Property label="Assignees">

@@ -51,14 +51,14 @@ export const onColor = (bg: string) =>
 
 export interface Tone {
   // Tinted fill, readable text, and a slightly stronger outline — for badges,
-  // status chips and calendar events coloured by status/priority/tag.
+  // status chips and calendar events coloured by status/tag.
   bg: string;
   fg: string;
   border: string;
   solid: string;
 }
 
-// A status/priority/tag hex turned into a badge that reads well on either theme,
+// A status/tag hex turned into a badge that reads well on either theme,
 // instead of `${hex}22` (washed out in dark mode, low-contrast text in light).
 export const tone = (color: string, dark: boolean): Tone => ({
   bg: alpha(color, dark ? 0.2 : 0.12),

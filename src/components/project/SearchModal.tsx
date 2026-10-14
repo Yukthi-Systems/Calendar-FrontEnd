@@ -9,7 +9,8 @@ import {
   searchTitleAtom,
   selectedItemIdAtom,
 } from '../../atoms/project';
-import { STATUSES } from '../../data/constants';
+import { allowedStatuses } from '../../data/constants';
+import { useActiveView } from '../../hooks/useViews';
 import { currentUserIdAtom } from '../../atoms/members';
 import { useMyProfile, usePerson, useUserSearch } from '../../hooks/useUsers';
 import type { SearchCriteria } from '../../data/search';
@@ -41,6 +42,8 @@ export function SearchModal() {
   const CURRENT_USER_ID = useAtomValue(currentUserIdAtom);
   const setSelectedId = useSetAtom(selectedItemIdAtom);
   const c = useThemeColors();
+  // Only statuses the view shows — the others can never match here.
+  const statusOptions = allowedStatuses(useActiveView()?.statusFilter);
 
   const [title, setTitle] = useAtom(searchTitleAtom);
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
@@ -135,7 +138,7 @@ export function SearchModal() {
               Status <Text className="text-text-subtle">· required</Text>
             </Text>
             <View className="flex-row flex-wrap gap-1.5">
-              {STATUSES.map(st => (
+              {statusOptions.map(st => (
                 <Chip
                   key={st.key}
                   label={st.label}

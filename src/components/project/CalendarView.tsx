@@ -52,7 +52,6 @@ import { Button, IconButton, Kbd, Press, SegmentedControl } from '../ui';
 import {
   AssigneeAvatars,
   ItemRow,
-  PriorityIcon,
   RecurrenceIcon,
   StatusIcon,
 } from './shared';
@@ -622,9 +621,6 @@ function EventBar({
             {item.title}
           </Text>
           {item.recurrence ? <RecurrenceIcon freq={item.recurrence} size={10} /> : null}
-          {detailed && showsField(fields, 'priority') ? (
-            <PriorityIcon priority={item.priority} size={12} />
-          ) : null}
           {detailed && showsField(fields, 'assignee') ? (
             <AssigneeAvatars ids={item.assigneeIds} size={16} max={2} />
           ) : null}
@@ -827,7 +823,6 @@ function DayCard({ occ, day, fields }: { occ: Occ; day: Date; fields?: ViewField
           </View>
         </View>
       ) : null}
-      {showsField(fields, 'priority') ? <PriorityIcon priority={item.priority} /> : null}
       {showsField(fields, 'assignee') ? (
         <AssigneeAvatars ids={item.assigneeIds} size={22} />
       ) : null}

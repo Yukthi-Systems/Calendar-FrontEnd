@@ -5,7 +5,7 @@ import {
   STATUS_FROM_BACKEND,
   TAG_FROM_BACKEND,
 } from './constants';
-import type { Priority, ProjectView, Reminder, Status, TaskTag, WorkItem } from './types';
+import type { ProjectView, Reminder, Status, TaskTag, WorkItem } from './types';
 import type {
   CreateTaskPayload,
   TaskFilterQuery,
@@ -14,7 +14,7 @@ import type {
 } from '../services/types';
 
 // Converts between this app's WorkItem and Tasks-Main-API's `tasks` row. The API
-// has no columns for priority/recurrence/reminders — only title,
+// has no columns for recurrence/reminders — only title,
 // description, status, tag and the start/end dates are real columns — so those
 // ride in the open-schema `details` JSON, the same trick src/data/viewSync.ts uses
 // for a view's `ui_info`.
@@ -36,7 +36,6 @@ const toTimestamp = (date: string) => `${date}T00:00:00.000Z`;
 const fromTimestamp = (ts: string) => ts.slice(0, 10);
 
 interface TaskDetails {
-  priority?: Priority;
   recurrence?: string | null;
   reminders?: Reminder[];
 }
@@ -48,7 +47,6 @@ export function taskFromServer(dto: TaskInfoDto): WorkItem {
     title: dto.title,
     description: dto.description,
     status: STATUS_FROM_BACKEND[dto.task_status],
-    priority: details.priority ?? 'medium',
     tag: TAG_FROM_BACKEND[dto.task_tag] ?? 'other',
     // Read-only: the API has no endpoint yet to set a task's assignees (no live
     // /assignees scope), so this only ever reflects what's already on the server.
@@ -70,15 +68,13 @@ export function taskFromServer(dto: TaskInfoDto): WorkItem {
   };
 }
 
-type DetailFields = Pick<WorkItem, 'priority' | 'recurrence' | 'reminders'>;
+type DetailFields = Pick<WorkItem, 'recurrence' | 'reminders'>;
 
 // `details` (JSONB) carries only what the tasks table has no column for, and only
 // when set — every core field (title, description, status, tag, dates, parent)
 // is a top-level column. Contract (read back in taskFromServer):
-//   { priority?: 'low'|'medium'|'high',
-//     recurrence?: RRULE string, reminders?: { offsetDays, time }[] }
+//   { recurrence?: RRULE string, reminders?: { offsetDays, time }[] }
 const detailsPayload = (item: DetailFields): Record<string, unknown> => ({
-  ...(item.priority && item.priority !== 'medium' ? { priority: item.priority } : null),
   ...(item.recurrence ? { recurrence: item.recurrence } : null),
   ...(item.reminders.length
     ? { reminders: item.reminders.map(r => ({ offsetDays: r.offsetDays, time: r.time })) }

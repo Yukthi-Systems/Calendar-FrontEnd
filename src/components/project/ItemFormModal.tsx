@@ -14,7 +14,7 @@ import {
   itemsAtom,
   selectedItemIdAtom,
 } from '../../atoms/project';
-import { PRIORITY_COLOR, allowedStatuses, allowedTags } from '../../data/constants';
+import { allowedStatuses, allowedTags } from '../../data/constants';
 import { useActiveView } from '../../hooks/useViews';
 import { currentUserIdAtom } from '../../atoms/members';
 import { useMyProfile, usePeople, useUserSearch, type Person } from '../../hooks/useUsers';
@@ -29,7 +29,7 @@ import {
   normalizeRRule,
   parseRRule,
 } from '../../data/rrule';
-import type { Priority, Reminder, Status, TaskTag } from '../../data/types';
+import type { Reminder, Status, TaskTag } from '../../data/types';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { errorMessage, toast } from '../../atoms/feedback';
 import {
@@ -47,10 +47,9 @@ import {
   SheetFooter,
   SheetHeader,
 } from '../ui';
-import { MultiSelectDropdown, PRIORITY_LABEL } from './shared';
+import { MultiSelectDropdown } from './shared';
 
 const DATE_FMT = 'yyyy-MM-dd';
-const PRIORITIES: Priority[] = ['low', 'medium', 'high'];
 const REMINDER_OFFSETS = [
   { days: 0, label: 'On due date' },
   { days: 1, label: '1 day before' },
@@ -102,7 +101,6 @@ export function ItemFormModal() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState<Status>('not_started');
-  const [priority, setPriority] = useState<Priority>('medium');
   const [tag, setTag] = useState<TaskTag>('other');
   const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
   const selectedPeople = usePeople(assigneeIds);
@@ -164,7 +162,6 @@ export function ItemFormModal() {
         statusOptions,
       ),
     );
-    setPriority(editing?.priority ?? 'medium');
     setTag(pick(editing?.tag ?? 'other', tagOptions));
     setAssigneeIds(editing ? editing.assigneeIds : parent?.assigneeIds ?? []);
     const presetStart =
@@ -300,7 +297,6 @@ export function ItemFormModal() {
       title: title.trim(),
       description: description.trim(),
       status,
-      priority,
       tag,
       // Assignees are never part of the task's own payload — the API assigns/
       // removes one person per call (`changes` below), separate from the task
@@ -404,40 +400,25 @@ export function ItemFormModal() {
           </View>
         </Field>
 
-        <View className="flex-row flex-wrap gap-x-6">
-          <Field label="Priority">
-            <View className="flex-row flex-wrap gap-1.5">
-              {PRIORITIES.map(p => (
-                <Chip
-                  key={p}
-                  label={PRIORITY_LABEL[p]}
-                  color={PRIORITY_COLOR[p]}
-                  active={priority === p}
-                  onPress={() => setPriority(p)}
-                />
-              ))}
-            </View>
-          </Field>
-          <Field
-            label="Tag"
-            required
-            hint={
-              tagOptions.length < 6 ? `“${activeView?.name}” only shows these tags.` : null
-            }
-          >
-            <View className="flex-row flex-wrap gap-1.5">
-              {tagOptions.map(t => (
-                <Chip
-                  key={t.key}
-                  label={t.label}
-                  color={t.color}
-                  active={tag === t.key}
-                  onPress={() => setTag(t.key)}
-                />
-              ))}
-            </View>
-          </Field>
-        </View>
+        <Field
+          label="Tag"
+          required
+          hint={
+            tagOptions.length < 6 ? `“${activeView?.name}” only shows these tags.` : null
+          }
+        >
+          <View className="flex-row flex-wrap gap-1.5">
+            {tagOptions.map(t => (
+              <Chip
+                key={t.key}
+                label={t.label}
+                color={t.color}
+                active={tag === t.key}
+                onPress={() => setTag(t.key)}
+              />
+            ))}
+          </View>
+        </Field>
 
         <Field
           label="Assignees"

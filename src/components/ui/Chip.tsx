@@ -4,7 +4,7 @@ import { useThemeColors, useTone } from '../../hooks/useThemeColors';
 import { Press } from './Press';
 
 // Selectable pill (single- or multi-select option). With `color`, the selected
-// state is tinted in that colour (status/priority/tag); without, it uses the accent.
+// state is tinted in that colour (status/tag); without, it uses the accent.
 export function Chip({
   label,
   color,
@@ -55,7 +55,7 @@ export function Chip({
   );
 }
 
-// Read-only tinted label: status, priority, tag.
+// Read-only tinted label: status, tag.
 export function Badge({
   label,
   color,

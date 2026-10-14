@@ -164,7 +164,7 @@ export interface TaskInfoDto {
 
   title: string;
   description: string;
-  // Open schema — this app stores { priority, recurrence, reminders }
+  // Open schema — this app stores { recurrence, reminders }
   // (src/data/taskSync.ts), the fields the backend has no column for.
   details: Record<string, unknown>;
 
