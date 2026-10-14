@@ -173,3 +173,41 @@ export function buildTaskFilter(
     ...(cursor ?? {}),
   };
 }
+
+// `title_contains` only accepts letters, digits and spaces (TaskFilterDto::
+// has_valid_title_filter — anything else is a 400), so punctuation becomes a
+// space. '' = nothing searchable; leave the title filter out.
+export const searchableTitle = (raw: string) =>
+  raw
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+export interface TaskSearch {
+  title: string;
+  statuses: Status[];
+  tags: TaskTag[];
+  // yyyy-MM-dd or ''. The API matches tasks lying wholly inside the range
+  // (start_at >= from AND end_at <= to); an open end uses the wide window.
+  from: string;
+  to: string;
+}
+
+// POST /tasks/list filter for a search: top-level tasks of the view, one page.
+export function buildSearchFilter(
+  s: TaskSearch,
+  limit: number,
+  cursor?: { cursor_start_at: string; cursor_task_id: number },
+): TaskFilterQuery {
+  const wide = wideTaskWindow();
+  const title = searchableTitle(s.title);
+  return {
+    ...(title ? { title_contains: title } : null),
+    any_of_task_status: s.statuses.map(k => BACKEND_STATUS[k]),
+    any_of_task_tag: s.tags.map(k => BACKEND_TAG[k]),
+    start_at: s.from ? toTimestamp(s.from) : wide.start_at,
+    end_at: s.to ? toTimestamp(s.to) : wide.end_at,
+    limit,
+    ...(cursor ?? {}),
+  };
+}

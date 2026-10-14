@@ -215,7 +215,6 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
           <CalendarCheck2 size={16} color={c.accentForeground} strokeWidth={2.25} />
         </View>
         <Text className="flex-1 text-base font-semibold text-text-heading">YTC</Text>
-        <IconButton icon={Plus} label="New task (N)" onPress={newTask} variant="outline" />
       </View>
 
       <View className="px-3 pb-2">
