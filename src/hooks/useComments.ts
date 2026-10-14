@@ -58,9 +58,16 @@ export function useCommentMutations(viewId: number, taskId: number) {
       withAuthRetry(token, t => deleteComment(t, viewId, taskId, commentId)),
     onSettled: refresh,
   });
+  // The server just merges whatever's sent in under each emoji key (no
+  // toggling), so the full desired array per emoji is computed here first.
   const react = useMutation({
-    mutationFn: ({ commentId, emoji }: { commentId: number; emoji: string }) =>
-      withAuthRetry(token, t => reactToComment(t, viewId, taskId, commentId, emoji)),
+    mutationFn: ({
+      commentId,
+      patch,
+    }: {
+      commentId: number;
+      patch: Record<string, string[]>;
+    }) => withAuthRetry(token, t => reactToComment(t, viewId, taskId, commentId, patch)),
     onSettled: refresh,
   });
 

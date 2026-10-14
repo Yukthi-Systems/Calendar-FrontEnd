@@ -19,12 +19,27 @@ import type { CommentDbDto } from '../../services/types';
 // comments need without pulling in a whole picker library for it.
 const QUICK_REACTIONS = ['👍', '❤️', '😂', '🎉', '👀', '🙁'];
 
+// The server's /react just JSONB-merges whatever's sent under `emoji`, so the
+// full new array (self added/removed) is computed here and sent as a patch.
+const toggleReaction = (
+  comment: CommentDbDto,
+  emoji: string,
+  me: string,
+): Record<string, string[]> => {
+  const current = comment.reactions[emoji] ?? [];
+  const next = current.includes(me)
+    ? current.filter(id => id !== me)
+    : [...current, me];
+  return { [emoji]: next };
+};
+
 // Comments and reactions on a task, backed by Tasks-Main-API's /comments routes
 // (now live — see docs/BACKEND.md §8). Needs the task's own id (server-assigned;
 // a task that hasn't synced yet has none) and the view it's being viewed through
 // (comments are only visible when that view's show_comments is on).
 export function CommentsSection({ taskId }: { taskId: string }) {
   const c = useThemeColors();
+  const me = useAtomValue(currentUserIdAtom);
   const view = useActiveView();
   const canLoad = !!view && isServerTaskId(taskId);
   const viewId = view ? Number(view.id) : 0;
@@ -132,7 +147,7 @@ export function CommentsSection({ taskId }: { taskId: string }) {
                 }
               }}
               onReact={emoji =>
-                react({ commentId: cm.comment_id, emoji }).catch(err => {
+                react({ commentId: cm.comment_id, patch: toggleReaction(cm, emoji, me) }).catch(err => {
                   toast.error('Couldn’t react to the comment', {
                     description: errorMessage(err, 'Please try again.'),
                   });
