@@ -216,6 +216,9 @@ function AddPerson({ view, existing }: { view: ProjectView; existing: string[] }
     canDelete: false,
   });
   const [saving, setSaving] = useState(false);
+  // The note is required; its error shows after the first Share attempt.
+  const [tried, setTried] = useState(false);
+  const noteMissing = !draft.notes.trim();
   const { people, isSearching } = useUserSearch(query);
   // Not yourself, and not someone who already has access (edit them above).
   const matches = people.filter(p => p.id !== currentUserId && !existing.includes(p.id));
@@ -224,15 +227,20 @@ function AddPerson({ view, existing }: { view: ProjectView; existing: string[] }
     setQuery('');
     setPicked(null);
     setDraft({ notes: '', canCreate: false, canEdit: false, canDelete: false });
+    setTried(false);
   };
 
   const share = async () => {
     if (!picked) {
       return;
     }
+    setTried(true);
+    if (noteMissing) {
+      return;
+    }
     setSaving(true);
     try {
-      await addShare({ userId: picked.id, ...draft });
+      await addShare({ userId: picked.id, ...draft, notes: draft.notes.trim() });
       toast.success(`Shared with ${picked.name}`);
       reset();
     } catch (err) {
@@ -275,11 +283,18 @@ function AddPerson({ view, existing }: { view: ProjectView; existing: string[] }
               label="Can delete tasks"
             />
           </View>
-          <Field label="Note" className="mb-0">
+          <Field
+            label="Note"
+            required
+            className="mb-0"
+            hint={`${picked.name} sees this at the top of the view.`}
+            error={tried && noteMissing ? 'Add a short note so they know why.' : null}
+          >
             <Input
               value={draft.notes}
               onChangeText={notes => setDraft(d => ({ ...d, notes }))}
-              placeholder="Why you're sharing this (optional)"
+              invalid={tried && noteMissing}
+              placeholder="Why you're sharing this, e.g. “Please keep the launch tasks updated”"
               multiline
               minHeight={48}
             />

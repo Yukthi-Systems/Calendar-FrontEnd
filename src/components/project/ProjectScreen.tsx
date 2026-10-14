@@ -8,6 +8,7 @@ import {
   CloudOff,
   Ellipsis,
   LayoutGrid,
+  MessageSquareText,
   Plus,
   Search,
   Table2,
@@ -25,6 +26,7 @@ import { useThemeColors } from '../../hooks/useThemeColors';
 import { useViewUrlSync } from '../../hooks/useViewUrlSync';
 import {
   useActiveView,
+  useMyShare,
   useViewList,
   useViewMutations,
   type ViewDraftFields,
@@ -312,7 +314,10 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
 
   const content =
     ActiveView && active ? (
-      <ActiveView key={active.id} view={active} />
+      <>
+        {active.shared ? <SharedNote view={active} /> : null}
+        <ActiveView key={active.id} view={active} />
+      </>
     ) : !ready ? (
       <View className="flex-1 gap-3 p-6">
         <Skeleton className="h-8 w-64 rounded-lg" />
@@ -478,6 +483,28 @@ function OwnerAvatar({ ownerId }: { ownerId: string }) {
   return owner ? (
     <InitialsAvatar color={owner.color} initials={owner.initials} size={18} />
   ) : null;
+}
+
+// The note the owner wrote when sharing this view with me, above the view.
+function SharedNote({ view }: { view: ProjectView }) {
+  const c = useThemeColors();
+  const owner = usePerson(view.ownerId);
+  const { data: share } = useMyShare(view);
+  const note = share?.share_notes?.trim();
+  if (!note) {
+    return null;
+  }
+  return (
+    <View className="flex-row items-start gap-2 border-b border-border-main bg-muted px-6 py-2">
+      <View className="pt-0.5">
+        <MessageSquareText size={14} color={c.subtle} />
+      </View>
+      <Text numberOfLines={2} className="flex-1 text-sm text-text-main">
+        <Text className="font-medium text-text-heading">{owner?.name ?? 'Owner'}: </Text>
+        {note}
+      </Text>
+    </View>
+  );
 }
 
 function SharedByBadge({ ownerId }: { ownerId: string }) {
