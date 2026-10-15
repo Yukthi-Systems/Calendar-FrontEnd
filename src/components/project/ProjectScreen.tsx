@@ -16,6 +16,7 @@ import {
   LayoutGrid,
   MessageSquareText,
   Plus,
+  RefreshCw,
   Search,
   Table2,
 } from 'lucide-react-native';
@@ -33,11 +34,13 @@ import { useViewUrlSync } from '../../hooks/useViewUrlSync';
 import {
   useActiveView,
   useMyShare,
+  useViewAccess,
   useViewList,
   useViewMutations,
   type ViewDraftFields,
 } from '../../hooks/useViews';
 import { useTasksSync } from '../../hooks/useTasksSync';
+import { useRefresh } from '../../hooks/useRefresh';
 import { useShortcuts } from '../../hooks/useShortcuts';
 import { VIEW_TYPES } from '../../data/constants';
 import type { ProjectView, ViewType } from '../../data/types';
@@ -103,11 +106,15 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   useTasksSync(active);
 
   const wide = width >= WIDE_BREAKPOINT;
+  // New task only where I may create (always in my own views; per share otherwise).
+  const { canCreate } = useViewAccess(active);
   const newTask = () => setItemForm({ mode: 'new' });
   const openSearch = () => setSearchOpen(true);
+  const { refresh, refreshing } = useRefresh();
 
   useShortcuts({
-    n: () => ActiveView && newTask(),
+    n: () => ActiveView && canCreate && newTask(),
+    r: refresh,
     '/': openSearch,
     v: () => setModalView(null),
   });
@@ -305,10 +312,18 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
           </Text>
         ) : null}
       </View>
+      <IconButton
+        icon={RefreshCw}
+        label={refreshing ? 'Refreshing…' : 'Refresh (R)'}
+        disabled={refreshing}
+        onPress={refresh}
+      />
       <MenuButton label="View options" onOpen={ref => openMenu(active, ref)} />
-      <Button variant="primary" icon={Plus} onPress={newTask}>
-        New task
-      </Button>
+      {canCreate ? (
+        <Button variant="primary" icon={Plus} onPress={newTask}>
+          New task
+        </Button>
+      ) : null}
     </View>
   ) : null;
 
@@ -400,6 +415,13 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
         })}
       </ScrollView>
       <IconButton icon={Search} label="Search" onPress={openSearch} size="lg" />
+      <IconButton
+        icon={RefreshCw}
+        label={refreshing ? 'Refreshing…' : 'Refresh'}
+        disabled={refreshing}
+        onPress={refresh}
+        size="lg"
+      />
       {active ? (
         <MenuButton label="View options" size="lg" onOpen={ref => openMenu(active, ref)} />
       ) : null}
@@ -432,7 +454,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
         <>
           {phoneHeader}
           <View className="flex-1">{content}</View>
-          {ActiveView ? (
+          {ActiveView && canCreate ? (
             <View className="absolute bottom-6 right-5">
               <Press
                 accessibilityRole="button"

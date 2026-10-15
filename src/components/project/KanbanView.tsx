@@ -14,6 +14,7 @@ import {
 import { allowedStatuses, statusInfo, tagInfo } from '../../data/constants';
 import { errorMessage, toast } from '../../atoms/feedback';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
+import { useViewAccess } from '../../hooks/useViews';
 import type { ProjectView, Status, WorkItem } from '../../data/types';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { Badge, IconButton, Press, Skeleton } from '../ui';
@@ -45,6 +46,8 @@ export function KanbanView({ view }: { view: ProjectView }) {
   const select = useSetAtom(selectedItemIdAtom);
   const setForm = useSetAtom(itemFormAtom);
   const { editItem } = useTaskMutations();
+  // Shared view: add / move only if the owner allowed it.
+  const { canCreate, canEdit } = useViewAccess(view);
   // Top-level tasks only — subtasks load lazily (useTasksSync's header comment),
   // so showing them as their own cards here would mean the board's contents
   // depend on whatever happened to get fetched elsewhere. `items` itself (used
@@ -95,12 +98,16 @@ export function KanbanView({ view }: { view: ProjectView }) {
                 </Text>
                 <Text className="text-sm text-text-subtle">{list.length}</Text>
                 <View className="flex-1" />
-                <IconButton
-                  icon={Plus}
-                  size="sm"
-                  label={`Add task to ${col.label}`}
-                  onPress={() => setForm({ mode: 'new', status: col.key })}
-                />
+                {canCreate ? (
+                  <IconButton
+                    icon={Plus}
+                    size="sm"
+                    label={`Add task to ${col.label}`}
+                    onPress={() => setForm({ mode: 'new', status: col.key })}
+                  />
+                ) : (
+                  <View className="h-7" />
+                )}
               </View>
               {loading && items.length === 0 ? (
                 <View className="gap-2 px-2">
@@ -124,17 +131,23 @@ export function KanbanView({ view }: { view: ProjectView }) {
                   }}
                   onDragEnd={({ data }) => reorder(col.key, data)}
                   ListEmptyComponent={
-                    <Press
-                      feedback="subtle"
-                      accessibilityRole="button"
-                      accessibilityLabel={`Add task to ${col.label}`}
-                      onPress={() => setForm({ mode: 'new', status: col.key })}
-                      className="group h-20 items-center justify-center rounded-lg border border-dashed border-border-strong hover:bg-bg-card"
-                    >
-                      <Text className="text-xs text-text-subtle group-hover:text-text-main">
-                        No tasks · click to add
-                      </Text>
-                    </Press>
+                    canCreate ? (
+                      <Press
+                        feedback="subtle"
+                        accessibilityRole="button"
+                        accessibilityLabel={`Add task to ${col.label}`}
+                        onPress={() => setForm({ mode: 'new', status: col.key })}
+                        className="group h-20 items-center justify-center rounded-lg border border-dashed border-border-strong hover:bg-bg-card"
+                      >
+                        <Text className="text-xs text-text-subtle group-hover:text-text-main">
+                          No tasks · click to add
+                        </Text>
+                      </Press>
+                    ) : (
+                      <View className="h-20 items-center justify-center rounded-lg border border-dashed border-border-main">
+                        <Text className="text-xs text-text-subtle">No tasks</Text>
+                      </View>
+                    )
                   }
                   renderItem={({
                     item,
@@ -152,6 +165,7 @@ export function KanbanView({ view }: { view: ProjectView }) {
                         nextLabel={
                           colIdx < COLUMNS.length - 1 ? COLUMNS[colIdx + 1].label : undefined
                         }
+                        canMove={canEdit}
                         onPrev={
                           colIdx > 0
                             ? () => move(item.id, COLUMNS[colIdx - 1].key)
@@ -181,6 +195,7 @@ function KanbanCard({
   isActive,
   onOpen,
   onDrag,
+  canMove,
   onPrev,
   onNext,
   prevLabel,
@@ -191,6 +206,8 @@ function KanbanCard({
   isActive: boolean;
   onOpen: () => void;
   onDrag: () => void;
+  // False in a shared view without edit access — no move arrows.
+  canMove: boolean;
   onPrev?: () => void;
   onNext?: () => void;
   prevLabel?: string;
@@ -240,22 +257,24 @@ function KanbanCard({
         <DueDate item={item} className="text-xs" />
         <SubtaskBadge item={item} />
         <View className="flex-1" />
-        <View className={`flex-row ${HOVER_REVEAL}`}>
-          <IconButton
-            icon={ChevronLeft}
-            size="sm"
-            label={prevLabel ? `Move to ${prevLabel}` : 'Move left'}
-            disabled={!onPrev}
-            onPress={onPrev}
-          />
-          <IconButton
-            icon={ChevronRight}
-            size="sm"
-            label={nextLabel ? `Move to ${nextLabel}` : 'Move right'}
-            disabled={!onNext}
-            onPress={onNext}
-          />
-        </View>
+        {canMove ? (
+          <View className={`flex-row ${HOVER_REVEAL}`}>
+            <IconButton
+              icon={ChevronLeft}
+              size="sm"
+              label={prevLabel ? `Move to ${prevLabel}` : 'Move left'}
+              disabled={!onPrev}
+              onPress={onPrev}
+            />
+            <IconButton
+              icon={ChevronRight}
+              size="sm"
+              label={nextLabel ? `Move to ${nextLabel}` : 'Move right'}
+              disabled={!onNext}
+              onPress={onNext}
+            />
+          </View>
+        ) : null}
       </View>
     </Press>
   );
