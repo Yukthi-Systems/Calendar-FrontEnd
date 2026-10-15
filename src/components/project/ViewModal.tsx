@@ -199,7 +199,8 @@ export function ViewModal({
                   accessibilityRole="radio"
                   accessibilityState={{ selected: active, checked: active }}
                   onPress={() => pickType(t.key)}
-                  style={{ flexBasis: 170, flexGrow: 1 }}
+                  // Two per row — the four layouts sit as a 2×2 grid.
+                  style={{ flexBasis: '45%', flexGrow: 1 }}
                   className={`gap-2 rounded-xl border p-3 ${
                     active
                       ? 'border-accent bg-accent-soft'
