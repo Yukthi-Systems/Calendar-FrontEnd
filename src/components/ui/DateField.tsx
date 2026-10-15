@@ -407,6 +407,8 @@ export function DateTimeField({
   onChange,
   min,
   invalid = false,
+  clearable = false,
+  allDayLabel = 'All day',
   accessibilityLabel,
   placeholder = 'Pick a date',
 }: {
@@ -415,6 +417,10 @@ export function DateTimeField({
   // 'yyyy-MM-dd' — days before it are disabled.
   min?: string;
   invalid?: boolean;
+  // An ✕ that empties it (date and time) — for optional fields like search.
+  clearable?: boolean;
+  // The "no time" option's name — "All day" for a task, "Any time" for a filter.
+  allDayLabel?: string;
   accessibilityLabel?: string;
   placeholder?: string;
 }) {
@@ -458,7 +464,8 @@ export function DateTimeField({
     onChange({ date, time: value.time });
   };
   const pickTime = (time: string) => {
-    onChange({ date: draftDate || value.date, time });
+    // A time with no day yet means today.
+    onChange({ date: draftDate || value.date || format(new Date(), DATE_FMT), time });
     setOpen(false);
   };
 
@@ -500,6 +507,7 @@ export function DateTimeField({
           triggerRef={ref}
           icon={CalendarDays}
           label={dateTimeLabel(value)}
+          onClear={clearable && value.date ? () => onChange({ date: '', time: '' }) : undefined}
           placeholder={placeholder}
           open={open}
           invalid={invalid}
@@ -574,7 +582,7 @@ export function DateTimeField({
             <Clock size={13} color={c.subtle} />
             <Text className="text-xs font-medium text-text-subtle">Time</Text>
           </View>
-          {timeOption('', 'All day')}
+          {timeOption('', allDayLabel)}
           <ScrollView
             ref={scroller}
             horizontal={stacked}

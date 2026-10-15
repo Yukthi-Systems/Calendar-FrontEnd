@@ -203,6 +203,9 @@ export interface TaskSearch {
   // (start_at >= from AND end_at <= to); an open end uses the wide window.
   from: string;
   to: string;
+  // 'HH:mm' (local) or '' — '' = the whole day (from its start / to its end).
+  fromTime: string;
+  toTime: string;
 }
 
 // The whole of a local day as an API bound, also covering its all-day form
@@ -225,8 +228,16 @@ export function buildSearchFilter(
     ...(title ? { title_contains: title } : null),
     any_of_task_status: s.statuses.map(k => BACKEND_STATUS[k]),
     any_of_task_tag: s.tags.map(k => BACKEND_TAG[k]),
-    start_at: s.from ? dayBound(s.from, 'start') : wide.start_at,
-    end_at: s.to ? dayBound(s.to, 'end') : wide.end_at,
+    start_at: !s.from
+      ? wide.start_at
+      : s.fromTime
+      ? new Date(`${s.from}T${s.fromTime}:00`).toISOString()
+      : dayBound(s.from, 'start'),
+    end_at: !s.to
+      ? wide.end_at
+      : s.toTime
+      ? new Date(`${s.to}T${s.toTime}:59.999`).toISOString()
+      : dayBound(s.to, 'end'),
     limit,
     ...(cursor ?? {}),
   };

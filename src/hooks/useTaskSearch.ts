@@ -25,7 +25,12 @@ export function useTaskSearch(view: ProjectView | undefined, search: TaskSearch,
   const valid =
     debounced.statuses.length > 0 &&
     debounced.tags.length > 0 &&
-    !(debounced.from && debounced.to && debounced.from > debounced.to);
+    !(
+      debounced.from &&
+      debounced.to &&
+      `${debounced.from} ${debounced.fromTime || '00:00'}` >
+        `${debounced.to} ${debounced.toTime || '23:59'}`
+    );
   const viewId = view ? Number(view.id) : undefined;
 
   const query = useInfiniteQuery({

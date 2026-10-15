@@ -20,7 +20,8 @@ import {
   Badge,
   Button,
   Chip,
-  DateField,
+  DateTimeField,
+  type DateTimeValue,
   EmptyState,
   IconButton,
   Input,
@@ -48,8 +49,9 @@ export function SearchModal() {
   const [title, setTitle] = useAtom(searchTitleAtom);
   const [statuses, setStatuses] = useState<Status[]>([]);
   const [tags, setTags] = useState<TaskTag[]>([]);
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
+  // Date + time ('' time = the whole day); '' date = open-ended.
+  const [from, setFrom] = useState<DateTimeValue>({ date: '', time: '' });
+  const [to, setTo] = useState<DateTimeValue>({ date: '', time: '' });
 
   // A different view allows different values — start from all of them.
   const viewId = view?.id;
@@ -62,9 +64,18 @@ export function SearchModal() {
   const toggle = <T,>(list: T[], key: T) =>
     list.includes(key) ? list.filter(k => k !== key) : [...list, key];
 
-  const rangeError = from && to && from > to ? '“From” is after “To”.' : null;
+  const rangeError =
+    from.date &&
+    to.date &&
+    `${from.date} ${from.time || '00:00'}` > `${to.date} ${to.time || '23:59'}`
+      ? '“From” is after “To”.'
+      : null;
   const { results, isSearching, isLoading, error, hasMore, loadMore, loadingMore } =
-    useTaskSearch(view, { title, statuses, tags, from, to }, open);
+    useTaskSearch(
+      view,
+      { title, statuses, tags, from: from.date, to: to.date, fromTime: from.time, toTime: to.time },
+      open,
+    );
 
   const close = () => setOpen(false);
   const openItem = (item: WorkItem) => {
@@ -153,29 +164,31 @@ export function SearchModal() {
             <View className="flex-row flex-wrap gap-3">
               <View style={{ flexBasis: 150, flexGrow: 1 }}>
                 <Text className="mb-1.5 text-xs font-medium text-text-heading">From</Text>
-                <DateField
+                <DateTimeField
                   value={from}
                   onChange={setFrom}
                   clearable
+                  allDayLabel="Any time"
                   placeholder="Any date"
                   accessibilityLabel="From"
                 />
               </View>
               <View style={{ flexBasis: 150, flexGrow: 1 }}>
                 <Text className="mb-1.5 text-xs font-medium text-text-heading">To</Text>
-                <DateField
+                <DateTimeField
                   value={to}
                   onChange={setTo}
                   clearable
+                  allDayLabel="Any time"
                   placeholder="Any date"
-                  min={from || undefined}
+                  min={from.date || undefined}
                   invalid={!!rangeError}
                   accessibilityLabel="To"
                 />
               </View>
             </View>
             <Text className="mt-1.5 text-xs text-text-subtle">
-              Tasks that start and end within these dates.
+              Tasks that start and end within this range. No time = the whole day.
             </Text>
           </View>
         </View>
