@@ -10,6 +10,7 @@ import {
 import { useAtomValue, useSetAtom } from 'jotai';
 import { GanttChart, Plus } from 'lucide-react-native';
 import type { ProjectView, Status, WorkItem } from '../../data/types';
+import { useViewAccess } from '../../hooks/useViews';
 import {
   addDays,
   differenceInCalendarDays,
@@ -122,24 +123,27 @@ function buildColumns(
 export function RoadmapView({ view }: { view: ProjectView }) {
   const items = useAtomValue(itemsAtom).filter(i => !i.parentId);
   if (items.length === 0) {
-    return <RoadmapEmpty />;
+    return <RoadmapEmpty view={view} />;
   }
   return <RoadmapTimeline items={items} statusFilter={view.statusFilter} />;
 }
 
 // Nothing to lay out yet — the timeline's date range comes from the tasks, so an
 // empty list has no range at all.
-function RoadmapEmpty() {
+function RoadmapEmpty({ view }: { view: ProjectView }) {
   const setForm = useSetAtom(itemFormAtom);
+  const { canCreate } = useViewAccess(view);
   return (
     <EmptyState
       icon={GanttChart}
       title="Nothing on the roadmap"
       description="Tasks appear here as bars across their start and due dates, so you can see what overlaps."
       action={
-        <Button variant="primary" icon={Plus} onPress={() => setForm({ mode: 'new' })}>
-          New task
-        </Button>
+        canCreate ? (
+          <Button variant="primary" icon={Plus} onPress={() => setForm({ mode: 'new' })}>
+            New task
+          </Button>
+        ) : undefined
       }
     />
   );

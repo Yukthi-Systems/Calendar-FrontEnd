@@ -20,6 +20,7 @@ import {
 import { MAX_DEPTH, hasSubtasks } from '../../data/tree';
 import { showsField } from '../../data/viewFields';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
+import { useViewAccess } from '../../hooks/useViews';
 import { errorMessage, toast } from '../../atoms/feedback';
 import type { ProjectView, WorkItem } from '../../data/types';
 import { useThemeColors } from '../../hooks/useThemeColors';
@@ -105,6 +106,8 @@ function buildRows(
   sorted: WorkItem[],
   expanded: ReadonlySet<string>,
   loading: ReadonlySet<string>,
+  // False in a shared view without create access — no "Add subtask" rows.
+  allowAdd: boolean,
 ): Row[] {
   const ids = new Set(sorted.map(i => i.id));
   const childrenOf = (id: string) => sorted.filter(i => i.parentId === id);
@@ -123,7 +126,7 @@ function buildRows(
         out.push({ kind: 'loading', key: `${item.id}:loading`, depth: depth + 1, guides: childGuides });
         return;
       }
-      const canAdd = depth < MAX_DEPTH;
+      const canAdd = allowAdd && depth < MAX_DEPTH;
       walk(kids, depth + 1, childGuides, canAdd);
       if (canAdd) {
         out.push({ kind: 'add', key: `${item.id}:add`, parent: item, depth: depth + 1, guides: childGuides });
@@ -168,6 +171,7 @@ export function TableView({ view }: { view: ProjectView }) {
   const setForm = useSetAtom(itemFormAtom);
   const select = useSetAtom(selectedItemIdAtom);
   const { loadChildren, subtasksEnabled } = useTaskMutations();
+  const { canCreate } = useViewAccess(view);
   const c = useThemeColors();
   const columns = COLUMNS.filter(
     col => col.key === 'title' || showsField(view.fields, col.key),
@@ -184,7 +188,12 @@ export function TableView({ view }: { view: ProjectView }) {
     return (x < y ? -1 : x > y ? 1 : 0) * sort.dir;
   });
   // Views with show_subtasks off can't list subtasks (server rule) — nothing to expand.
-  const rows = buildRows(sorted, subtasksEnabled ? expanded : new Set(), loadingRows);
+  const rows = buildRows(
+    sorted,
+    subtasksEnabled ? expanded : new Set(),
+    loadingRows,
+    canCreate,
+  );
   const roots = items.filter(i => !i.parentId);
   // Every loaded task that has subtasks (for Expand all) — the header counts only
   // top-level ones, so the number doesn't change as rows are expanded.
@@ -242,9 +251,11 @@ export function TableView({ view }: { view: ProjectView }) {
         title="No tasks yet"
         description="Tasks you create show up here as a sortable table, with subtasks nested under their parent."
         action={
-          <Button variant="primary" icon={Plus} onPress={() => setForm({ mode: 'new' })}>
-            New task
-          </Button>
+          canCreate ? (
+            <Button variant="primary" icon={Plus} onPress={() => setForm({ mode: 'new' })}>
+              New task
+            </Button>
+          ) : undefined
         }
       />
     );
@@ -300,7 +311,7 @@ export function TableView({ view }: { view: ProjectView }) {
           </View>
         ) : null}
         <View className="flex-1" />
-        {subtasksEnabled && depth < MAX_DEPTH ? (
+        {subtasksEnabled && canCreate && depth < MAX_DEPTH ? (
           <View className="reveal-on-hover pr-1">
             <IconButton
               icon={Plus}

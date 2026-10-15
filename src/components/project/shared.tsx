@@ -15,6 +15,7 @@ import {
 import { useAtomValue, useSetAtom } from 'jotai';
 import { differenceInCalendarDays, format, parseISO } from 'date-fns';
 import { itemsAtom, selectedItemIdAtom } from '../../atoms/project';
+import { currentUserIdAtom } from '../../atoms/members';
 import { statusInfo } from '../../data/constants';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { usePeople, usePerson, type Person } from '../../hooks/useUsers';
@@ -45,8 +46,9 @@ export function InitialsAvatar({
   color: string;
   initials: string;
   size?: number;
-  // A card-colour border so stacked avatars (AssigneeAvatars) read as separate circles.
-  ring?: boolean;
+  // A card-colour border so stacked avatars (AssigneeAvatars) read as separate circles;
+  // 'accent' marks the signed-in user.
+  ring?: boolean | 'accent';
 }) {
   return (
     <View
@@ -55,9 +57,11 @@ export function InitialsAvatar({
         height: size,
         borderRadius: size / 2,
         backgroundColor: color,
-        borderWidth: ring ? 1.5 : 0,
+        borderWidth: ring === 'accent' ? 2 : ring ? 1.5 : 0,
       }}
-      className={`items-center justify-center ${ring ? 'border-bg-card' : ''}`}
+      className={`items-center justify-center ${
+        ring === 'accent' ? 'border-accent' : ring ? 'border-bg-card' : ''
+      }`}
     >
       <Text
         style={{ fontSize: Math.max(9, size * 0.38), lineHeight: size }}
@@ -76,11 +80,12 @@ export function Avatar({
 }: {
   id: string | null;
   size?: number;
-  ring?: boolean;
+  ring?: boolean | 'accent';
 }) {
   const m = usePerson(id);
+  const me = useAtomValue(currentUserIdAtom);
   return (
-    <Tooltip label={m?.name ?? 'Unassigned'}>
+    <Tooltip label={id && id === me ? `You (${m?.name ?? '…'})` : m?.name ?? 'Unassigned'}>
       <InitialsAvatar
         color={m?.color ?? '#9ca3af'}
         initials={m?.initials ?? '?'}
@@ -91,10 +96,16 @@ export function Avatar({
   );
 }
 
+// Me first, then everyone else in their original order.
+const meFirst = (ids: string[], me: string) =>
+  ids.includes(me) ? [me, ...ids.filter(id => id !== me)] : ids;
+
 // Overlapping avatars for an item's assignee list, capped at `max` with a
-// "+N" tail. Renders a dashed "unassigned" placeholder when the list is empty.
+// "+N" tail. If I'm assigned, I come first with an accent ring — so tasks of
+// mine stand out in every view. Renders a dashed "unassigned" placeholder when
+// the list is empty.
 export function AssigneeAvatars({
-  ids,
+  ids: given,
   size = 22,
   max = 3,
 }: {
@@ -102,6 +113,8 @@ export function AssigneeAvatars({
   size?: number;
   max?: number;
 }) {
+  const me = useAtomValue(currentUserIdAtom);
+  const ids = meFirst(given, me);
   const people = usePeople(ids.slice(max));
   if (ids.length === 0) {
     return (
@@ -125,7 +138,7 @@ export function AssigneeAvatars({
     <View className="flex-row items-center">
       {shown.map((id, i) => (
         <View key={id} style={{ marginLeft: i === 0 ? 0 : -size * 0.28 }}>
-          <Avatar id={id} size={size} ring />
+          <Avatar id={id} size={size} ring={id === me ? 'accent' : true} />
         </View>
       ))}
       {rest > 0 ? (
@@ -157,10 +170,13 @@ export function AssigneeAvatars({
 
 // Comma-separated names for an assignee list, given people resolved with
 // usePeople (table sorting, detail sheet).
-export const namesOf = (ids: string[], people: Map<string, Person>) =>
+// With `me`, I'm listed first, as "You".
+export const namesOf = (ids: string[], people: Map<string, Person>, me?: string) =>
   ids.length === 0
     ? 'Unassigned'
-    : ids.map(id => people.get(id)?.name ?? '…').join(', ');
+    : (me ? meFirst(ids, me) : ids)
+        .map(id => (me && id === me ? 'You' : people.get(id)?.name ?? '…'))
+        .join(', ');
 
 export function AssigneeNames({
   ids,
@@ -170,9 +186,10 @@ export function AssigneeNames({
   className?: string;
 }) {
   const people = usePeople(ids);
+  const me = useAtomValue(currentUserIdAtom);
   return (
     <Text numberOfLines={1} className={className}>
-      {namesOf(ids, people)}
+      {namesOf(ids, people, me)}
     </Text>
   );
 }

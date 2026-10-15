@@ -140,17 +140,48 @@ export function useViewShares(view: ProjectView | null) {
   });
 }
 
+export const myShareKey = (viewId: string) => ['myShare', viewId] as const;
+
 // My own access to a view someone shared with me — GET /shared/info/{view_id}/{me}.
-// Fetched fresh each time it's shown, so a change by the owner shows up.
-export function useMyShare(view: ProjectView | null) {
+// Cached briefly (many components ask); `fresh` refetches on mount, e.g. the ⋯
+// menu, so a change by the owner shows up there. The refresh button invalidates it.
+export function useMyShare(view: ProjectView | null | undefined, fresh = false) {
   const token = useAtomValue(tokenAtom);
   const me = useAtomValue(currentUserIdAtom);
   return useQuery({
-    queryKey: ['myShare', view?.id ?? '', me],
+    queryKey: [...myShareKey(view?.id ?? ''), me],
     queryFn: () => withAuthRetry(token, t => getSharedTaskView(t, Number(view!.id), me)),
     enabled: !!token && !!me && !!view?.shared,
-    staleTime: 0,
+    staleTime: 60_000,
+    refetchOnMount: fresh ? 'always' : true,
   });
+}
+
+export interface ViewAccess {
+  canCreate: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
+}
+
+const FULL: ViewAccess = { canCreate: true, canEdit: true, canDelete: true };
+const NONE: ViewAccess = { canCreate: false, canEdit: false, canDelete: false };
+
+// What I may do with tasks in `view`: everything in my own views; in a shared one,
+// exactly what the owner granted (the server's share record — the same one the
+// server checks). Until that record has loaded, nothing — actions appear once known
+// rather than flash in and vanish. If it can't be read, everything is offered and
+// the server's answer (a toast on refusal) decides, rather than a dead-end screen.
+export function useViewAccess(view: ProjectView | null | undefined): ViewAccess {
+  const { data, isError } = useMyShare(view);
+  if (!view) {
+    return NONE;
+  }
+  if (!view.shared || isError) {
+    return FULL;
+  }
+  return data
+    ? { canCreate: data.can_create, canEdit: data.can_edit, canDelete: data.can_delete }
+    : NONE;
 }
 
 export interface ShareDraft {

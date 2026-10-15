@@ -89,7 +89,7 @@ export function ViewMenuModal({
 // What a view shared with me lets me do: the owner's grant (from the server), plus
 // the view's own limits that apply to everyone — subtasks and status/tag filters.
 function MyAccess({ view }: { view: ProjectView }) {
-  const { data: share, isLoading, error } = useMyShare(view);
+  const { data: share, isLoading, error } = useMyShare(view, true);
   const statuses = view.statusFilter?.length
     ? STATUSES.filter(s => view.statusFilter!.includes(s.key)).map(s => s.label)
     : null;

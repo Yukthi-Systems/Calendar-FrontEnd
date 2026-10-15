@@ -47,6 +47,7 @@ import { showsField } from '../../data/viewFields';
 import type { ProjectView, ViewField, WorkItem } from '../../data/types';
 import { useThemeColors, useTone } from '../../hooks/useThemeColors';
 import { useShortcuts } from '../../hooks/useShortcuts';
+import { useViewAccess } from '../../hooks/useViews';
 import { mix } from '../../theme/color';
 import { Button, IconButton, Kbd, Press, SegmentedControl } from '../ui';
 import {
@@ -180,8 +181,10 @@ export function CalendarView({ view }: { view: ProjectView }) {
     setSelected(day);
     setMode('day');
   };
-  const newTaskOn = (day: Date) =>
-    setForm({ mode: 'new', start: format(day, DATE_FMT) });
+  const { canCreate } = useViewAccess(view);
+  const newTaskOn = canCreate
+    ? (day: Date) => setForm({ mode: 'new', start: format(day, DATE_FMT) })
+    : undefined;
 
   useShortcuts({
     arrowleft: () => step(-1),
@@ -362,7 +365,8 @@ function MonthGrid({
   narrow: boolean;
   onSelectDay: (d: Date) => void;
   onOpenDay: (d: Date) => void;
-  onNewTask: (d: Date) => void;
+  // Absent where I may not create tasks (shared view) — no "+" buttons.
+  onNewTask?: (d: Date) => void;
 }) {
   const weeks = useMemo(
     () =>
@@ -438,7 +442,7 @@ function WeekRow({
   narrow: boolean;
   onSelectDay: (d: Date) => void;
   onOpenDay: (d: Date) => void;
-  onNewTask: (d: Date) => void;
+  onNewTask?: (d: Date) => void;
 }) {
   const c = useThemeColors();
   const segments = layoutWeek(occ, days[0]);
@@ -497,7 +501,7 @@ function WeekRow({
                   {day.getDate() === 1 && !narrow ? format(day, 'MMM d') : format(day, 'd')}
                 </Text>
               </View>
-              {!narrow ? (
+              {!narrow && onNewTask ? (
                 <View className="reveal-on-hover">
                   <IconButton
                     icon={Plus}
@@ -646,7 +650,7 @@ function WeekBody({
   items: WorkItem[];
   fields?: ViewField[];
   onOpenDay: (d: Date) => void;
-  onNewTask: (d: Date) => void;
+  onNewTask?: (d: Date) => void;
 }) {
   const c = useThemeColors();
   const days = eachDayOfInterval({ start: weekStart, end: addDays(weekStart, 6) });
@@ -708,11 +712,13 @@ function WeekBody({
               style={isWeekend(d) ? { backgroundColor: dimmed } : undefined}
               className={`group flex-1 ${col > 0 ? 'border-l border-border-main' : ''}`}
             >
-              <View className="reveal-on-hover absolute bottom-2 left-0 right-0 items-center">
-                <Button size="sm" variant="ghost" icon={Plus} onPress={() => onNewTask(d)}>
-                  Add
-                </Button>
-              </View>
+              {onNewTask ? (
+                <View className="reveal-on-hover absolute bottom-2 left-0 right-0 items-center">
+                  <Button size="sm" variant="ghost" icon={Plus} onPress={() => onNewTask(d)}>
+                    Add
+                  </Button>
+                </View>
+              ) : null}
             </View>
           ))}
           <View pointerEvents="box-none" className="absolute inset-0">
@@ -755,7 +761,7 @@ function DayBody({
   day: Date;
   items: WorkItem[];
   fields?: ViewField[];
-  onNewTask: (d: Date) => void;
+  onNewTask?: (d: Date) => void;
 }) {
   const occ = occOnDay(items, day);
   const c = useThemeColors();
@@ -774,11 +780,13 @@ function DayBody({
             </Text>
           </View>
         ) : null}
-        <View className="mt-1 items-start">
-          <Button variant="ghost" size="sm" icon={Plus} onPress={() => onNewTask(day)}>
-            {`Add task on ${format(day, 'MMM d')}`}
-          </Button>
-        </View>
+        {onNewTask ? (
+          <View className="mt-1 items-start">
+            <Button variant="ghost" size="sm" icon={Plus} onPress={() => onNewTask(day)}>
+              {`Add task on ${format(day, 'MMM d')}`}
+            </Button>
+          </View>
+        ) : null}
       </View>
     </ScrollView>
   );
@@ -850,7 +858,7 @@ function AgendaPanel({
   day: Date;
   items: WorkItem[];
   fields?: ViewField[];
-  onNewTask: (d: Date) => void;
+  onNewTask?: (d: Date) => void;
   onSelectDay: (d: Date) => void;
 }) {
   const c = useThemeColors();
@@ -881,12 +889,14 @@ function AgendaPanel({
           </Text>
           <Text className="text-lg font-semibold text-text-heading">{format(day, 'MMMM d')}</Text>
         </View>
-        <IconButton
-          icon={Plus}
-          variant="outline"
-          label={`New task on ${format(day, 'MMM d')}`}
-          onPress={() => onNewTask(day)}
-        />
+        {onNewTask ? (
+          <IconButton
+            icon={Plus}
+            variant="outline"
+            label={`New task on ${format(day, 'MMM d')}`}
+            onPress={() => onNewTask(day)}
+          />
+        ) : null}
       </View>
       <View className="gap-1.5">
         {agenda.map(o => (

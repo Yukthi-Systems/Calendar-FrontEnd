@@ -33,7 +33,7 @@ import {
   subtaskProgress,
 } from '../../data/tree';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { useActiveView, useViewMutations } from '../../hooks/useViews';
+import { useActiveView, useViewAccess, useViewMutations } from '../../hooks/useViews';
 import {
   Badge,
   Button,
@@ -49,6 +49,7 @@ import { CommentsSection } from './CommentsSection';
 import {
   AssigneeAvatars,
   DueDate,
+  StatusBadge,
   StatusIcon,
   AssigneeNames,
 } from './shared';
@@ -68,6 +69,9 @@ export function ItemModal() {
   } = useTaskMutations();
   const activeView = useActiveView();
   const { updateView } = useViewMutations();
+  // In a shared view, only what the owner granted is offered (the server's share
+  // record); my own views allow everything.
+  const { canCreate, canEdit, canDelete } = useViewAccess(activeView);
   const [enablingSubtasks, setEnablingSubtasks] = useState(false);
   // Views with show_subtasks off: the server refuses subtasks through them. The
   // owner can switch it on right here; anyone else just sees why.
@@ -123,9 +127,6 @@ export function ItemModal() {
   const subtasks = item ? flattenTree(descendantsOf(items, item.id)) : [];
   const progress = item ? subtaskProgress(items, item) : null;
   const canAdd = item ? canAddSubtask(items, item) : false;
-  // Edit/Delete are always offered: the server decides (owner/creator + the
-  // view's permissions) and its refusal is shown as a toast. The client has no
-  // copy of those rules — docs/BACKEND.md §4.
 
   const setStatus = (status: (typeof STATUSES)[number]['key']) => {
     if (!item || item.status === status) {
@@ -208,20 +209,24 @@ export function ItemModal() {
             }
             actions={
               <>
-                <IconButton
-                  icon={Pencil}
-                  label="Edit task"
-                  onPress={() => {
-                    setForm({ mode: 'edit', id: item.id });
-                    close();
-                  }}
-                />
-                <IconButton
-                  icon={Trash2}
-                  label="Delete task"
-                  color={c.destructive}
-                  onPress={remove}
-                />
+                {canEdit ? (
+                  <IconButton
+                    icon={Pencil}
+                    label="Edit task"
+                    onPress={() => {
+                      setForm({ mode: 'edit', id: item.id });
+                      close();
+                    }}
+                  />
+                ) : null}
+                {canDelete ? (
+                  <IconButton
+                    icon={Trash2}
+                    label="Delete task"
+                    color={c.destructive}
+                    onPress={remove}
+                  />
+                ) : null}
               </>
             }
           />
@@ -236,17 +241,28 @@ export function ItemModal() {
               </View>
             ) : null}
 
-            <View className="mb-5 flex-row flex-wrap gap-1.5">
-              {allowedStatuses(activeView?.statusFilter).map(s => (
-                <Chip
-                  key={s.key}
-                  label={s.label}
-                  color={s.color}
-                  active={s.key === item.status}
-                  onPress={() => setStatus(s.key)}
-                />
-              ))}
-            </View>
+            {canEdit ? (
+              <View className="mb-5 flex-row flex-wrap gap-1.5">
+                {allowedStatuses(activeView?.statusFilter).map(s => (
+                  <Chip
+                    key={s.key}
+                    label={s.label}
+                    color={s.color}
+                    active={s.key === item.status}
+                    onPress={() => setStatus(s.key)}
+                  />
+                ))}
+              </View>
+            ) : (
+              <View className="mb-5 flex-row items-center gap-2">
+                <StatusBadge status={item.status} />
+                {activeView?.shared ? (
+                  <Text className="text-xs text-text-subtle">
+                    {canDelete ? 'You can’t edit tasks in this view' : 'View only'}
+                  </Text>
+                ) : null}
+              </View>
+            )}
 
             <View className="mb-6 rounded-xl border border-border-main">
               <Property label="Tag" first>
@@ -310,7 +326,7 @@ export function ItemModal() {
                   </Text>
                 ) : null}
                 <View className="flex-1" />
-                {!subtasksEnabled ? null : canAdd ? (
+                {!subtasksEnabled || !canCreate ? null : canAdd ? (
                   <Button
                     size="sm"
                     variant="ghost"
