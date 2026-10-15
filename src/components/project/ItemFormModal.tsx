@@ -38,6 +38,7 @@ import {
   Checkbox,
   Chip,
   DateField,
+  DateTimeField,
   Field,
   IconButton,
   Input,
@@ -64,6 +65,19 @@ const parseDate = (s: string) => parse(s, DATE_FMT, new Date());
 const validDate = (s: string) =>
   /^\d{4}-\d{2}-\d{2}$/.test(s) && isValid(parseDate(s));
 const validTime = (s: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(s);
+
+// Default times for a new task: from now (rounded up to the next 15 minutes —
+// the time picker's grid) until midnight tonight. A day other than today starts
+// at 09:00. Due is always that day's 23:59.
+const END_OF_DAY = '23:59';
+const defaultStartTime = (day: Date) => {
+  const now = new Date();
+  if (format(day, DATE_FMT) !== format(now, DATE_FMT)) {
+    return '09:00';
+  }
+  const mins = Math.min(23 * 60 + 45, Math.ceil((now.getHours() * 60 + now.getMinutes()) / 15) * 15);
+  return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
+};
 
 // Create or edit a work item. Opened via itemFormAtom from the "+" button, Kanban
 // columns and the item detail sheet.
@@ -111,6 +125,9 @@ export function ItemFormModal() {
   ];
   const [start, setStart] = useState('');
   const [end, setEnd] = useState('');
+  // 'HH:mm' or '' — '' = all day (see WorkItem.startTime).
+  const [startTime, setStartTime] = useState('');
+  const [endTime, setEndTime] = useState('');
   // Stored as an RRULE string. Presets set it directly; "Custom" edits the raw text.
   const [recurrence, setRecurrence] = useState<string | null>(null);
   const [customRule, setCustomRule] = useState(false);
@@ -171,11 +188,14 @@ export function ItemFormModal() {
         parent?.start ??
         format(presetStart ?? today, DATE_FMT),
     );
-    setEnd(
-      editing?.end ??
-        parent?.end ??
-        format(addDays(presetStart ?? today, presetStart ? 0 : 2), DATE_FMT),
+    setEnd(editing?.end ?? parent?.end ?? format(presetStart ?? today, DATE_FMT));
+    // Editing keeps the task's own times (none = all day); a subtask starts with
+    // its parent's; anything new runs from now (or 09:00) to midnight.
+    const source = editing ?? parent;
+    setStartTime(
+      source ? source.startTime ?? '' : defaultStartTime(presetStart ?? today),
     );
+    setEndTime(source ? source.endTime ?? '' : END_OF_DAY);
     const savedRule = migrateRecurrence(editing?.recurrence);
     setRecurrence(savedRule);
     setCustomRule(
@@ -262,6 +282,8 @@ export function ItemFormModal() {
       ? 'Use YYYY-MM-DD'
       : validDate(start) && end < start
       ? 'Due date is before the start'
+      : end === start && startTime && endTime && endTime < startTime
+      ? 'Due time is before the start'
       : null,
     reminders: reminders.some(r => !validTime(r.time)) ? 'Use HH:mm' : null,
     recurrence: customError,
@@ -305,6 +327,8 @@ export function ItemFormModal() {
       assigneeIds: isServerBacked ? editing?.assigneeIds ?? [] : assigneeIds,
       start,
       end,
+      startTime: startTime || null,
+      endTime: endTime || null,
       recurrence,
       reminders,
     };
@@ -338,6 +362,9 @@ export function ItemFormModal() {
   };
 
   const show = (e: string | null) => (attempted ? e : null);
+  // Ordering problems between start and due show straight away.
+  const ordering = errors.end === 'Due date is before the start' || errors.end === 'Due time is before the start';
+  const endError = ordering ? errors.end : show(errors.end);
   const title_ = editing
     ? 'Edit task'
     : parent
@@ -461,25 +488,36 @@ export function ItemFormModal() {
           />
         </Field>
 
+        {/* Start and due side by side, each one picker for its date and time
+            (empty time = all day). Ordering errors show at once — they're caused
+            by the other field, not by typing. */}
         <View className="flex-row gap-3">
           <View className="flex-1">
             <Field label="Start" required error={show(errors.start)}>
-              <DateField
-                value={start}
-                onChange={changeStart}
+              <DateTimeField
+                value={{ date: start, time: startTime }}
+                onChange={v => {
+                  if (v.date !== start) {
+                    changeStart(v.date);
+                  }
+                  setStartTime(v.time);
+                }}
                 invalid={!!show(errors.start)}
-                accessibilityLabel="Start date"
+                accessibilityLabel="Start"
               />
             </Field>
           </View>
           <View className="flex-1">
-            <Field label="Due" required error={show(errors.end) ?? (end && start && end < start ? errors.end : null)}>
-              <DateField
-                value={end}
-                onChange={setEnd}
+            <Field label="Due" required error={endError}>
+              <DateTimeField
+                value={{ date: end, time: endTime }}
+                onChange={v => {
+                  setEnd(v.date);
+                  setEndTime(v.time);
+                }}
                 min={validDate(start) ? start : undefined}
-                invalid={!!(show(errors.end) || (end && start && end < start))}
-                accessibilityLabel="Due date"
+                invalid={!!endError}
+                accessibilityLabel="Due"
               />
             </Field>
           </View>

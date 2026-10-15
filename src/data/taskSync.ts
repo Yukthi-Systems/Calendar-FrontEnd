@@ -1,4 +1,4 @@
-import { addYears, format } from 'date-fns';
+import { addYears, endOfDay, format, parseISO, startOfDay } from 'date-fns';
 import {
   BACKEND_STATUS,
   BACKEND_TAG,
@@ -21,19 +21,29 @@ import type {
 
 const DATE_FMT = 'yyyy-MM-dd';
 
-// start_at/end_at are TIMESTAMPTZ, but tasks here carry no time of day (brief:
-// "Task has no Time required only date is enough"), so every one is always
-// midnight UTC on that date — stable across the server's and every client's
-// timezone, never drifting a day in either direction.
-const toTimestamp = (date: string) => `${date}T00:00:00.000Z`;
-// Reads the date digits straight off the ISO string instead of going through
-// `parseISO` + `format`, which was the bug: date-fns' `format` renders in the
-// *local* system timezone, not UTC, so a task stored at e.g.
-// "2026-10-14T00:00:00.000Z" came back as "2026-10-13" for anyone west of UTC
-// (any negative offset) — every task a day early (or, east of UTC, a day
-// late). The backend always sends a full ISO 8601 timestamp with the date
-// first, so slicing is exact and has no timezone to get wrong.
-const fromTimestamp = (ts: string) => ts.slice(0, 10);
+// start_at/end_at are TIMESTAMPTZ. Two shapes live in them:
+//  - **With a time** ('HH:mm', local): the real instant — local date + time
+//    converted to UTC — so it reads back as the same wall-clock time anywhere.
+//  - **All-day** (time null — every task saved before times existed): midnight
+//    UTC on that date. Read back by slicing the date digits, never through the
+//    local timezone, which would shift it a day for anyone west of UTC.
+// A timed instant that happens to land exactly on midnight UTC (05:30 in India)
+// is nudged one second so it isn't mistaken for all-day.
+const ALL_DAY = /T00:00:00(\.0+)?(Z|\+00(:?00)?)$/;
+const toTimestamp = (date: string, time: string | null = null) => {
+  if (!time) {
+    return `${date}T00:00:00.000Z`;
+  }
+  const iso = new Date(`${date}T${time}:00`).toISOString();
+  return ALL_DAY.test(iso) ? iso.replace('T00:00:00', 'T00:00:01') : iso;
+};
+const fromTimestamp = (ts: string): { date: string; time: string | null } => {
+  if (ALL_DAY.test(ts)) {
+    return { date: ts.slice(0, 10), time: null };
+  }
+  const d = parseISO(ts);
+  return { date: format(d, DATE_FMT), time: format(d, 'HH:mm') };
+};
 
 interface TaskDetails {
   recurrence?: string | null;
@@ -56,8 +66,10 @@ export function taskFromServer(dto: TaskInfoDto): WorkItem {
     createdById: dto.created_by ?? dto.owner_id,
     parentId: dto.parent_task_id === null ? null : String(dto.parent_task_id),
     totalSubtasks: dto.total_sub_tasks,
-    start: fromTimestamp(dto.start_at),
-    end: fromTimestamp(dto.end_at),
+    start: fromTimestamp(dto.start_at).date,
+    startTime: fromTimestamp(dto.start_at).time,
+    end: fromTimestamp(dto.end_at).date,
+    endTime: fromTimestamp(dto.end_at).time,
     recurrence: details.recurrence ?? null,
     // Stored without ids; give each a row key for the form's list.
     reminders: (details.reminders ?? []).map((r, i) => ({
@@ -91,8 +103,8 @@ export function taskToCreatePayload(
     details: detailsPayload(item),
     task_status: BACKEND_STATUS[item.status],
     task_tag: BACKEND_TAG[item.tag],
-    start_at: toTimestamp(item.start),
-    end_at: toTimestamp(item.end),
+    start_at: toTimestamp(item.start, item.startTime),
+    end_at: toTimestamp(item.end, item.endTime),
   };
 }
 
@@ -104,8 +116,8 @@ export function taskToUpdatePayload(item: WorkItem): UpdateTaskPayload {
     details: detailsPayload(item),
     task_status: BACKEND_STATUS[item.status],
     task_tag: BACKEND_TAG[item.tag],
-    start_at: toTimestamp(item.start),
-    end_at: toTimestamp(item.end),
+    start_at: toTimestamp(item.start, item.startTime),
+    end_at: toTimestamp(item.end, item.endTime),
   };
 }
 
@@ -193,6 +205,14 @@ export interface TaskSearch {
   to: string;
 }
 
+// The whole of a local day as an API bound, also covering its all-day form
+// (midnight UTC), whichever side of UTC this device is on.
+const dayBound = (date: string, side: 'start' | 'end') => {
+  const local = (side === 'start' ? startOfDay : endOfDay)(parseISO(date)).toISOString();
+  const utc = side === 'start' ? `${date}T00:00:00.000Z` : `${date}T23:59:59.999Z`;
+  return side === 'start' ? (local < utc ? local : utc) : local > utc ? local : utc;
+};
+
 // POST /tasks/list filter for a search: top-level tasks of the view, one page.
 export function buildSearchFilter(
   s: TaskSearch,
@@ -205,8 +225,8 @@ export function buildSearchFilter(
     ...(title ? { title_contains: title } : null),
     any_of_task_status: s.statuses.map(k => BACKEND_STATUS[k]),
     any_of_task_tag: s.tags.map(k => BACKEND_TAG[k]),
-    start_at: s.from ? toTimestamp(s.from) : wide.start_at,
-    end_at: s.to ? toTimestamp(s.to) : wide.end_at,
+    start_at: s.from ? dayBound(s.from, 'start') : wide.start_at,
+    end_at: s.to ? dayBound(s.to, 'end') : wide.end_at,
     limit,
     ...(cursor ?? {}),
   };

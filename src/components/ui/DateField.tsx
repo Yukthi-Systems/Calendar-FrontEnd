@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ScrollView,
   Text,
+  useWindowDimensions,
   View,
   type ScrollViewInstance,
   type ViewInstance,
@@ -279,12 +280,16 @@ function calendarStyles(c: ThemeTokens) {
   };
 }
 
-// Every 15 minutes, 00:00–23:45.
-const TIME_SLOTS = Array.from({ length: 96 }, (_, i) => {
-  const h = String(Math.floor(i / 4)).padStart(2, '0');
-  const m = String((i % 4) * 15).padStart(2, '0');
-  return `${h}:${m}`;
-});
+// Every 15 minutes, 00:00–23:45, then 23:59 — "end of day", the default due
+// time for a new task, so it can always be picked again.
+const TIME_SLOTS = [
+  ...Array.from({ length: 96 }, (_, i) => {
+    const h = String(Math.floor(i / 4)).padStart(2, '0');
+    const m = String((i % 4) * 15).padStart(2, '0');
+    return `${h}:${m}`;
+  }),
+  '23:59',
+];
 const SLOT_H = 32;
 
 function TimeField({
@@ -366,6 +371,221 @@ function TimeField({
           );
         })}
       </ScrollView>
+    </Popover>
+  );
+}
+
+// ── Date + time in one picker ───────────────────────────────────────────────
+
+export interface DateTimeValue {
+  // 'yyyy-MM-dd'
+  date: string;
+  // 'HH:mm', or '' for all day
+  time: string;
+}
+
+// "Today, Oct 15 · 11:45" · "Mon, Oct 26 · 23:59" · "Wed, Jan 6, 2027" — the
+// actual date always shows (a relative word only replaces the weekday), and the
+// trigger stays short enough for two of these side by side.
+const dateTimeLabel = ({ date, time }: DateTimeValue) => {
+  const d = parseDate(date);
+  if (!d) {
+    return null;
+  }
+  const n = differenceInCalendarDays(d, new Date());
+  const rel = n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : n === -1 ? 'Yesterday' : null;
+  const sameYear = d.getFullYear() === new Date().getFullYear();
+  const day = `${rel ?? format(d, 'EEE')}, ${format(d, sameYear ? 'MMM d' : 'MMM d, yyyy')}`;
+  return time ? `${day} · ${time}` : day;
+};
+
+// One field for a date and its time: the calendar and a time column side by side
+// in one popover (stacked on narrow phones). Picking a day keeps it open so the
+// time can follow; picking a time (or "All day") applies both and closes it.
+export function DateTimeField({
+  value,
+  onChange,
+  min,
+  invalid = false,
+  accessibilityLabel,
+  placeholder = 'Pick a date',
+}: {
+  value: DateTimeValue;
+  onChange: (next: DateTimeValue) => void;
+  // 'yyyy-MM-dd' — days before it are disabled.
+  min?: string;
+  invalid?: boolean;
+  accessibilityLabel?: string;
+  placeholder?: string;
+}) {
+  const c = useThemeColors();
+  const { width: screenW } = useWindowDimensions();
+  const stacked = screenW < 460;
+  const [open, setOpen] = useState(false);
+  // The day picked in this session of the popover, before a time is chosen.
+  const [draftDate, setDraftDate] = useState(value.date);
+  const scroller = useRef<ScrollViewInstance>(null);
+  const styles = useMemo(() => calendarStyles(c), [c]);
+  const selected = parseDate(draftDate);
+  const minD = min ? parseDate(min) : null;
+  const today = new Date();
+  const slots = useMemo(
+    () =>
+      value.time && !TIME_SLOTS.includes(value.time)
+        ? [...TIME_SLOTS, value.time].sort()
+        : TIME_SLOTS,
+    [value.time],
+  );
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+    setDraftDate(value.date);
+    const target = value.time || '09:00';
+    const i = Math.max(0, slots.findIndex(s => s >= target));
+    const t = setTimeout(() => {
+      const offset = Math.max(0, (i - 3) * SLOT_H);
+      scroller.current?.scrollTo(stacked ? { x: i * 64, animated: false } : { y: offset, animated: false });
+    }, 16);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only on open
+  }, [open]);
+
+  const pickDay = (d: Date) => {
+    const date = format(d, DATE_FMT);
+    setDraftDate(date);
+    onChange({ date, time: value.time });
+  };
+  const pickTime = (time: string) => {
+    onChange({ date: draftDate || value.date, time });
+    setOpen(false);
+  };
+
+  const quick = [
+    { label: 'Today', date: today },
+    { label: 'Tomorrow', date: addDays(today, 1) },
+    { label: 'Next week', date: nextMonday(today) },
+  ].filter(q => !minD || format(q.date, DATE_FMT) >= format(minD, DATE_FMT));
+
+  const timeOption = (s: string, label = s) => {
+    const active = s === value.time;
+    return (
+      <Press
+        key={s || 'all-day'}
+        feedback="none"
+        accessibilityRole="button"
+        accessibilityState={{ selected: active }}
+        onPress={() => pickTime(s)}
+        style={stacked ? { height: 30 } : { height: SLOT_H }}
+        className={`justify-center rounded-md px-2.5 ${active ? 'bg-accent' : 'hover:bg-hover'}`}
+      >
+        <Text
+          numberOfLines={1}
+          className={`text-sm ${active ? 'font-semibold text-accent-foreground' : 'text-text-heading'}`}
+        >
+          {label}
+        </Text>
+      </Press>
+    );
+  };
+
+  return (
+    <Popover
+      open={open}
+      onClose={() => setOpen(false)}
+      width={stacked ? 296 : 404}
+      renderTrigger={ref => (
+        <Trigger
+          triggerRef={ref}
+          icon={CalendarDays}
+          label={dateTimeLabel(value)}
+          placeholder={placeholder}
+          open={open}
+          invalid={invalid}
+          onPress={() => setOpen(true)}
+          accessibilityLabel={accessibilityLabel}
+        />
+      )}
+    >
+      {/* Stacked: pinned to the calendar's width — the horizontal time strip would
+          otherwise size to all its slots and push the calendar off-centre. */}
+      <View className={stacked ? 'gap-2' : 'flex-row gap-3'} style={stacked ? { width: 272 } : undefined}>
+        <View style={{ width: 272 }}>
+          <DateTimePicker
+            mode="single"
+            date={selected ?? undefined}
+            month={(selected ?? minD ?? today).getMonth()}
+            year={(selected ?? minD ?? today).getFullYear()}
+            minDate={minD ?? undefined}
+            onChange={({ date }: { date: DateType }) => {
+              if (date) {
+                pickDay(dayjs(date).toDate());
+              }
+            }}
+            firstDayOfWeek={1}
+            showOutsideDays
+            navigationPosition="right"
+            weekdaysFormat="min"
+            monthCaptionFormat="full"
+            containerHeight={252}
+            weekdaysHeight={28}
+            styles={styles}
+            classNames={{
+              day: 'hover:bg-hover',
+              month: 'hover:bg-hover',
+              year: 'hover:bg-hover',
+              button_prev: 'hover:bg-hover',
+              button_next: 'hover:bg-hover',
+            }}
+            components={{
+              IconPrev: <ChevronLeft size={16} color={c.text} />,
+              IconNext: <ChevronRight size={16} color={c.text} />,
+            }}
+          />
+          <View className="mt-2 flex-row gap-1.5 border-t border-border-main pt-2.5">
+            {quick.map(q => {
+              const active = draftDate === format(q.date, DATE_FMT);
+              return (
+                <Press
+                  key={q.label}
+                  accessibilityRole="button"
+                  onPress={() => pickDay(q.date)}
+                  className={`h-7 flex-1 items-center justify-center rounded-md border ${
+                    active
+                      ? 'border-accent/40 bg-accent-soft'
+                      : 'border-border-main hover:border-border-strong hover:bg-hover'
+                  }`}
+                >
+                  <Text className={`text-xs font-medium ${active ? 'text-accent' : 'text-text-heading'}`}>
+                    {q.label}
+                  </Text>
+                </Press>
+              );
+            })}
+          </View>
+        </View>
+
+        <View
+          className={stacked ? 'border-t border-border-main pt-2' : 'border-l border-border-main pl-3'}
+          style={stacked ? undefined : { width: 96 }}
+        >
+          <View className="mb-1.5 flex-row items-center gap-1.5 px-1">
+            <Clock size={13} color={c.subtle} />
+            <Text className="text-xs font-medium text-text-subtle">Time</Text>
+          </View>
+          {timeOption('', 'All day')}
+          <ScrollView
+            ref={scroller}
+            horizontal={stacked}
+            showsHorizontalScrollIndicator={false}
+            style={stacked ? undefined : { maxHeight: 9 * SLOT_H }}
+            contentContainerClassName={stacked ? 'gap-1' : undefined}
+          >
+            {slots.map(s => timeOption(s))}
+          </ScrollView>
+        </View>
+      </View>
     </Popover>
   );
 }

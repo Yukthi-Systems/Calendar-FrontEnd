@@ -281,6 +281,7 @@ export function ItemModal() {
                 <View className="flex-row items-center gap-2">
                   <Text className="text-sm text-text-heading">
                     {format(parseISO(item.start), 'MMM d')}
+                    {item.startTime ? ` ${item.startTime}` : ''}
                   </Text>
                   <ArrowRight size={13} color={c.subtle} />
                   <DueDate item={item} />

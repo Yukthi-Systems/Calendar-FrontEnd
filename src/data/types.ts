@@ -55,9 +55,13 @@ export interface WorkItem {
   // comment) — the only reliable way to know a task has subtasks before fetching
   // them. 0 for a purely local item. See hasSubtasks/subtaskProgress (src/data/tree.ts).
   totalSubtasks: number;
-  // yyyy-MM-dd
+  // yyyy-MM-dd (local)
   start: string;
   end: string;
+  // 'HH:mm' (local), or null for an all-day date — every task saved before times
+  // existed. See toTimestamp/fromTimestamp in src/data/taskSync.ts.
+  startTime: string | null;
+  endTime: string | null;
   // null/[] are the common case — most tasks don't repeat or have reminders.
   recurrence: string | null;
   reminders: Reminder[];
