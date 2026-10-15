@@ -10,6 +10,7 @@ import {
   Text,
   useWindowDimensions,
   View,
+  type ViewInstance,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { X } from 'lucide-react-native';
@@ -25,6 +26,37 @@ export { DOCK_BREAKPOINT };
 
 const WIDTH = { sm: 400, md: 520, lg: 640, xl: 760 } as const;
 const NATIVE_DRIVER = Platform.OS !== 'web';
+
+// react-native-web's <Modal> always renders its <ModalPortal>, which appends a new
+// <div> straight to document.body the first time it renders — not when it opens
+// (visible only toggles what's inside). A Sheet that's always mounted (every sheet
+// in this app — callers pass visible={someCondition}, never conditionally render
+// the Sheet itself) gets its portal div appended at MOUNT time, not open time.
+// Stacking across separate portal divs has no z-index involved anywhere in
+// react-native-web's Modal — it's plain DOM order, last sibling on top — so
+// whichever Sheet happened to mount first stays visually underneath forever,
+// regardless of which one a person actually opened more recently. ConfirmHost and
+// ToastHost are mounted as siblings of the whole signed-in app (App.tsx), so they
+// exist before anything inside ProjectScreen does — meaning every ordinary panel
+// (ItemModal, ViewModal, …) ends up with a portal appended *after* theirs, and so
+// paints on top of a confirm dialog or toast raised from inside it.
+// Fix: move this Sheet's own portal div to the very end of <body> every time it
+// opens. appendChild on a node already in the DOM relocates it rather than
+// duplicating it, so the most-recently-opened sheet is always the last child of
+// <body> — always on top — independent of mount order. Native ignores this
+// entirely; the OS's own modal presentation already layers correctly.
+export function bringPortalToFront(node: unknown) {
+  if (Platform.OS !== 'web' || typeof document === 'undefined') {
+    return;
+  }
+  let el = node as HTMLElement | null;
+  while (el && el.parentElement && el.parentElement !== document.body) {
+    el = el.parentElement;
+  }
+  if (el && el.parentElement === document.body) {
+    document.body.appendChild(el);
+  }
+}
 
 // The one modal shell every dialog/sheet in the app uses: animated backdrop + panel
 // (spring in, quick ease out), bottom-sheet on phones, centred dialog elsewhere,
@@ -54,6 +86,15 @@ export function Sheet({
   const setOpenSheets = useSetAtom(openSheetsAtom);
   const openSheets = useAtomValue(openSheetsAtom);
   const onTop = openSheets[openSheets.length - 1] === sheetId;
+  const rootRef = useRef<ViewInstance | null>(null);
+
+  // See bringPortalToFront's comment above: without this, which sheet visually
+  // wins is decided by mount order, not open order.
+  useEffect(() => {
+    if (visible) {
+      bringPortalToFront(rootRef.current);
+    }
+  }, [visible]);
 
   // Register while open, so the topmost sheet can host the toasts.
   useEffect(() => {
@@ -125,6 +166,7 @@ export function Sheet({
         style={{ flex: 1 }}
       >
         <View
+          ref={rootRef}
           style={{ flex: 1 }}
           className={docked ? 'justify-end' : 'items-center justify-center p-6'}
         >

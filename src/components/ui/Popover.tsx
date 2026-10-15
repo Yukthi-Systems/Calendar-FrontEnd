@@ -10,7 +10,7 @@ import {
 } from 'react-native';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { DOCK_BREAKPOINT } from './layout';
-import { Sheet } from './Sheet';
+import { Sheet, bringPortalToFront } from './Sheet';
 
 const NATIVE_DRIVER = Platform.OS !== 'web';
 const GAP = 6;
@@ -52,6 +52,16 @@ export function Popover({
   const [anchor, setAnchor] = useState<Anchor | null>(null);
   const [panelH, setPanelH] = useState(0);
   const anim = useRef(new Animated.Value(0)).current;
+  const backdropRef = useRef<ViewInstance | null>(null);
+
+  // Same fix as Sheet's (see bringPortalToFront's comment there) — this Popover's
+  // own <Modal> is just as liable to mount before whatever Sheet it's opened from
+  // (e.g. a reaction picker inside an already-open task panel), landing behind it.
+  useEffect(() => {
+    if (open && !docked) {
+      bringPortalToFront(backdropRef.current);
+    }
+  }, [open, docked]);
 
   useEffect(() => {
     if (!open || docked) {
@@ -110,6 +120,7 @@ export function Popover({
       {renderTrigger?.(triggerRef)}
       <Modal visible={open} transparent animationType="none" onRequestClose={onClose}>
         <Pressable
+          ref={backdropRef}
           accessibilityLabel="Close"
           onPress={onClose}
           style={{ flex: 1, cursor: 'default' } as object}
