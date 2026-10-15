@@ -117,6 +117,8 @@ export function seedDemoIfRequested() {
         totalSubtasks: SEEDS.filter(s => s[7] === id).length,
         start: day(off),
         end: day(off + days),
+        startTime: null,
+        endTime: null,
         recurrence: null,
         reminders: [],
         ...extra,

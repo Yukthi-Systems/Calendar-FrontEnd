@@ -113,10 +113,13 @@ function MyAccess({ view }: { view: ProjectView }) {
       ) : (
         <View className="gap-1 px-2.5 py-1">
           <Perm allowed label="See tasks" />
-          <Perm allowed={share.can_create} label="Create tasks" />
-          <Perm allowed={share.can_edit} label="Edit tasks" />
-          <Perm allowed={share.can_delete} label="Delete tasks" />
-          <Perm allowed={view.showSubtasks !== false} label="Subtasks" />
+          {/* A view setting, not a grant: subtasks are listed at all. Adding,
+              editing or deleting one still needs the matching permission below
+              (the server checks show_subtasks + can_create/can_edit/can_delete). */}
+          <Perm allowed={view.showSubtasks !== false} label="See subtasks" />
+          <Perm allowed={share.can_create} label="Create tasks & subtasks" />
+          <Perm allowed={share.can_edit} label="Edit tasks & subtasks" />
+          <Perm allowed={share.can_delete} label="Delete tasks & subtasks" />
         </View>
       )}
       {statuses || tags ? (
@@ -133,16 +136,21 @@ function MyAccess({ view }: { view: ProjectView }) {
   );
 }
 
+// ✓ + normal text when allowed; ✕ + dimmed text when not (with the a11y name
+// saying so, since the icon alone isn't read out).
 function Perm({ allowed, label }: { allowed: boolean; label: string }) {
   const c = useThemeColors();
   const Icon = allowed ? Check : X;
   return (
-    <View className="flex-row items-center gap-2 py-0.5">
+    <View
+      accessible
+      accessibilityLabel={`${label}: ${allowed ? 'allowed' : 'not allowed'}`}
+      className="flex-row items-center gap-2 py-0.5"
+    >
       <Icon size={14} color={allowed ? c.success : c.subtle} />
       <Text className={`text-sm ${allowed ? 'text-text-heading' : 'text-text-subtle'}`}>
         {label}
       </Text>
-      {allowed ? null : <Text className="text-2xs text-text-subtle">· not allowed</Text>}
     </View>
   );
 }

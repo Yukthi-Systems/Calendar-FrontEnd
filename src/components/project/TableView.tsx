@@ -50,8 +50,8 @@ const COLUMNS: { key: SortKey; label: string; width?: number }[] = [
   { key: 'title', label: 'Title' },
   { key: 'status', label: 'Status', width: 136 },
   { key: 'assignee', label: 'Assignees', width: 120 },
-  { key: 'start', label: 'Start', width: 88 },
-  { key: 'end', label: 'Due', width: 88 },
+  { key: 'start', label: 'Start', width: 116 },
+  { key: 'end', label: 'Due', width: 116 },
 ];
 
 const sortValue = (
@@ -64,6 +64,11 @@ const sortValue = (
       return STATUS_RANK[i.status] ?? 0;
     case 'assignee':
       return namesOf(i.assigneeIds, people);
+    // Date, then time; an all-day start sorts first in its day, an all-day due last.
+    case 'start':
+      return `${i.start} ${i.startTime ?? '00:00'}`;
+    case 'end':
+      return `${i.end} ${i.endTime ?? '24:00'}`;
     default:
       return i[key];
   }
@@ -339,7 +344,8 @@ export function TableView({ view }: { view: ProjectView }) {
       default:
         return (
           <Text className="text-sm text-text-main">
-            {format(parseISO(i[key]), 'MMM d')}
+            {format(parseISO(i.start), 'MMM d')}
+            {i.startTime ? ` ${i.startTime}` : ''}
           </Text>
         );
     }

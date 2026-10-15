@@ -817,7 +817,12 @@ function DayCard({ occ, day, fields }: { occ: Occ; day: Date; fields?: ViewField
         </View>
         <Text className="mt-0.5 text-xs text-text-subtle">
           {total > 1
-            ? `${format(occ.start, 'MMM d')} – ${format(occ.end, 'MMM d')} · day ${nth} of ${total}`
+            ? `${format(occ.start, 'MMM d')}${item.startTime ? ` ${item.startTime}` : ''} – ${format(
+                occ.end,
+                'MMM d',
+              )}${item.endTime ? ` ${item.endTime}` : ''} · day ${nth} of ${total}`
+            : item.startTime || item.endTime
+            ? `${item.startTime ?? 'All day'} – ${item.endTime ?? 'end of day'}`
             : 'All day'}
         </Text>
       </View>

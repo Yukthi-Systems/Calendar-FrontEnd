@@ -13,7 +13,7 @@ import {
   type LucideIcon,
 } from 'lucide-react-native';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { differenceInCalendarDays, format, parseISO } from 'date-fns';
+import { differenceInCalendarDays, endOfDay, format, parseISO } from 'date-fns';
 import { itemsAtom, selectedItemIdAtom } from '../../atoms/project';
 import { currentUserIdAtom } from '../../atoms/members';
 import { statusInfo } from '../../data/constants';
@@ -262,10 +262,14 @@ export function DueDate({
   className?: string;
 }) {
   const done = item.status === 'completed' || item.status === 'rejected';
-  const days = differenceInCalendarDays(parseISO(item.end), new Date());
+  const now = new Date();
+  const days = differenceInCalendarDays(parseISO(item.end), now);
+  // With a due time, overdue is exact; an all-day task is due by the day's end.
+  const dueAt = item.endTime ? parseISO(`${item.end}T${item.endTime}`) : endOfDay(parseISO(item.end));
+  const overdue = dueAt < now;
   const tint = done
     ? 'text-text-main'
-    : days < 0
+    : overdue
     ? 'text-destructive'
     : days <= 1
     ? 'text-warning'
@@ -275,15 +279,20 @@ export function DueDate({
       label={
         done
           ? `Due ${format(parseISO(item.end), 'PP')}`
-          : days < 0
-          ? `Overdue by ${-days} day${days === -1 ? '' : 's'}`
+          : overdue
+          ? days < 0
+            ? `Overdue by ${-days} day${days === -1 ? '' : 's'}`
+            : `Overdue since ${item.endTime}`
           : days === 0
-          ? 'Due today'
+          ? item.endTime
+            ? `Due today at ${item.endTime}`
+            : 'Due today'
           : `Due in ${days} day${days === 1 ? '' : 's'}`
       }
     >
       <Text numberOfLines={1} className={`${className} ${tint}`}>
         {format(parseISO(item.end), 'MMM d')}
+        {item.endTime ? ` ${item.endTime}` : ''}
       </Text>
     </Tooltip>
   );

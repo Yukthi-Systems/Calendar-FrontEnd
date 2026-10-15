@@ -121,7 +121,7 @@ export function Field({
       <View className="mb-1.5 flex-row items-center justify-between gap-2">
         <Text className="text-xs font-medium text-text-heading">
           {label}
-          {required ? <Text className="text-text-subtle"> *</Text> : null}
+          {required ? <Text className="text-destructive"> *</Text> : null}
         </Text>
         {right}
       </View>

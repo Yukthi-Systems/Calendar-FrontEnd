@@ -1,10 +1,14 @@
-import { Platform, ScrollView, Text, View } from 'react-native';
-import { ChevronLeft, ChevronRight, CornerDownRight, Plus } from 'lucide-react-native';
-import DraggableFlatList, {
-  ScaleDecorator,
-  type RenderItemParams,
-} from 'react-native-draggable-flatlist';
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { useMemo, useRef, useState } from 'react';
+import {
+  Animated,
+  PanResponder,
+  ScrollView,
+  Text,
+  View,
+  type ViewInstance,
+} from 'react-native';
+import { CornerDownRight, Plus } from 'lucide-react-native';
+import { useAtomValue, useSetAtom } from 'jotai';
 import {
   itemFormAtom,
   itemsAtom,
@@ -25,23 +29,31 @@ import {
   StatusIcon,
   SubtaskBadge,
 } from './shared';
+import { DRAG_NEEDS_LONG_PRESS, GHOST_SHADOW } from './kanbanDrag';
 
-// Shown on card hover on web (web/web.css); always visible on touch.
-const HOVER_REVEAL = 'reveal-on-hover';
+type Rect = { x: number; y: number; width: number; height: number };
 
-// Dragging (long-press a card) reorders it within its own column — real,
-// spring-animated drag-and-drop via react-native-draggable-flatlist, which
-// works the same on web, iOS and Android since it's built on
-// react-native-gesture-handler + Reanimated, not per-platform gesture code.
-//
-// The library only reorders within one list; it doesn't support dragging
-// between two separate lists. So moving a card to a different status uses the
-// ‹ › buttons on the card.
+const measure = (v: ViewInstance | null): Promise<Rect | null> =>
+  new Promise(resolve =>
+    v
+      ? v.measureInWindow((x: number, y: number, width: number, height: number) => resolve({ x, y, width, height }))
+      : resolve(null),
+  );
+
+// Pixels a card must travel (web) before a press turns into a drag.
+const DRAG_SLOP = 6;
+
+// One column per status the view allows. Drag a card onto another column to
+// change its status (web: just drag; touch: long-press, then drag) — a floating
+// copy follows the pointer and the column under it lights up. The move is saved
+// to the server and the board re-reads (no optimistic update); order inside a
+// column is the server's (by start date) — the API has nowhere to store a manual
+// order, so there's no within-column reordering.
 export function KanbanView({ view }: { view: ProjectView }) {
-  // One column per status the view allows — a card can't be created in, or moved
-  // to, a status outside the view's filter (the server refuses it).
+  // A card can't be created in, or moved to, a status outside the view's filter
+  // (the server refuses it), so those columns don't exist here.
   const COLUMNS = allowedStatuses(view.statusFilter);
-  const [items, setItems] = useAtom(itemsAtom);
+  const items = useAtomValue(itemsAtom);
   const loading = useAtomValue(tasksLoadingAtom);
   const select = useSetAtom(selectedItemIdAtom);
   const setForm = useSetAtom(itemFormAtom);
@@ -49,54 +61,126 @@ export function KanbanView({ view }: { view: ProjectView }) {
   // Shared view: add / move only if the owner allowed it.
   const { canCreate, canEdit } = useViewAccess(view);
   // Top-level tasks only — subtasks load lazily (useTasksSync's header comment),
-  // so showing them as their own cards here would mean the board's contents
-  // depend on whatever happened to get fetched elsewhere. `items` itself (used
-  // by `move`/`reorder` below) stays unfiltered, so reordering a column doesn't
-  // drop any subtask this device has already loaded.
+  // so showing them as their own cards would make the board depend on whatever
+  // happened to get fetched elsewhere.
   const rootItems = items.filter(i => !i.parentId);
 
-  const move = (id: string, status: Status) => {
-    const item = items.find(i => i.id === id);
-    if (!item) {
-      return;
-    }
-    // Not optimistic — the card only actually moves once the server confirms
-    // it (see useTaskMutations' header comment). On failure it stays put and
-    // says so.
+  const move = (item: WorkItem, status: Status) =>
     editItem({ ...item, status })
       .then(() => toast.success(`Moved to ${statusInfo(status).label}`, { duration: 2200 }))
-      .catch(err => toast.error('Couldn’t move the task', { description: errorMessage(err, 'Please try again.') }));
+      .catch(err =>
+        toast.error('Couldn’t move the task', {
+          description: errorMessage(err, 'Please try again.'),
+        }),
+      );
+
+  // ── Drag state ─────────────────────────────────────────────────────────
+  const rootRef = useRef<ViewInstance>(null);
+  const columnRefs = useRef(new Map<Status, ViewInstance | null>());
+  const ghost = useRef(new Animated.ValueXY()).current;
+  // Window geometry captured when the drag starts (columns don't move during it).
+  const geo = useRef<{
+    root: Rect;
+    columns: { key: Status; rect: Rect }[];
+    grab: { dx: number; dy: number };
+  } | null>(null);
+  const [dragging, setDragging] = useState<{ item: WorkItem; width: number } | null>(null);
+  const [over, setOver] = useState<Status | null>(null);
+  const overRef = useRef<Status | null>(null);
+  // A drag ends with a pointer-up over the card — don't let that also open it.
+  const lastDragEnd = useRef(0);
+
+  const columnAt = (pageX: number, pageY: number): Status | null =>
+    geo.current?.columns.find(
+      c =>
+        pageX >= c.rect.x &&
+        pageX <= c.rect.x + c.rect.width &&
+        pageY >= c.rect.y &&
+        pageY <= c.rect.y + c.rect.height,
+    )?.key ?? null;
+
+  const setOverColumn = (key: Status | null) => {
+    if (overRef.current !== key) {
+      overRef.current = key;
+      setOver(key);
+    }
   };
 
-  // Only the relative order of this status's items changes; nothing else in the
-  // app reads cross-status order, so it's fine to just move them as a block
-  // within the array. Local-only, by necessity — the API has no field to persist
-  // a manual order in, so this resets the next time the task list refetches.
-  const reorder = (status: Status, newOrder: WorkItem[]) =>
-    setItems(prev => [...prev.filter(i => i.status !== status), ...newOrder]);
+  const onDragStart = async (item: WorkItem, card: Rect, pageX: number, pageY: number) => {
+    const [root, ...cols] = await Promise.all([
+      measure(rootRef.current),
+      ...COLUMNS.map(c => measure(columnRefs.current.get(c.key) ?? null)),
+    ]);
+    if (!root) {
+      return;
+    }
+    geo.current = {
+      root,
+      columns: COLUMNS.flatMap((c, i) => (cols[i] ? [{ key: c.key, rect: cols[i]! }] : [])),
+      grab: { dx: pageX - card.x, dy: pageY - card.y },
+    };
+    ghost.setValue({ x: card.x - root.x, y: card.y - root.y });
+    setDragging({ item, width: card.width });
+    setOverColumn(item.status);
+  };
 
-  // Column headers stay fixed; each column's cards scroll (and reorder) on their own.
+  const onDragMove = (pageX: number, pageY: number) => {
+    const g = geo.current;
+    if (!g) {
+      return;
+    }
+    ghost.setValue({ x: pageX - g.grab.dx - g.root.x, y: pageY - g.grab.dy - g.root.y });
+    setOverColumn(columnAt(pageX, pageY));
+  };
+
+  const onDragEnd = (drop: boolean) => {
+    const item = dragging?.item;
+    const target = overRef.current;
+    geo.current = null;
+    lastDragEnd.current = Date.now();
+    setDragging(null);
+    setOverColumn(null);
+    if (drop && item && target && target !== item.status) {
+      move(item, target);
+    }
+  };
+
+  const open = (id: string) => {
+    if (Date.now() - lastDragEnd.current > 250) {
+      select(id);
+    }
+  };
+
+  // Column headers stay fixed; each column's cards scroll on their own.
   return (
-    <View className="flex-1">
+    <View ref={rootRef} collapsable={false} className="flex-1">
       <ScrollView
         horizontal
+        scrollEnabled={!dragging}
         contentContainerStyle={{ minWidth: '100%', height: '100%' }}
         contentContainerClassName="gap-3 p-4 lg:px-6"
       >
-        {COLUMNS.map((col, colIdx) => {
+        {COLUMNS.map(col => {
           const list = rootItems.filter(i => i.status === col.key);
+          const target = !!dragging && over === col.key && dragging.item.status !== col.key;
           return (
             <View
               key={col.key}
+              ref={v => {
+                columnRefs.current.set(col.key, v);
+              }}
+              collapsable={false}
               style={{ flexGrow: 1, flexBasis: 0, minWidth: 280, maxWidth: 380 }}
-              className="overflow-hidden rounded-xl border border-border-main bg-muted/60"
+              className={`overflow-hidden rounded-xl border ${
+                target ? 'border-accent bg-accent-soft' : 'border-border-main bg-muted/60'
+              }`}
             >
               <View className="h-11 flex-row items-center gap-2 pl-3 pr-1.5">
                 <StatusIcon status={col.key} size={15} />
-                <Text className="text-sm font-semibold text-text-heading">
-                  {col.label}
-                </Text>
-                <Text className="text-sm text-text-subtle">{list.length}</Text>
+                <Text className="text-sm font-semibold text-text-heading">{col.label}</Text>
+                {list.length > 0 ? (
+                  <Text className="text-sm text-text-subtle">{list.length}</Text>
+                ) : null}
                 <View className="flex-1" />
                 {canCreate ? (
                   <IconButton
@@ -120,18 +204,32 @@ export function KanbanView({ view }: { view: ProjectView }) {
                   ))}
                 </View>
               ) : (
-                <DraggableFlatList
-                  data={list}
-                  keyExtractor={item => item.id}
-                  containerStyle={{ flex: 1 }}
-                  contentContainerStyle={{
-                    gap: 8,
-                    paddingHorizontal: 8,
-                    paddingBottom: 80,
-                  }}
-                  onDragEnd={({ data }) => reorder(col.key, data)}
-                  ListEmptyComponent={
-                    canCreate ? (
+                <ScrollView
+                  scrollEnabled={!dragging}
+                  className="flex-1"
+                  contentContainerStyle={{ gap: 8, paddingHorizontal: 8, paddingBottom: 80 }}
+                >
+                  {list.map(item => (
+                    <DraggableCard
+                      key={item.id}
+                      item={item}
+                      items={items}
+                      enabled={canEdit}
+                      lifted={dragging?.item.id === item.id}
+                      onOpen={() => open(item.id)}
+                      onDragStart={onDragStart}
+                      onDragMove={onDragMove}
+                      onDragEnd={onDragEnd}
+                    />
+                  ))}
+                  {list.length === 0 ? (
+                    target ? (
+                      <View className="h-20 items-center justify-center rounded-lg border border-dashed border-accent">
+                        <Text className="text-xs font-medium text-accent">
+                          Move to {col.label}
+                        </Text>
+                      </View>
+                    ) : canCreate ? (
                       <Press
                         feedback="subtle"
                         accessibilityRole="button"
@@ -148,43 +246,114 @@ export function KanbanView({ view }: { view: ProjectView }) {
                         <Text className="text-xs text-text-subtle">No tasks</Text>
                       </View>
                     )
-                  }
-                  renderItem={({
-                    item,
-                    drag,
-                    isActive,
-                  }: RenderItemParams<WorkItem>) => (
-                    <ScaleDecorator activeScale={1.03}>
-                      <KanbanCard
-                        item={item}
-                        items={items}
-                        isActive={isActive}
-                        onOpen={() => select(item.id)}
-                        onDrag={drag}
-                        prevLabel={colIdx > 0 ? COLUMNS[colIdx - 1].label : undefined}
-                        nextLabel={
-                          colIdx < COLUMNS.length - 1 ? COLUMNS[colIdx + 1].label : undefined
-                        }
-                        canMove={canEdit}
-                        onPrev={
-                          colIdx > 0
-                            ? () => move(item.id, COLUMNS[colIdx - 1].key)
-                            : undefined
-                        }
-                        onNext={
-                          colIdx < COLUMNS.length - 1
-                            ? () => move(item.id, COLUMNS[colIdx + 1].key)
-                            : undefined
-                        }
-                      />
-                    </ScaleDecorator>
-                  )}
-                />
+                  ) : null}
+                </ScrollView>
               )}
             </View>
           );
         })}
       </ScrollView>
+
+      {dragging ? (
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            {
+              position: 'absolute',
+              left: 0,
+              top: 0,
+              width: dragging.width,
+              transform: [...ghost.getTranslateTransform(), { rotate: '2deg' }],
+            },
+          ]}
+        >
+          <View style={GHOST_SHADOW} className="rounded-lg">
+            <KanbanCard item={dragging.item} items={items} lifted={false} ghost />
+          </View>
+        </Animated.View>
+      ) : null}
+    </View>
+  );
+}
+
+// A card that can be picked up. The pan responder only claims the gesture once
+// it's clearly a drag (moved past DRAG_SLOP on web; after a long-press on touch),
+// so taps still open the card and swipes still scroll.
+function DraggableCard({
+  item,
+  items,
+  enabled,
+  lifted,
+  onOpen,
+  onDragStart,
+  onDragMove,
+  onDragEnd,
+}: {
+  item: WorkItem;
+  items: WorkItem[];
+  // False in a shared view without edit access — the card can't be moved.
+  enabled: boolean;
+  lifted: boolean;
+  onOpen: () => void;
+  onDragStart: (item: WorkItem, card: Rect, pageX: number, pageY: number) => void;
+  onDragMove: (pageX: number, pageY: number) => void;
+  onDragEnd: (drop: boolean) => void;
+}) {
+  const ref = useRef<ViewInstance>(null);
+  const armed = useRef(false);
+  // Handlers read the latest props through this, so the responder is made once.
+  const latest = useRef({ item, enabled, onDragStart, onDragMove, onDragEnd });
+  latest.current = { item, enabled, onDragStart, onDragMove, onDragEnd };
+
+  const responder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponderCapture: (_e, g) =>
+          latest.current.enabled &&
+          (DRAG_NEEDS_LONG_PRESS
+            ? armed.current
+            : Math.abs(g.dx) > DRAG_SLOP || Math.abs(g.dy) > DRAG_SLOP),
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderGrant: (e, g) => {
+          const startX = e.nativeEvent.pageX - g.dx;
+          const startY = e.nativeEvent.pageY - g.dy;
+          ref.current?.measureInWindow((x: number, y: number, width: number, height: number) =>
+            latest.current.onDragStart(latest.current.item, { x, y, width, height }, startX, startY),
+          );
+        },
+        onPanResponderMove: e => latest.current.onDragMove(e.nativeEvent.pageX, e.nativeEvent.pageY),
+        onPanResponderRelease: () => {
+          armed.current = false;
+          latest.current.onDragEnd(true);
+        },
+        onPanResponderTerminate: () => {
+          armed.current = false;
+          latest.current.onDragEnd(false);
+        },
+      }),
+    [],
+  );
+
+  return (
+    <View ref={ref} collapsable={false} {...responder.panHandlers}>
+      <KanbanCard
+        item={item}
+        items={items}
+        lifted={lifted}
+        onOpen={onOpen}
+        onLongPress={
+          enabled && DRAG_NEEDS_LONG_PRESS
+            ? () => {
+                armed.current = true;
+              }
+            : undefined
+        }
+        onPressOut={() => {
+          if (DRAG_NEEDS_LONG_PRESS) {
+            setTimeout(() => (armed.current = false), 0);
+          }
+        }}
+      />
     </View>
   );
 }
@@ -192,45 +361,36 @@ export function KanbanView({ view }: { view: ProjectView }) {
 function KanbanCard({
   item,
   items,
-  isActive,
+  lifted,
+  ghost = false,
   onOpen,
-  onDrag,
-  canMove,
-  onPrev,
-  onNext,
-  prevLabel,
-  nextLabel,
+  onLongPress,
+  onPressOut,
 }: {
   item: WorkItem;
   items: WorkItem[];
-  isActive: boolean;
-  onOpen: () => void;
-  onDrag: () => void;
-  // False in a shared view without edit access — no move arrows.
-  canMove: boolean;
-  onPrev?: () => void;
-  onNext?: () => void;
-  prevLabel?: string;
-  nextLabel?: string;
+  // The card's place in its column while its floating copy is being dragged.
+  lifted: boolean;
+  // The floating copy itself.
+  ghost?: boolean;
+  onOpen?: () => void;
+  onLongPress?: () => void;
+  onPressOut?: () => void;
 }) {
   const c = useThemeColors();
   const parent = items.find(i => i.id === item.parentId);
   return (
     <Press
-      feedback="subtle"
+      feedback={ghost ? 'none' : 'subtle'}
       accessibilityRole="button"
       accessibilityLabel={item.title}
       onPress={onOpen}
-      onLongPress={onDrag}
-      delayLongPress={220}
-      disabled={isActive}
-      style={
-        isActive && Platform.OS === 'web'
-          ? ({ boxShadow: '0 16px 32px -12px rgba(0,0,0,0.35)' } as object)
-          : undefined
-      }
-      className={`group gap-2 rounded-lg border bg-bg-card p-3 ${
-        isActive ? 'border-accent' : 'border-border-main hover:border-border-strong'
+      onLongPress={onLongPress}
+      onPressOut={onPressOut}
+      delayLongPress={250}
+      style={lifted ? { opacity: 0.35 } : undefined}
+      className={`select-none gap-2 rounded-lg border bg-bg-card p-3 ${
+        ghost ? 'border-accent' : 'border-border-main hover:border-border-strong'
       }`}
     >
       <View className="flex-row items-start gap-1.5">
@@ -256,25 +416,6 @@ function KanbanCard({
         <AssigneeAvatars ids={item.assigneeIds} size={20} />
         <DueDate item={item} className="text-xs" />
         <SubtaskBadge item={item} />
-        <View className="flex-1" />
-        {canMove ? (
-          <View className={`flex-row ${HOVER_REVEAL}`}>
-            <IconButton
-              icon={ChevronLeft}
-              size="sm"
-              label={prevLabel ? `Move to ${prevLabel}` : 'Move left'}
-              disabled={!onPrev}
-              onPress={onPrev}
-            />
-            <IconButton
-              icon={ChevronRight}
-              size="sm"
-              label={nextLabel ? `Move to ${nextLabel}` : 'Move right'}
-              disabled={!onNext}
-              onPress={onNext}
-            />
-          </View>
-        ) : null}
       </View>
     </Press>
   );
