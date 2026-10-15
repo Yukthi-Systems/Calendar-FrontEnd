@@ -230,7 +230,9 @@ export function SearchModal() {
   );
 }
 
-const day = (d: string) => format(parseISO(d), 'MMM d');
+// "Oct 14 09:00" — with the time when the task has one.
+const day = (d: string, time: string | null) =>
+  `${format(parseISO(d), 'MMM d')}${time ? ` ${time}` : ''}`;
 
 function ResultRow({ item, onPress }: { item: WorkItem; onPress: () => void }) {
   const tag = tagInfo(item.tag);
@@ -247,8 +249,10 @@ function ResultRow({ item, onPress }: { item: WorkItem; onPress: () => void }) {
         {item.title}
       </Text>
       {tag ? <Badge label={tag.label} color={tag.color} size="sm" /> : null}
-      <Text className="w-28 text-right text-xs text-text-subtle">
-        {item.start === item.end ? day(item.start) : `${day(item.start)} – ${day(item.end)}`}
+      <Text className="w-40 text-right text-xs text-text-subtle">
+        {item.start === item.end && !item.startTime && !item.endTime
+          ? day(item.start, null)
+          : `${day(item.start, item.startTime)} – ${day(item.end, item.endTime)}`}
       </Text>
       <AssigneeAvatars ids={item.assigneeIds} size={20} />
     </Press>

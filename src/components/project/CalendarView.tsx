@@ -617,6 +617,15 @@ function EventBar({
           className="flex-row items-center gap-1.5 px-1.5 hover:opacity-85"
         >
           {!seg.isStart ? <ChevronLeft size={10} color={t.fg} strokeWidth={2.5} /> : null}
+          {/* A timed task's start time leads its first segment ("11:45 Standup"). */}
+          {seg.isStart && item.startTime ? (
+            <Text
+              style={{ color: t.fg, opacity: 0.75 }}
+              className={detailed ? 'text-xs' : 'text-2xs'}
+            >
+              {item.startTime}
+            </Text>
+          ) : null}
           <Text
             numberOfLines={1}
             style={{ color: t.fg }}
