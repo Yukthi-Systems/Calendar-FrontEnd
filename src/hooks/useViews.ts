@@ -11,7 +11,6 @@ import {
   getSharedTaskView,
   listSharedUsersForView,
   listTaskViews,
-  updateSharedTaskView,
   updateTaskView,
 } from '../services/views';
 import { queryClient as appQueryClient } from '../services/queryClient';
@@ -222,9 +221,24 @@ export function useShareMutations(viewId: string) {
       withAuthRetry(token, t => createSharedTaskView(t, sharePayload(viewId, d))),
     onSettled: refresh,
   });
+  // TEMPORARY (2026-10-15) — backend bug #0c: PATCH /shared/update has no
+  // `user_id` condition, so it rewrites *every* share of the view (permissions and
+  // note). Until that's fixed, a change is "remove this person, add them back with
+  // the new values": DELETE is exact (and clears their cached permission), so no
+  // one else is touched. If the re-add fails, their old access is put back.
+  // Restore `updateSharedTaskView` here once the backend filters by user.
   const change = useMutation({
-    mutationFn: (d: ShareDraft) =>
-      withAuthRetry(token, t => updateSharedTaskView(t, sharePayload(viewId, d))),
+    mutationFn: async ({ next, prev }: { next: ShareDraft; prev: ShareDraft }) => {
+      await withAuthRetry(token, t => deleteSharedTaskView(t, Number(viewId), next.userId));
+      try {
+        await withAuthRetry(token, t => createSharedTaskView(t, sharePayload(viewId, next)));
+      } catch (err) {
+        await withAuthRetry(token, t =>
+          createSharedTaskView(t, sharePayload(viewId, prev)),
+        ).catch(() => undefined);
+        throw err;
+      }
+    },
     onSettled: refresh,
   });
   const revoke = useMutation({

@@ -173,6 +173,34 @@ export function usePeople(ids: string[]): Map<string, Person> {
   return map;
 }
 
+// Exact lookups for a pasted list of emails: each through GET /user/search (same
+// organization), keeping only an exact (case-insensitive) match. Returns who was
+// found and which addresses weren't.
+export function useFindPeopleByEmail() {
+  const token = useAtomValue(tokenAtom);
+  const queryClient = useQueryClient();
+  return async (emails: string[]) => {
+    const found: Person[] = [];
+    const missing: string[] = [];
+    for (const email of emails) {
+      const hits = await queryClient
+        .fetchQuery({
+          queryKey: ['userSearch', email],
+          queryFn: () => withAuthRetry(token, t => searchUsersByEmail(t, email)),
+          staleTime: 60_000,
+        })
+        .catch(() => []);
+      const hit = hits.find(u => u.email.toLowerCase() === email.toLowerCase());
+      if (hit) {
+        found.push(personFrom(hit));
+      } else {
+        missing.push(email);
+      }
+    }
+    return { found, missing };
+  };
+}
+
 const MIN_QUERY_LENGTH = 2;
 const DEBOUNCE_MS = 300;
 
