@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { tokenAtom } from '../atoms/auth';
@@ -88,14 +88,30 @@ export function useTasksSync(view: ProjectView | undefined) {
     enabled: !!token && viewId !== undefined,
   });
 
+  // Which view the tasks in itemsAtom belong to. Switching views starts from that
+  // view's own tasks only — subtasks expanded in the previous view belong to it
+  // (often to another owner) and must not leak in: they'd show up as stray rows
+  // here, and re-reading them through this view is refused (403).
+  const shownView = useRef<number | undefined>(undefined);
+
   useEffect(() => {
+    const switched = shownView.current !== viewId;
+    if (switched) {
+      shownView.current = viewId;
+    }
     if (!query.data) {
+      if (switched) {
+        setItems([]);
+      }
       return;
     }
     const freshRoots = query.data.map(taskFromServer);
     const freshRootIds = new Set(freshRoots.map(t => t.id));
     setItems(prev => {
-      // A plain refresh of the root level shouldn't throw away subtrees someone
+      if (switched) {
+        return freshRoots;
+      }
+      // A plain refresh of the same view shouldn't throw away subtrees someone
       // already expanded on demand — keep any already-loaded subtask that isn't
       // itself one of the roots just refetched.
       const keep = prev.filter(
@@ -103,7 +119,7 @@ export function useTasksSync(view: ProjectView | undefined) {
       );
       return [...freshRoots, ...keep];
     });
-  }, [query.data, setItems]);
+  }, [viewId, query.data, setItems]);
 
   useEffect(() => {
     if (query.error) {

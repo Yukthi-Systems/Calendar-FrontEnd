@@ -29,7 +29,12 @@ export function useRefresh() {
         view ? queryClient.invalidateQueries({ queryKey: ['tasks', Number(view.id)] }) : null,
         queryClient.invalidateQueries({ queryKey: ['taskSearch'] }),
       ]);
-      const parents = [...new Set(items.map(i => i.parentId).filter((p): p is string => !!p))];
+      // Only parents that are themselves loaded in this view (an orphaned subtask
+      // has nothing here to re-read through).
+      const loaded = new Set(items.map(i => i.id));
+      const parents = [
+        ...new Set(items.map(i => i.parentId).filter((p): p is string => !!p && loaded.has(p))),
+      ];
       // A parent deleted elsewhere just has nothing to re-read.
       await Promise.all(parents.map(p => loadChildren(p).catch(() => null)));
     } catch (err) {
