@@ -1,4 +1,4 @@
-package com.yukthisystems.ytc.widget
+package com.yukthi.ytc.widget
 
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReactApplicationContext

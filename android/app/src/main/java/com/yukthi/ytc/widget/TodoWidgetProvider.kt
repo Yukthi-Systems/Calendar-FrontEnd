@@ -1,4 +1,4 @@
-package com.yukthisystems.ytc.widget
+package com.yukthi.ytc.widget
 
 import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
@@ -8,8 +8,8 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.RemoteViews
-import com.yukthisystems.ytc.MainActivity
-import com.yukthisystems.ytc.R
+import com.yukthi.ytc.MainActivity
+import com.yukthi.ytc.R
 
 class TodoWidgetProvider : AppWidgetProvider() {
 
@@ -30,8 +30,8 @@ class TodoWidgetProvider : AppWidgetProvider() {
   }
 
   companion object {
-    const val ACTION_COMPLETE = "com.yukthisystems.ytc.widget.COMPLETE"
-    const val ACTION_REFRESH = "com.yukthisystems.ytc.widget.REFRESH"
+    const val ACTION_COMPLETE = "com.yukthi.ytc.widget.COMPLETE"
+    const val ACTION_REFRESH = "com.yukthi.ytc.widget.REFRESH"
     const val EXTRA_TASK_ID = "task_id"
 
     fun refreshAll(context: Context) {

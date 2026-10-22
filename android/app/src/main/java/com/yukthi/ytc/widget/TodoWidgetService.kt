@@ -1,10 +1,10 @@
-package com.yukthisystems.ytc.widget
+package com.yukthi.ytc.widget
 
 import android.content.Context
 import android.content.Intent
 import android.widget.RemoteViews
 import android.widget.RemoteViewsService
-import com.yukthisystems.ytc.R
+import com.yukthi.ytc.R
 
 class TodoWidgetService : RemoteViewsService() {
   override fun onGetViewFactory(intent: Intent): RemoteViewsFactory = TodoFactory(applicationContext)

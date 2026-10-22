@@ -1,4 +1,4 @@
-package com.yukthisystems.ytc
+package com.yukthi.ytc
 
 import com.facebook.react.ReactActivity
 import com.facebook.react.ReactActivityDelegate

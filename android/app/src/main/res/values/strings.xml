@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">YTCFronend</string>
+    <string name="app_name">Yukthi Calendar</string>
     <string name="widget_title">To do</string>
     <string name="widget_empty">Nothing active today</string>
     <string name="widget_capture">Capture</string>

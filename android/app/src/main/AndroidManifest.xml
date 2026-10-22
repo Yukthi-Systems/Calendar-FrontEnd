@@ -35,8 +35,8 @@
         android:exported="false">
         <intent-filter>
             <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            <action android:name="com.yukthisystems.ytc.widget.COMPLETE" />
-            <action android:name="com.yukthisystems.ytc.widget.REFRESH" />
+            <action android:name="com.yukthi.ytc.widget.COMPLETE" />
+            <action android:name="com.yukthi.ytc.widget.REFRESH" />
         </intent-filter>
         <meta-data
             android:name="android.appwidget.provider"

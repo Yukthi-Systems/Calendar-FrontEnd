@@ -1,4 +1,4 @@
-package com.yukthisystems.ytc.widget
+package com.yukthi.ytc.widget
 
 import android.content.Context
 import org.json.JSONArray
