@@ -64,6 +64,7 @@ export function taskFromServer(dto: TaskInfoDto): WorkItem {
     // created_by is nullable (SET NULL if that account is gone); the view's
     // owner is the next most sensible "who can manage this" fallback.
     createdById: dto.created_by ?? dto.owner_id,
+    ownerId: dto.owner_id,
     parentId: dto.parent_task_id === null ? null : String(dto.parent_task_id),
     totalSubtasks: dto.total_sub_tasks,
     start: fromTimestamp(dto.start_at).date,
@@ -94,7 +95,7 @@ const detailsPayload = (item: DetailFields): Record<string, unknown> => ({
 });
 
 export function taskToCreatePayload(
-  item: Omit<WorkItem, 'id' | 'createdById' | 'assigneeIds' | 'totalSubtasks'>,
+  item: Omit<WorkItem, 'id' | 'createdById' | 'ownerId' | 'assigneeIds' | 'totalSubtasks'>,
 ): CreateTaskPayload {
   return {
     parent_task_id: item.parentId ? Number(item.parentId) : null,

@@ -7,12 +7,12 @@ import type {
 } from './types';
 
 // Wrappers for Tasks-Main-API's /recurring/* — recurring_tasks rows are templates
-// (title/description/tag/RRULE only, no anchor date or start/end; "UI will use
-// this to generate a task", per the schema's own comment) and are a separate
+// (title/description/tag/RRULE only, no anchor date or start/end) and a separate
 // concept from a task's own `recurrence` field (src/data/rrule.ts), which already
-// covers single-task repeats end to end. Nothing in the UI calls these yet — nothing
-// in this app manages a library of reusable recurrence templates or generates task
-// rows from one, which is its own feature, not a prerequisite for /tasks.
+// covers single-task repeats end to end. The "Recurring tasks" screen
+// (RecurringTasksView.tsx, via hooks/useRecurringTasks.ts) manages this library —
+// create/edit/delete a template. The backend doesn't generate real tasks rows from
+// one on any schedule; that's still a future feature, not this one.
 
 // POST /recurring/create/{view_id} — needs show_recurring + can_create on the view,
 // and the view's task_tag_filter (if any) must allow the given tag.
@@ -72,22 +72,20 @@ export const getRecurringTask = async (
   return data;
 };
 
-// GET /recurring/list/{view_id} — needs show_recurring; the view's task_tag_filter
-// (if any) must allow every tag asked for. The route takes the tag list as a bare
-// `web::Query<Vec<TaskTag>>` with no wrapping struct — the same shape that made
-// the old GET /user/search reject every call (web::Query<String> couldn't bind a
-// bare query string either; see that earlier fix request). This sends the
-// conventional repeated-key form (?task_tag=WORK&task_tag=URGENT); if the route
-// has the same binding bug, every call 400s regardless of what's sent here.
+// POST /recurring/list/{view_id} — needs show_recurring; the view's
+// task_tag_filter (if any) must allow every tag asked for. Body is the tag list
+// as a bare JSON array (Vec<TaskTag>, not wrapped in an object) — this used to be
+// GET with the tags as a query string, which could never work (a bare
+// web::Query<Vec<TaskTag>> can't bind an array in any encoding — the same class
+// of bug /tasks/list had; fixed there the same way, by moving to a JSON body).
 export const listRecurringTasks = async (
   accessToken: string,
   viewId: number,
   taskTags: BackendTaskTag[],
 ): Promise<RecurringTaskDto[]> => {
-  const query = taskTags.map(t => `task_tag=${t}`).join('&');
   const { data } = await apiRequest<RecurringTaskDto[]>(
-    `/recurring/list/${viewId}${query ? `?${query}` : ''}`,
-    { accessToken },
+    `/recurring/list/${viewId}`,
+    { method: 'POST', accessToken, body: JSON.stringify(taskTags) },
   );
   return data;
 };

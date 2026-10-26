@@ -111,6 +111,7 @@ export function seedDemoIfRequested() {
         tag,
         assigneeIds: who.map(w => (w === 'me' ? me : w)),
         createdById: me,
+        ownerId: me,
         parentId: parentId ?? null,
         // Real tasks get this from the server (total_sub_tasks); demo seeds derive
         // it the same way — direct children only, by counting the other seeds.

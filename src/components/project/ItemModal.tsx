@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { format, parseISO } from 'date-fns';
@@ -20,13 +20,11 @@ import {
 import { STATUSES, tagInfo, allowedStatuses } from '../../data/constants';
 import { confirm, errorMessage, toast } from '../../atoms/feedback';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
-import { isServerTaskId } from '../../data/taskSync';
 import { describeRecurrence } from '../../data/rrule';
 import {
   MAX_DEPTH,
   ancestorsOf,
   canAddSubtask,
-  depthOf,
   descendantsOf,
   flattenTree,
   hasSubtasks,
@@ -49,6 +47,8 @@ import { CommentsSection } from './CommentsSection';
 import {
   AssigneeAvatars,
   DueDate,
+  PersonRow,
+  Property,
   StatusBadge,
   StatusIcon,
   AssigneeNames,
@@ -62,7 +62,7 @@ export function ItemModal() {
   const {
     editItem,
     removeItem,
-    loadSubtree,
+    loadChildren,
     isServerBacked,
     unavailableReason,
     subtasksEnabled,
@@ -96,37 +96,65 @@ export function ItemModal() {
   const close = () => setSelectedId(null);
   const open = (id: string) => setSelectedId(id);
 
-  // Subtasks load lazily, on open — and only when the server says this task has
-  // any (total_sub_tasks > 0), so opening a leaf task costs no request.
-  const [loadingSubtasks, setLoadingSubtasks] = useState(false);
+  // Subtasks stay collapsed until asked for — and that's per level, not just
+  // the task itself: expanding this task only fetches its direct children
+  // (loadChildren), same as any of those children expanding fetches *their*
+  // direct children, same as TableView's own row-expand. A deep subtree never
+  // gets pulled in all at once just because the task was opened.
+  const [expandedSubtasks, setExpandedSubtasks] = useState<Set<string>>(new Set());
+  const [loadingSubtaskRows, setLoadingSubtaskRows] = useState<Set<string>>(new Set());
+  const [loadedSubtaskRows, setLoadedSubtaskRows] = useState<Set<string>>(new Set());
+  // Collapses again each time a different task opens, so it doesn't carry
+  // over from the last one.
   useEffect(() => {
-    if (!item || !isServerTaskId(item.id) || !hasSubtasks(item) || !subtasksEnabled) {
+    setExpandedSubtasks(new Set());
+    setLoadingSubtaskRows(new Set());
+    setLoadedSubtaskRows(new Set());
+  }, [item?.id]);
+
+  const withoutId = (set: Set<string>, id: string) => {
+    const next = new Set(set);
+    next.delete(id);
+    return next;
+  };
+
+  const fetchSubtaskChildren = (id: string) => {
+    if (loadedSubtaskRows.has(id) || loadingSubtaskRows.has(id)) {
       return;
     }
-    let active = true;
-    setLoadingSubtasks(true);
-    loadSubtree(item)
-      .catch(err =>
+    setLoadingSubtaskRows(prev => new Set(prev).add(id));
+    loadChildren(id)
+      .then(() => setLoadedSubtaskRows(prev => new Set(prev).add(id)))
+      .catch(err => {
         toast.error('Couldn’t load subtasks', {
           description: errorMessage(err, 'Please try again.'),
-        }),
-      )
-      .finally(() => {
-        if (active) {
-          setLoadingSubtasks(false);
-        }
-      });
-    return () => {
-      active = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when the open task changes, not on every loadSubtree identity change
-  }, [item?.id, subtasksEnabled]);
+        });
+        setExpandedSubtasks(prev => withoutId(prev, id));
+      })
+      .finally(() => setLoadingSubtaskRows(prev => withoutId(prev, id)));
+  };
+
+  const toggleSubtask = (id: string) => {
+    if (expandedSubtasks.has(id)) {
+      setExpandedSubtasks(prev => withoutId(prev, id));
+      return;
+    }
+    setExpandedSubtasks(prev => new Set(prev).add(id));
+    fetchSubtaskChildren(id);
+  };
 
   const crumbs = item ? ancestorsOf(items, item) : [];
-  const depth = item ? depthOf(items, item) : 1;
-  const subtasks = item ? flattenTree(descendantsOf(items, item.id)) : [];
+  // Only ever as deep as what's actually been expanded — descendantsOf(items, …)
+  // itself only ever holds whatever loadChildren has fetched so far.
+  const loadedDescendants = item ? descendantsOf(items, item.id) : [];
+  const collapsedSubtaskIds = new Set(
+    loadedDescendants.filter(d => !expandedSubtasks.has(d.id)).map(d => d.id),
+  );
+  const subtasks = item ? flattenTree(loadedDescendants, collapsedSubtaskIds) : [];
   const progress = item ? subtaskProgress(items, item) : null;
   const canAdd = item ? canAddSubtask(items, item) : false;
+  const subtasksOpen = item ? expandedSubtasks.has(item.id) : false;
+  const loadingTopSubtasks = item ? loadingSubtaskRows.has(item.id) : false;
 
   const setStatus = (status: (typeof STATUSES)[number]['key']) => {
     if (!item || item.status === status) {
@@ -195,11 +223,6 @@ export function ItemModal() {
                     <ChevronRight size={12} color={c.subtle} />
                   </View>
                 ))}
-                {depth > 1 ? (
-                  <Text className="text-xs text-text-subtle">
-                    Subtask · level {depth} of {MAX_DEPTH}
-                  </Text>
-                ) : null}
               </View>
             }
             title={
@@ -265,7 +288,10 @@ export function ItemModal() {
             )}
 
             <View className="mb-6 rounded-xl border border-border-main">
-              <Property label="Tag" first>
+              <Property label="ID" first>
+                <Text className="text-sm text-text-heading">{item.id}</Text>
+              </Property>
+              <Property label="Tag">
                 {tag ? <Badge label={tag.label} color={tag.color} dot /> : null}
               </Property>
               <Property label="Assignees">
@@ -276,6 +302,12 @@ export function ItemModal() {
                     className="flex-1 text-sm text-text-heading"
                   />
                 </View>
+              </Property>
+              <Property label="Creator">
+                <PersonRow id={item.createdById} />
+              </Property>
+              <Property label="Owner">
+                <PersonRow id={item.ownerId} />
               </Property>
               <Property label="Dates">
                 <View className="flex-row items-center gap-2">
@@ -291,14 +323,21 @@ export function ItemModal() {
                 </View>
               </Property>
               {item.recurrence ? (
-                <Property label="Repeats">
-                  <View className="flex-row items-center gap-1.5">
-                    <Repeat size={13} color={c.text} />
-                    <Text className="text-sm text-text-heading">
-                      {describeRecurrence(item.recurrence) || item.recurrence}
+                <>
+                  <Property label="Repeats">
+                    <View className="flex-row items-center gap-1.5">
+                      <Repeat size={13} color={c.text} />
+                      <Text className="text-sm text-text-heading">
+                        {describeRecurrence(item.recurrence) || item.recurrence}
+                      </Text>
+                    </View>
+                  </Property>
+                  <Property label="RRULE">
+                    <Text selectable className="flex-1 text-xs text-text-subtle">
+                      {item.recurrence}
                     </Text>
-                  </View>
-                </Property>
+                  </Property>
+                </>
               ) : null}
               {(item.reminders ?? []).length > 0 ? (
                 <Property label="Reminders">
@@ -323,7 +362,7 @@ export function ItemModal() {
                 <Text className="text-sm font-semibold text-text-heading">Subtasks</Text>
                 {progress && progress.total > 0 ? (
                   <Text className="text-sm text-text-subtle">
-                    {progress.done}/{progress.total}
+                    {progress.loaded ? `${progress.done}/${progress.total}` : progress.total}
                   </Text>
                 ) : null}
                 <View className="flex-1" />
@@ -363,7 +402,7 @@ export function ItemModal() {
                   </View>
                 </Callout>
               ) : null}
-              {subtasksEnabled && progress && progress.total > 0 ? (
+              {subtasksEnabled && progress && progress.total > 0 && progress.loaded ? (
                 <View className="mb-2 h-1 overflow-hidden rounded-full bg-muted">
                   <View
                     style={{ width: `${(progress.done / progress.total) * 100}%` }}
@@ -371,32 +410,101 @@ export function ItemModal() {
                   />
                 </View>
               ) : null}
-              {!subtasksEnabled ? null : subtasks.length === 0 ? (
-                <Text className="py-1 text-sm text-text-subtle">
-                  {loadingSubtasks ? 'Loading subtasks…' : 'No subtasks yet'}
-                </Text>
+              {!subtasksEnabled || !progress || progress.total === 0 ? (
+                subtasksEnabled ? (
+                  <Text className="py-1 text-sm text-text-subtle">No subtasks yet</Text>
+                ) : null
+              ) : !subtasksOpen ? (
+                <Press
+                  accessibilityRole="button"
+                  accessibilityState={{ expanded: false }}
+                  accessibilityLabel={`Show ${progress.total} subtasks`}
+                  onPress={() => toggleSubtask(item.id)}
+                  className="flex-row items-center gap-1.5 self-start rounded-lg border border-border-main px-3 py-1.5 hover:bg-hover"
+                >
+                  <ChevronRight size={14} color={c.text} strokeWidth={2.25} />
+                  <Text className="text-sm text-text-heading">
+                    Show {progress.total} subtask{progress.total === 1 ? '' : 's'}
+                  </Text>
+                </Press>
               ) : (
-                <View className="overflow-hidden rounded-xl border border-border-main">
-                  {subtasks.map(({ item: s, depth: d }, idx) => (
-                    <Press
-                      key={s.id}
-                      feedback="none"
-                      accessibilityRole="button"
-                      accessibilityLabel={`Open ${s.title}`}
-                      onPress={() => open(s.id)}
-                      style={{ paddingLeft: 12 + (d - 1) * 16 }}
-                      className={`flex-row items-center gap-2.5 py-2 pr-3 hover:bg-hover ${
-                        idx > 0 ? 'border-t border-border-main' : ''
-                      }`}
-                    >
-                      <StatusIcon status={s.status} size={14} />
-                      <Text numberOfLines={1} className="flex-1 text-sm text-text-heading">
-                        {s.title}
-                      </Text>
-                      <AssigneeAvatars ids={s.assigneeIds} size={18} />
-                    </Press>
-                  ))}
-                </View>
+                <>
+                  <Press
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: true }}
+                    accessibilityLabel="Hide subtasks"
+                    onPress={() => toggleSubtask(item.id)}
+                    className="mb-1.5 flex-row items-center gap-1.5 self-start rounded-lg px-1 py-0.5 hover:bg-hover"
+                  >
+                    <View style={{ transform: [{ rotate: '90deg' }] }}>
+                      <ChevronRight size={14} color={c.text} strokeWidth={2.25} />
+                    </View>
+                    <Text className="text-sm text-text-heading">Hide subtasks</Text>
+                  </Press>
+                  {loadingTopSubtasks && subtasks.length === 0 ? (
+                    <Text className="py-1 text-sm text-text-subtle">Loading subtasks…</Text>
+                  ) : (
+                    <View className="overflow-hidden rounded-xl border border-border-main">
+                      {subtasks.map(({ item: s, depth: d }, idx) => {
+                        // Same per-level lazy load as the task itself: a subtask
+                        // with its own children gets its own chevron, and only
+                        // fetches them (loadChildren) the first time it's opened.
+                        const kids = hasSubtasks(s);
+                        const rowExpanded = expandedSubtasks.has(s.id);
+                        const rowLoading = loadingSubtaskRows.has(s.id);
+                        const rowChildrenShown = subtasks.some(r => r.item.parentId === s.id);
+                        return (
+                          <View key={s.id}>
+                            <Press
+                              feedback="none"
+                              accessibilityRole="button"
+                              accessibilityLabel={`Open ${s.title}`}
+                              onPress={() => open(s.id)}
+                              style={{ paddingLeft: 4 + (d - 1) * 16 }}
+                              className={`flex-row items-center gap-2 py-2 pr-3 hover:bg-hover ${
+                                idx > 0 ? 'border-t border-border-main' : ''
+                              }`}
+                            >
+                              <View className="h-5 w-5 items-center justify-center">
+                                {kids ? (
+                                  <Press
+                                    accessibilityRole="button"
+                                    accessibilityLabel={
+                                      rowExpanded ? `Collapse ${s.title}` : `Expand ${s.title}`
+                                    }
+                                    accessibilityState={{ expanded: rowExpanded }}
+                                    onPress={() => toggleSubtask(s.id)}
+                                    hitSlop={6}
+                                    className="h-5 w-5 items-center justify-center rounded-md hover:bg-border-main"
+                                  >
+                                    <View
+                                      style={{ transform: [{ rotate: rowExpanded ? '90deg' : '0deg' }] }}
+                                    >
+                                      <ChevronRight size={13} color={c.text} strokeWidth={2.25} />
+                                    </View>
+                                  </Press>
+                                ) : null}
+                              </View>
+                              <StatusIcon status={s.status} size={14} />
+                              <Text numberOfLines={1} className="flex-1 text-sm text-text-heading">
+                                {s.title}
+                              </Text>
+                              <AssigneeAvatars ids={s.assigneeIds} size={18} />
+                            </Press>
+                            {rowExpanded && rowLoading && !rowChildrenShown ? (
+                              <Text
+                                style={{ paddingLeft: 4 + d * 16 }}
+                                className="border-t border-border-main py-1.5 text-xs text-text-subtle"
+                              >
+                                Loading…
+                              </Text>
+                            ) : null}
+                          </View>
+                        );
+                      })}
+                    </View>
+                  )}
+                </>
               )}
             </View>
 
@@ -405,27 +513,5 @@ export function ItemModal() {
         </>
       ) : null}
     </Sheet>
-  );
-}
-
-// One label/value row in the properties panel.
-function Property({
-  label,
-  first = false,
-  children,
-}: {
-  label: string;
-  first?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <View
-      className={`min-h-[40px] flex-row items-center gap-3 px-3 py-2 ${
-        first ? '' : 'border-t border-border-main'
-      }`}
-    >
-      <Text className="w-24 text-sm text-text-subtle">{label}</Text>
-      <View className="flex-1 flex-row items-center">{children}</View>
-    </View>
   );
 }

@@ -17,7 +17,7 @@ import type {
 // `ui_info` JSON column instead.
 
 const VIEW_TYPES: ViewType[] = ['table', 'kanban', 'roadmap', 'calendar'];
-const FIELD_KEYS: string[] = ['status', 'assignee', 'start', 'end'];
+const FIELD_KEYS: string[] = ['status', 'assignee', 'creator', 'owner', 'end'];
 const isViewType = (v: unknown): v is ViewType =>
   typeof v === 'string' && (VIEW_TYPES as string[]).includes(v);
 

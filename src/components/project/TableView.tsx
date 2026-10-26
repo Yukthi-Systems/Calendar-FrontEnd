@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { format, parseISO } from 'date-fns';
 import {
   ArrowDown,
   ArrowUp,
@@ -28,6 +27,7 @@ import { usePeople, type Person } from '../../hooks/useUsers';
 import { Button, EmptyState, IconButton, Press, Skeleton } from '../ui';
 import {
   AssigneeAvatars,
+  Avatar,
   DueDate,
   RecurrenceIcon,
   StatusBadge,
@@ -35,7 +35,7 @@ import {
   namesOf,
 } from './shared';
 
-type SortKey = 'title' | 'status' | 'assignee' | 'start' | 'end';
+type SortKey = 'title' | 'status' | 'assignee' | 'creator' | 'owner' | 'end';
 
 const STATUS_RANK = {
   not_started: 0,
@@ -50,7 +50,8 @@ const COLUMNS: { key: SortKey; label: string; width?: number }[] = [
   { key: 'title', label: 'Title' },
   { key: 'status', label: 'Status', width: 136 },
   { key: 'assignee', label: 'Assignees', width: 120 },
-  { key: 'start', label: 'Start', width: 116 },
+  { key: 'creator', label: 'Creator', width: 140 },
+  { key: 'owner', label: 'Owner', width: 140 },
   { key: 'end', label: 'Due', width: 116 },
 ];
 
@@ -64,9 +65,11 @@ const sortValue = (
       return STATUS_RANK[i.status] ?? 0;
     case 'assignee':
       return namesOf(i.assigneeIds, people);
-    // Date, then time; an all-day start sorts first in its day, an all-day due last.
-    case 'start':
-      return `${i.start} ${i.startTime ?? '00:00'}`;
+    case 'creator':
+      return people.get(i.createdById)?.name ?? '';
+    case 'owner':
+      return people.get(i.ownerId)?.name ?? '';
+    // Date, then time; an all-day due date sorts last in its day.
     case 'end':
       return `${i.end} ${i.endTime ?? '24:00'}`;
     default:
@@ -76,6 +79,19 @@ const sortValue = (
 
 const cellStyle = (width?: number) =>
   width ? { width } : { flexGrow: 1, flexBasis: 0, minWidth: 320 };
+
+// One person (Creator / Owner column) — avatar + name, reusing the ids this
+// table already fetched for the Assignees column rather than querying again.
+function PersonCell({ id, people }: { id: string; people: Map<string, Person> }) {
+  return (
+    <View className="flex-row items-center gap-1.5">
+      <Avatar id={id} size={20} />
+      <Text numberOfLines={1} className="flex-1 text-sm text-text-main">
+        {people.get(id)?.name ?? '…'}
+      </Text>
+    </View>
+  );
+}
 
 // ── Tree rows ───────────────────────────────────────────────────────────────
 //
@@ -171,7 +187,9 @@ function TreeGuides({ depth, guides, last }: { depth: number; guides: boolean[];
 
 export function TableView({ view }: { view: ProjectView }) {
   const items = useAtomValue(itemsAtom);
-  const people = usePeople(items.flatMap(i => i.assigneeIds));
+  const people = usePeople(
+    items.flatMap(i => [...i.assigneeIds, i.createdById, i.ownerId]),
+  );
   const tasksLoading = useAtomValue(tasksLoadingAtom);
   const setForm = useSetAtom(itemFormAtom);
   const select = useSetAtom(selectedItemIdAtom);
@@ -181,7 +199,7 @@ export function TableView({ view }: { view: ProjectView }) {
   const columns = COLUMNS.filter(
     col => col.key === 'title' || showsField(view.fields, col.key),
   );
-  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'start', dir: 1 });
+  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'end', dir: 1 });
   // Collapsed by default; a row's subtasks load the first time it's expanded.
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [loadingRows, setLoadingRows] = useState<Set<string>>(new Set());
@@ -339,15 +357,14 @@ export function TableView({ view }: { view: ProjectView }) {
         return <StatusBadge status={i.status} />;
       case 'assignee':
         return <AssigneeAvatars ids={i.assigneeIds} size={22} max={4} />;
+      case 'creator':
+        return <PersonCell id={i.createdById} people={people} />;
+      case 'owner':
+        return <PersonCell id={i.ownerId} people={people} />;
       case 'end':
         return <DueDate item={i} />;
       default:
-        return (
-          <Text className="text-sm text-text-main">
-            {format(parseISO(i.start), 'MMM d')}
-            {i.startTime ? ` ${i.startTime}` : ''}
-          </Text>
-        );
+        return null;
     }
   };
 

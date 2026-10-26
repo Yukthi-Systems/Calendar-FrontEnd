@@ -3,7 +3,8 @@ import type { ViewField, ViewType } from './types';
 export const TABLE_FIELDS: { key: ViewField; label: string }[] = [
   { key: 'status', label: 'Status' },
   { key: 'assignee', label: 'Assignees' },
-  { key: 'start', label: 'Start date' },
+  { key: 'creator', label: 'Creator' },
+  { key: 'owner', label: 'Owner' },
   { key: 'end', label: 'Due date' },
 ];
 

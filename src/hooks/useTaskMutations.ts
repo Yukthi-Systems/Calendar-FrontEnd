@@ -124,7 +124,7 @@ export function useTaskMutations() {
   // re-read by (parent, title) — unique per owner server-side. Returns the new
   // id and any assignees the server refused.
   const addItem = async (
-    draft: Omit<WorkItem, 'id' | 'createdById' | 'totalSubtasks' | 'assigneeIds'>,
+    draft: Omit<WorkItem, 'id' | 'createdById' | 'ownerId' | 'totalSubtasks' | 'assigneeIds'>,
     changes?: AssigneeChanges,
   ): Promise<{ id: string; failedAssignees: string[] }> => {
     const vid = ensure();

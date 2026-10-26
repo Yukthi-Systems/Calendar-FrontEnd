@@ -48,6 +48,10 @@ export interface WorkItem {
   // Whoever opened this task — the only one who can delete it. A member id
   // (the server enforces what each role may do — docs/BACKEND.md §4).
   createdById: string;
+  // The view owner's id at the time this task was made — every task in a view
+  // belongs to that view's owner, whoever actually created it (docs/BACKEND.md
+  // §4). Read-only; the server sets it, never the client.
+  ownerId: string;
   // Parent task; null for top-level. Nesting is limited to MAX_DEPTH levels.
   parentId: string | null;
   // Direct children this task has on the server, whether or not they're loaded
@@ -72,7 +76,8 @@ export interface WorkItem {
 export type ViewField =
   | 'status'
   | 'assignee'
-  | 'start'
+  | 'creator'
+  | 'owner'
   | 'end';
 
 export interface ProjectView {

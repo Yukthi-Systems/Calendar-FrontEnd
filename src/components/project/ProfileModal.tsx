@@ -1,28 +1,19 @@
 import { useState } from 'react';
-import { useAtom, useSetAtom } from 'jotai';
+import { useAtom } from 'jotai';
 import { Text, View } from 'react-native';
-import {
-  Building2,
-  LogOut,
-  Mail,
-  Palette,
-  Pencil,
-  Phone,
-  type LucideIcon,
-} from 'lucide-react-native';
-import { profileEditOpenAtom, profileOpenAtom } from '../../atoms/profile';
+import { Building2, LogOut, Mail, Palette, Phone, type LucideIcon } from 'lucide-react-native';
+import { profileOpenAtom } from '../../atoms/profile';
 import { useMyProfile } from '../../hooks/useUsers';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { MenuItem, MenuSeparator, Sheet, SheetHeader } from '../ui';
 import { InitialsAvatar } from './shared';
 import { ThemeModal } from './ThemeModal';
 
-// Account sheet, opened from the rail/header avatar. "Edit profile" hands off to
-// ProfileEditModal; "Sign out" only appears once SSO is wired in (see
-// ProjectScreen, which is the one place that knows whether it's enabled).
+// Account sheet, opened from the rail/header avatar. "Sign out" only appears
+// once SSO is wired in (see ProjectScreen, which is the one place that knows
+// whether it's enabled).
 export function ProfileModal({ onSignOut }: { onSignOut?: () => void }) {
   const [open, setOpen] = useAtom(profileOpenAtom);
-  const setEditOpen = useSetAtom(profileEditOpenAtom);
   const profile = useMyProfile();
   const [themeOpen, setThemeOpen] = useState(false);
   const close = () => setOpen(false);
@@ -55,15 +46,6 @@ export function ProfileModal({ onSignOut }: { onSignOut?: () => void }) {
           </View>
         </View>
         <View className="border-t border-border-main p-2">
-          <MenuItem
-            icon={Pencil}
-            label="Edit profile"
-            chevron
-            onPress={() => {
-              close();
-              setEditOpen(true);
-            }}
-          />
           <MenuItem
             icon={Palette}
             label="Appearance"

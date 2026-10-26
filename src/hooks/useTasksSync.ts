@@ -82,10 +82,11 @@ export function useTasksSync(view: ProjectView | undefined) {
     TASKS_API_ENABLED && view
       ? Number(view.id)
       : undefined;
+  const enabled = !!token && viewId !== undefined;
   const query = useQuery({
     queryKey: rootTasksKey(view),
     queryFn: () => withAuthRetry(token, t => drainPages(t, viewId!, view!)),
-    enabled: !!token && viewId !== undefined,
+    enabled,
   });
 
   // Which view the tasks in itemsAtom belong to. Switching views starts from that
@@ -136,17 +137,25 @@ export function useTasksSync(view: ProjectView | undefined) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to the view/token actually changing, not to every items write
   }, [viewId, token]);
 
-  // isLoading, not isPending: a disabled query (TASKS_API_ENABLED off, or a
-  // local-only view) stays "pending" forever but never fetches.
+  // `enabled && isPending`, not `isLoading`: plain `isLoading` (isPending &&
+  // fetchStatus === 'fetching') stays false for the one render where a query
+  // has just flipped from disabled to enabled (e.g. the same render `active`
+  // first resolves, right after switching views/views finish loading) — React
+  // Query doesn't dispatch the actual fetch until its own effect runs after
+  // that commit. TableView was reading that render's items ([]) and loading
+  // (false) together and showing "No tasks yet" instead of a skeleton. Plain
+  // `isPending` alone would fix that but then never clears for a disabled
+  // query (TASKS_API_ENABLED off, or a local-only view), which has no data and
+  // never fetches — gating on `enabled` keeps that case resolving to false.
   const setLoading = useSetAtom(tasksLoadingAtom);
   useEffect(() => {
-    setLoading(query.isLoading);
-  }, [query.isLoading, setLoading]);
+    setLoading(enabled && query.isPending);
+  }, [enabled, query.isPending, setLoading]);
 
   const refetch = () =>
     viewId !== undefined
       ? queryClient.invalidateQueries({ queryKey: ['tasks', viewId] })
       : Promise.resolve();
 
-  return { ready: !query.isPending, loading: query.isLoading, refetch };
+  return { ready: !query.isPending, loading: enabled && query.isPending, refetch };
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import {
   ChevronDown,
@@ -519,5 +519,39 @@ export function SubtaskBadge({ item }: { item: WorkItem }) {
         </Text>
       </View>
     </Tooltip>
+  );
+}
+
+// Avatar + name for a Property row's Creator/Owner value.
+export function PersonRow({ id }: { id: string }) {
+  const person = usePerson(id);
+  return (
+    <View className="flex-row items-center gap-2">
+      <Avatar id={id} size={22} />
+      <Text className="text-sm text-text-heading">{person?.name ?? '…'}</Text>
+    </View>
+  );
+}
+
+// One label/value row in a detail sheet's properties panel — ItemModal's Tag/
+// Assignees/Creator/… rows, and RecurringTaskViewModal's Tag/Repeats rows.
+export function Property({
+  label,
+  first = false,
+  children,
+}: {
+  label: string;
+  first?: boolean;
+  children: ReactNode;
+}) {
+  return (
+    <View
+      className={`min-h-[40px] flex-row items-center gap-3 px-3 py-2 ${
+        first ? '' : 'border-t border-border-main'
+      }`}
+    >
+      <Text className="w-24 text-sm text-text-subtle">{label}</Text>
+      <View className="flex-1 flex-row items-center">{children}</View>
+    </View>
   );
 }
