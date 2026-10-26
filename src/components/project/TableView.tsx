@@ -1,34 +1,47 @@
 import { useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
-import { useAtomValue, useSetAtom } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import {
   ArrowDown,
   ArrowUp,
   ChevronRight,
   ChevronsDownUp,
   ChevronsUpDown,
+  Filter,
   ListTodo,
   Plus,
+  X,
 } from 'lucide-react-native';
 import {
   itemFormAtom,
   itemsAtom,
   selectedItemIdAtom,
+  taskFiltersAtom,
   tasksLoadingAtom,
 } from '../../atoms/project';
+import { STATUSES, TAGS } from '../../data/constants';
 import { MAX_DEPTH, hasSubtasks } from '../../data/tree';
 import { showsField } from '../../data/viewFields';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
 import { useViewAccess } from '../../hooks/useViews';
 import { errorMessage, toast } from '../../atoms/feedback';
-import type { ProjectView, WorkItem } from '../../data/types';
+import type { ProjectView, Status, TaskTag, WorkItem } from '../../data/types';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { usePeople, type Person } from '../../hooks/useUsers';
-import { Button, EmptyState, IconButton, Press, Skeleton } from '../ui';
+import { useUserSearch, usePeople, type Person } from '../../hooks/useUsers';
+import {
+  Button,
+  Chip,
+  EmptyState,
+  IconButton,
+  Popover,
+  Press,
+  Skeleton,
+} from '../ui';
 import {
   AssigneeAvatars,
   Avatar,
   DueDate,
+  MultiSelectDropdown,
   RecurrenceIcon,
   StatusBadge,
   SubtaskBadge,
@@ -82,7 +95,13 @@ const cellStyle = (width?: number) =>
 
 // One person (Creator / Owner column) — avatar + name, reusing the ids this
 // table already fetched for the Assignees column rather than querying again.
-function PersonCell({ id, people }: { id: string; people: Map<string, Person> }) {
+function PersonCell({
+  id,
+  people,
+}: {
+  id: string;
+  people: Map<string, Person>;
+}) {
   return (
     <View className="flex-row items-center gap-1.5">
       <Avatar id={id} size={20} />
@@ -116,7 +135,13 @@ type TaskRow = {
 type Row =
   | TaskRow
   | { kind: 'loading'; key: string; depth: number; guides: boolean[] }
-  | { kind: 'add'; key: string; parent: WorkItem; depth: number; guides: boolean[] };
+  | {
+      kind: 'add';
+      key: string;
+      parent: WorkItem;
+      depth: number;
+      guides: boolean[];
+    };
 
 const LEVEL_W = 22; // width of one indentation column
 const ROW_H = 44;
@@ -133,7 +158,12 @@ function buildRows(
   const ids = new Set(sorted.map(i => i.id));
   const childrenOf = (id: string) => sorted.filter(i => i.parentId === id);
   const out: Row[] = [];
-  const walk = (list: WorkItem[], depth: number, guides: boolean[], endsWithAddRow: boolean) => {
+  const walk = (
+    list: WorkItem[],
+    depth: number,
+    guides: boolean[],
+    endsWithAddRow: boolean,
+  ) => {
     list.forEach((item, idx) => {
       const last = idx === list.length - 1 && !endsWithAddRow;
       out.push({ kind: 'task', key: item.id, item, depth, guides, last });
@@ -144,23 +174,47 @@ function buildRows(
       const childGuides = depth >= 2 ? [...guides, !last] : [];
       const kids = childrenOf(item.id);
       if (kids.length === 0 && loading.has(item.id)) {
-        out.push({ kind: 'loading', key: `${item.id}:loading`, depth: depth + 1, guides: childGuides });
+        out.push({
+          kind: 'loading',
+          key: `${item.id}:loading`,
+          depth: depth + 1,
+          guides: childGuides,
+        });
         return;
       }
       const canAdd = allowAdd && depth < MAX_DEPTH;
       walk(kids, depth + 1, childGuides, canAdd);
       if (canAdd) {
-        out.push({ kind: 'add', key: `${item.id}:add`, parent: item, depth: depth + 1, guides: childGuides });
+        out.push({
+          kind: 'add',
+          key: `${item.id}:add`,
+          parent: item,
+          depth: depth + 1,
+          guides: childGuides,
+        });
       }
     });
   };
-  walk(sorted.filter(i => !i.parentId || !ids.has(i.parentId)), 1, [], false);
+  walk(
+    sorted.filter(i => !i.parentId || !ids.has(i.parentId)),
+    1,
+    [],
+    false,
+  );
   return out;
 }
 
 // The indentation in front of a title: one column per ancestor (a straight line
 // where that ancestor's group continues) and an elbow connector for this row.
-function TreeGuides({ depth, guides, last }: { depth: number; guides: boolean[]; last: boolean }) {
+function TreeGuides({
+  depth,
+  guides,
+  last,
+}: {
+  depth: number;
+  guides: boolean[];
+  last: boolean;
+}) {
   if (depth < 2) {
     return null;
   }
@@ -170,7 +224,10 @@ function TreeGuides({ depth, guides, last }: { depth: number; guides: boolean[];
       {guides.map((continues, j) => (
         <View key={j} style={{ width: LEVEL_W }}>
           {continues ? (
-            <View style={{ left: LEVEL_W / 2, width: 1 }} className={`${line} bottom-0 top-0`} />
+            <View
+              style={{ left: LEVEL_W / 2, width: 1 }}
+              className={`${line} bottom-0 top-0`}
+            />
           ) : null}
         </View>
       ))}
@@ -179,14 +236,45 @@ function TreeGuides({ depth, guides, last }: { depth: number; guides: boolean[];
           style={{ left: LEVEL_W / 2, width: 1, height: last ? '50%' : '100%' }}
           className={`${line} top-0`}
         />
-        <View style={{ left: LEVEL_W / 2, right: 2, height: 1, top: '50%' }} className={line} />
+        <View
+          style={{ left: LEVEL_W / 2, right: 2, height: 1, top: '50%' }}
+          className={line}
+        />
       </View>
     </View>
   );
 }
 
 export function TableView({ view }: { view: ProjectView }) {
-  const items = useAtomValue(itemsAtom);
+  const allItems = useAtomValue(itemsAtom);
+  const [filters, setFilters] = useAtom(taskFiltersAtom);
+  const filterActive =
+    filters.statuses.length > 0 ||
+    filters.tags.length > 0 ||
+    filters.assigneeIds.length > 0;
+  const passesFilter = (i: WorkItem) =>
+    (filters.statuses.length === 0 || filters.statuses.includes(i.status)) &&
+    (filters.tags.length === 0 || filters.tags.includes(i.tag)) &&
+    (filters.assigneeIds.length === 0 ||
+      i.assigneeIds.some(id => filters.assigneeIds.includes(id)));
+  // A loaded task's root ancestor decides whether it's shown — keeps a whole
+  // subtree together instead of promoting a filtered-out parent's children to
+  // orphan top-level rows (buildRows treats a missing parent as "top level").
+  const rootOf = (i: WorkItem): WorkItem => {
+    let cur = i;
+    while (cur.parentId) {
+      const parent = allItems.find(x => x.id === cur.parentId);
+      if (!parent) {
+        break;
+      }
+      cur = parent;
+    }
+    return cur;
+  };
+  const items = filterActive
+    ? allItems.filter(i => passesFilter(rootOf(i)))
+    : allItems;
+
   const people = usePeople(
     items.flatMap(i => [...i.assigneeIds, i.createdById, i.ownerId]),
   );
@@ -199,11 +287,50 @@ export function TableView({ view }: { view: ProjectView }) {
   const columns = COLUMNS.filter(
     col => col.key === 'title' || showsField(view.fields, col.key),
   );
-  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({ key: 'end', dir: 1 });
+  const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({
+    key: 'end',
+    dir: 1,
+  });
   // Collapsed by default; a row's subtasks load the first time it's expanded.
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [loadingRows, setLoadingRows] = useState<Set<string>>(new Set());
   const [loadedRows, setLoadedRows] = useState<Set<string>>(new Set());
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [assigneeQuery, setAssigneeQuery] = useState('');
+  const { people: assigneeSearchHits } = useUserSearch(assigneeQuery);
+  const filterAssigneePeople = usePeople(filters.assigneeIds);
+  const filterAssigneeOptions = [
+    ...new Map(
+      [...filterAssigneePeople.values(), ...assigneeSearchHits].map(
+        p => [p.id, p] as const,
+      ),
+    ).values(),
+  ].map(p => ({ id: p.id, label: p.name, hint: p.email, color: p.color }));
+  const toggleStatusFilter = (key: Status) =>
+    setFilters(f => ({
+      ...f,
+      statuses: f.statuses.includes(key)
+        ? f.statuses.filter(s => s !== key)
+        : [...f.statuses, key],
+    }));
+  const toggleTagFilter = (key: TaskTag) =>
+    setFilters(f => ({
+      ...f,
+      tags: f.tags.includes(key)
+        ? f.tags.filter(t => t !== key)
+        : [...f.tags, key],
+    }));
+  const toggleAssigneeFilter = (id: string) =>
+    setFilters(f => ({
+      ...f,
+      assigneeIds: f.assigneeIds.includes(id)
+        ? f.assigneeIds.filter(a => a !== id)
+        : [...f.assigneeIds, id],
+    }));
+  const clearFilters = () =>
+    setFilters({ statuses: [], tags: [], assigneeIds: [] });
+  const filterCount =
+    filters.statuses.length + filters.tags.length + filters.assigneeIds.length;
 
   const sorted = [...items].sort((a, b) => {
     const x = sortValue(a, sort.key, people);
@@ -267,7 +394,7 @@ export function TableView({ view }: { view: ProjectView }) {
     setForm({ mode: 'new', parentId: parent.id });
   };
 
-  if (!tasksLoading && items.length === 0) {
+  if (!tasksLoading && allItems.length === 0) {
     return (
       <EmptyState
         icon={ListTodo}
@@ -275,7 +402,11 @@ export function TableView({ view }: { view: ProjectView }) {
         description="Tasks you create show up here as a sortable table, with subtasks nested under their parent."
         action={
           canCreate ? (
-            <Button variant="primary" icon={Plus} onPress={() => setForm({ mode: 'new' })}>
+            <Button
+              variant="primary"
+              icon={Plus}
+              onPress={() => setForm({ mode: 'new' })}
+            >
               New task
             </Button>
           ) : undefined
@@ -295,13 +426,17 @@ export function TableView({ view }: { view: ProjectView }) {
           {kids ? (
             <Press
               accessibilityRole="button"
-              accessibilityLabel={open ? `Collapse ${item.title}` : `Expand ${item.title}`}
+              accessibilityLabel={
+                open ? `Collapse ${item.title}` : `Expand ${item.title}`
+              }
               accessibilityState={{ expanded: open }}
               onPress={() => toggleRow(item.id)}
               hitSlop={6}
               className="h-6 w-6 items-center justify-center rounded-md hover:bg-border-main"
             >
-              <View style={{ transform: [{ rotate: open ? '90deg' : '0deg' }] }}>
+              <View
+                style={{ transform: [{ rotate: open ? '90deg' : '0deg' }] }}
+              >
                 <ChevronRight size={15} color={c.text} strokeWidth={2.25} />
               </View>
             </Press>
@@ -309,7 +444,9 @@ export function TableView({ view }: { view: ProjectView }) {
         </View>
         <Text
           numberOfLines={1}
-          className={`ml-1 shrink text-sm text-text-heading ${depth === 1 ? 'font-medium' : ''}`}
+          className={`ml-1 shrink text-sm text-text-heading ${
+            depth === 1 ? 'font-medium' : ''
+          }`}
         >
           {item.title}
         </Text>
@@ -376,7 +513,10 @@ export function TableView({ view }: { view: ProjectView }) {
       style={{ height: GROUP_ROW_H }}
       className="flex-row border-b border-border-main bg-muted/40"
     >
-      <View style={cellStyle(undefined)} className="flex-row items-center self-stretch pl-3">
+      <View
+        style={cellStyle(undefined)}
+        className="flex-row items-center self-stretch pl-3"
+      >
         <TreeGuides depth={row.depth} guides={row.guides} last />
         <View className="w-6" />
         {content}
@@ -450,74 +590,190 @@ export function TableView({ view }: { view: ProjectView }) {
           <Text className="font-medium text-text-heading">{roots.length}</Text>
           {roots.length === 1 ? ' task' : ' tasks'}
           {rootParents > 0 ? (
-            <Text className="text-text-subtle"> · {rootParents} with subtasks</Text>
+            <Text className="text-text-subtle">
+              {' '}
+              · {rootParents} with subtasks
+            </Text>
+          ) : null}
+          {filterActive && allItems.length !== items.length ? (
+            <Text className="text-text-subtle"> · filtered</Text>
           ) : null}
         </Text>
-        {subtasksEnabled && parents.length > 0 ? (
-          <Button
-            variant="ghost"
-            size="sm"
-            icon={anyExpanded ? ChevronsDownUp : ChevronsUpDown}
-            onPress={anyExpanded ? () => setExpanded(new Set()) : expandAll}
+        <View className="flex-row items-center gap-1.5">
+          <Popover
+            open={filterOpen}
+            onClose={() => setFilterOpen(false)}
+            width={300}
+            variant="menu"
+            renderTrigger={ref => (
+              <View ref={ref}>
+                <Button
+                  variant={filterCount > 0 ? 'secondary' : 'ghost'}
+                  size="sm"
+                  icon={Filter}
+                  onPress={() => setFilterOpen(o => !o)}
+                >
+                  {filterCount > 0 ? `Filter (${filterCount})` : 'Filter'}
+                </Button>
+              </View>
+            )}
           >
-            {anyExpanded ? 'Collapse all' : 'Expand all'}
-          </Button>
-        ) : null}
+            <View className="gap-3 p-3">
+              <View>
+                <Text className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-text-subtle">
+                  Status
+                </Text>
+                <View className="flex-row flex-wrap gap-1.5">
+                  {STATUSES.map(s => (
+                    <Chip
+                      key={s.key}
+                      label={s.label}
+                      color={s.color}
+                      active={filters.statuses.includes(s.key)}
+                      onPress={() => toggleStatusFilter(s.key)}
+                    />
+                  ))}
+                </View>
+              </View>
+              <View>
+                <Text className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-text-subtle">
+                  Tag
+                </Text>
+                <View className="flex-row flex-wrap gap-1.5">
+                  {TAGS.map(t => (
+                    <Chip
+                      key={t.key}
+                      label={t.label}
+                      color={t.color}
+                      active={filters.tags.includes(t.key)}
+                      onPress={() => toggleTagFilter(t.key)}
+                    />
+                  ))}
+                </View>
+              </View>
+              <View>
+                <Text className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-text-subtle">
+                  Assignee
+                </Text>
+                <MultiSelectDropdown
+                  label="Filter by assignee"
+                  placeholder="Anyone"
+                  options={filterAssigneeOptions}
+                  selectedIds={filters.assigneeIds}
+                  onToggle={toggleAssigneeFilter}
+                  onQueryChange={setAssigneeQuery}
+                />
+              </View>
+              {filterCount > 0 ? (
+                <Press
+                  feedback="none"
+                  accessibilityRole="button"
+                  onPress={clearFilters}
+                  className="flex-row items-center gap-1 self-start rounded-md py-1"
+                >
+                  <X size={13} color={c.accent} />
+                  <Text className="text-sm font-medium text-accent">
+                    Clear filters
+                  </Text>
+                </Press>
+              ) : null}
+            </View>
+          </Popover>
+          {subtasksEnabled && parents.length > 0 ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              icon={anyExpanded ? ChevronsDownUp : ChevronsUpDown}
+              onPress={anyExpanded ? () => setExpanded(new Set()) : expandAll}
+            >
+              {anyExpanded ? 'Collapse all' : 'Expand all'}
+            </Button>
+          ) : null}
+        </View>
       </View>
 
-      <View className="flex-1 overflow-hidden rounded-xl border border-border-main bg-bg-card">
-        <ScrollView horizontal contentContainerStyle={{ minWidth: '100%', height: '100%' }}>
-          <View style={{ flexGrow: 1, minWidth: 940 }}>
-            <View className="h-9 flex-row border-b border-border-main bg-muted">
-              {columns.map(col => {
-                const isSorted = sort.key === col.key;
-                return (
-                  <Press
-                    key={col.key}
-                    feedback="none"
-                    accessibilityRole="button"
-                    accessibilityLabel={`Sort by ${col.label}`}
-                    onPress={() => toggleSort(col.key)}
-                    style={cellStyle(col.width)}
-                    className={`group flex-row items-center gap-1 ${
-                      col.key === 'title' ? 'pl-[40px] pr-3' : 'px-3'
-                    }`}
-                  >
-                    <Text
-                      className={`text-2xs font-semibold uppercase tracking-wider ${
-                        isSorted ? 'text-text-heading' : 'text-text-subtle group-hover:text-text-main'
+      {filterActive && items.length === 0 ? (
+        <EmptyState
+          compact
+          icon={Filter}
+          title="No tasks match your filters"
+          description="Try removing a filter."
+          action={
+            <Button variant="ghost" onPress={clearFilters}>
+              Clear filters
+            </Button>
+          }
+        />
+      ) : (
+        <View className="flex-1 overflow-hidden rounded-xl border border-border-main bg-bg-card">
+          <ScrollView
+            horizontal
+            contentContainerStyle={{ minWidth: '100%', height: '100%' }}
+          >
+            <View style={{ flexGrow: 1, minWidth: 940 }}>
+              <View className="h-9 flex-row border-b border-border-main bg-muted">
+                {columns.map(col => {
+                  const isSorted = sort.key === col.key;
+                  return (
+                    <Press
+                      key={col.key}
+                      feedback="none"
+                      accessibilityRole="button"
+                      accessibilityLabel={`Sort by ${col.label}`}
+                      onPress={() => toggleSort(col.key)}
+                      style={cellStyle(col.width)}
+                      className={`group flex-row items-center gap-1 ${
+                        col.key === 'title' ? 'pl-[40px] pr-3' : 'px-3'
                       }`}
                     >
-                      {col.label}
-                    </Text>
-                    {isSorted ? (
-                      sort.dir === 1 ? (
-                        <ArrowUp size={11} color={c.heading} strokeWidth={2.5} />
-                      ) : (
-                        <ArrowDown size={11} color={c.heading} strokeWidth={2.5} />
-                      )
-                    ) : null}
-                  </Press>
-                );
-              })}
+                      <Text
+                        className={`text-2xs font-semibold uppercase tracking-wider ${
+                          isSorted
+                            ? 'text-text-heading'
+                            : 'text-text-subtle group-hover:text-text-main'
+                        }`}
+                      >
+                        {col.label}
+                      </Text>
+                      {isSorted ? (
+                        sort.dir === 1 ? (
+                          <ArrowUp
+                            size={11}
+                            color={c.heading}
+                            strokeWidth={2.5}
+                          />
+                        ) : (
+                          <ArrowDown
+                            size={11}
+                            color={c.heading}
+                            strokeWidth={2.5}
+                          />
+                        )
+                      ) : null}
+                    </Press>
+                  );
+                })}
+              </View>
+              <ScrollView className="flex-1" contentContainerClassName="pb-16">
+                {tasksLoading && items.length === 0
+                  ? Array.from({ length: 8 }, (_, n) => (
+                      <View
+                        key={n}
+                        className="h-11 flex-row items-center gap-6 border-b border-border-main pl-[40px] pr-3"
+                      >
+                        <Skeleton
+                          className={`h-3 rounded ${n % 2 ? 'w-64' : 'w-80'}`}
+                        />
+                        <Skeleton className="h-3 w-20 rounded" />
+                        <Skeleton className="h-3 w-16 rounded" />
+                      </View>
+                    ))
+                  : rows.map(renderRow)}
+              </ScrollView>
             </View>
-            <ScrollView className="flex-1" contentContainerClassName="pb-16">
-              {tasksLoading && items.length === 0
-                ? Array.from({ length: 8 }, (_, n) => (
-                    <View
-                      key={n}
-                      className="h-11 flex-row items-center gap-6 border-b border-border-main pl-[40px] pr-3"
-                    >
-                      <Skeleton className={`h-3 rounded ${n % 2 ? 'w-64' : 'w-80'}`} />
-                      <Skeleton className="h-3 w-20 rounded" />
-                      <Skeleton className="h-3 w-16 rounded" />
-                    </View>
-                  ))
-                : rows.map(renderRow)}
-            </ScrollView>
-          </View>
-        </ScrollView>
-      </View>
+          </ScrollView>
+        </View>
+      )}
     </View>
   );
 }

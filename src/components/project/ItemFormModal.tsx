@@ -66,18 +66,6 @@ const validDate = (s: string) =>
   /^\d{4}-\d{2}-\d{2}$/.test(s) && isValid(parseDate(s));
 const validTime = (s: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(s);
 
-// Default times for a new task: from now (rounded up to the next 15 minutes —
-// the time picker's grid) until midnight tonight. A day other than today starts
-// at 09:00. Due is always that day's 23:59.
-const END_OF_DAY = '23:59';
-const defaultStartTime = (day: Date) => {
-  const now = new Date();
-  if (format(day, DATE_FMT) !== format(now, DATE_FMT)) {
-    return '09:00';
-  }
-  const mins = Math.min(23 * 60 + 45, Math.ceil((now.getHours() * 60 + now.getMinutes()) / 15) * 15);
-  return `${String(Math.floor(mins / 60)).padStart(2, '0')}:${String(mins % 60).padStart(2, '0')}`;
-};
 
 // Create or edit a work item. Opened via itemFormAtom from the "+" button, Kanban
 // columns and the item detail sheet.
@@ -190,12 +178,11 @@ export function ItemFormModal() {
     );
     setEnd(editing?.end ?? parent?.end ?? format(presetStart ?? today, DATE_FMT));
     // Editing keeps the task's own times (none = all day); a subtask starts with
-    // its parent's; anything new runs from now (or 09:00) to midnight.
+    // its parent's; anything brand new defaults to all day too — a time is
+    // only ever set if the person picks one.
     const source = editing ?? parent;
-    setStartTime(
-      source ? source.startTime ?? '' : defaultStartTime(presetStart ?? today),
-    );
-    setEndTime(source ? source.endTime ?? '' : END_OF_DAY);
+    setStartTime(source?.startTime ?? '');
+    setEndTime(source?.endTime ?? '');
     const savedRule = migrateRecurrence(editing?.recurrence);
     setRecurrence(savedRule);
     setCustomRule(

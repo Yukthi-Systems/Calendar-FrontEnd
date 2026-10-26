@@ -271,7 +271,7 @@ export function DueDate({
     ? 'text-text-main'
     : overdue
     ? 'text-destructive'
-    : days <= 1
+    : days <= 3
     ? 'text-warning'
     : 'text-text-main';
   return (

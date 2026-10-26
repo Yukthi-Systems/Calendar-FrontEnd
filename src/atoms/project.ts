@@ -1,5 +1,5 @@
 import { atom } from 'jotai';
-import type { Status, WorkItem } from '../data/types';
+import type { Status, TaskTag, WorkItem } from '../data/types';
 import type { RecurringTemplate } from '../data/recurringTemplate';
 
 // Views themselves come from the server (src/hooks/useViews.ts). This is only
@@ -36,6 +36,22 @@ export const searchTitleAtom = atom('');
 // True while the active view's first task fetch is in flight (useTasksSync) —
 // views show skeletons instead of an empty state until it settles.
 export const tasksLoadingAtom = atom(false);
+
+// TableView's own quick filter (GitHub Issues-style: status/tag/assignee
+// chips on top of whatever's loaded) — a client-side narrowing of itemsAtom,
+// separate from a view's own statusFilter/tagFilter (which gate what the
+// server returns at all, for everyone who opens the view). Empty array on any
+// field = no filter on that dimension. UI state only, never persisted.
+export interface TaskFilters {
+  statuses: Status[];
+  tags: TaskTag[];
+  assigneeIds: string[];
+}
+export const taskFiltersAtom = atom<TaskFilters>({
+  statuses: [],
+  tags: [],
+  assigneeIds: [],
+});
 
 
 
