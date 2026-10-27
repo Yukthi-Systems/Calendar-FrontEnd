@@ -1,22 +1,50 @@
 import { useState } from 'react';
 import { useAtom } from 'jotai';
-import { Text, View } from 'react-native';
-import { Building2, LogOut, Mail, Palette, Phone, type LucideIcon } from 'lucide-react-native';
+import { Linking, Text, View } from 'react-native';
+import {
+  Building2,
+  LogOut,
+  Mail,
+  Palette,
+  Pencil,
+  Phone,
+  type LucideIcon,
+} from 'lucide-react-native';
 import { profileOpenAtom } from '../../atoms/profile';
+import { toast } from '../../atoms/feedback';
+import { getSsoUrl } from '../../services/ssoProfile';
 import { useMyProfile } from '../../hooks/useUsers';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { MenuItem, MenuSeparator, Sheet, SheetHeader } from '../ui';
 import { InitialsAvatar } from './shared';
 import { ThemeModal } from './ThemeModal';
 
-// Account sheet, opened from the rail/header avatar. "Sign out" only appears
-// once SSO is wired in (see ProjectScreen, which is the one place that knows
-// whether it's enabled).
+// Where "Edit profile" sends you — the SSO portal's own account page, not
+// anything in this app (there's no local profile editor; SSO owns name/email/
+// phone). The base changes with SSO_URL (.env / container env — same one the
+// rest of the SSO login flow reads via getSsoUrl()); only the path here is fixed.
+const SSO_PROFILE_PATH = '/authenticated';
+
+// Account sheet, opened from the rail/header avatar. "Sign out" (and "Edit
+// profile", which only makes sense once there's an SSO account to edit) only
+// appear once SSO is wired in (see ProjectScreen, which is the one place that
+// knows whether it's enabled).
 export function ProfileModal({ onSignOut }: { onSignOut?: () => void }) {
   const [open, setOpen] = useAtom(profileOpenAtom);
   const profile = useMyProfile();
   const [themeOpen, setThemeOpen] = useState(false);
   const close = () => setOpen(false);
+
+  const editProfile = () => {
+    close();
+    try {
+      Linking.openURL(`${getSsoUrl()}${SSO_PROFILE_PATH}`);
+    } catch (err) {
+      toast.error('Couldn’t open the account page', {
+        description: err instanceof Error ? err.message : 'Please try again.',
+      });
+    }
+  };
 
   return (
     <>
@@ -24,14 +52,23 @@ export function ProfileModal({ onSignOut }: { onSignOut?: () => void }) {
         <SheetHeader title="Account" onClose={close} />
         <View className="px-5 pb-4">
           <View className="flex-row items-center gap-3.5">
-            <InitialsAvatar color={profile.color} initials={profile.initials} size={52} />
+            <InitialsAvatar
+              color={profile.color}
+              initials={profile.initials}
+              size={52}
+            />
             <View className="flex-1">
-              <Text numberOfLines={1} className="text-lg font-semibold text-text-heading">
+              <Text
+                numberOfLines={1}
+                className="text-lg font-semibold text-text-heading"
+              >
                 {profile.name || 'Your account'}
               </Text>
               {profile.role || profile.organization ? (
                 <Text numberOfLines={1} className="text-sm text-text-main">
-                  {[profile.role, profile.organization].filter(Boolean).join(' · ')}
+                  {[profile.role, profile.organization]
+                    .filter(Boolean)
+                    .join(' · ')}
                 </Text>
               ) : null}
             </View>
@@ -39,13 +76,24 @@ export function ProfileModal({ onSignOut }: { onSignOut?: () => void }) {
 
           <View className="mt-4 gap-2.5 rounded-xl border border-border-main bg-muted/50 px-3.5 py-3">
             <InfoRow icon={Mail} label={profile.email || '—'} />
-            {profile.phone ? <InfoRow icon={Phone} label={profile.phone} /> : null}
+            {profile.phone ? (
+              <InfoRow icon={Phone} label={profile.phone} />
+            ) : null}
             {profile.organization ? (
               <InfoRow icon={Building2} label={profile.organization} />
             ) : null}
           </View>
         </View>
         <View className="border-t border-border-main p-2">
+          {onSignOut ? (
+            <MenuItem
+              icon={Pencil}
+              label="Edit profile"
+              description="Opens your account on Yukthi SSO"
+              chevron
+              onPress={editProfile}
+            />
+          ) : null}
           <MenuItem
             icon={Palette}
             label="Appearance"
