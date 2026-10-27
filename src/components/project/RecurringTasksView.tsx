@@ -2,21 +2,48 @@ import { useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { useAtom, useSetAtom } from 'jotai';
 import { format, parseISO } from 'date-fns';
-import { CloudOff, Pencil, Plus, Repeat, Search, SearchX, Trash2, X } from 'lucide-react-native';
-import { recurringFormAtom, selectedTemplateIdAtom } from '../../atoms/project';
+import {
+  CloudOff,
+  Pencil,
+  Plus,
+  Repeat,
+  Search,
+  SearchX,
+  Trash2,
+  X,
+} from 'lucide-react-native';
+import {
+  itemFormAtom,
+  recurringFormAtom,
+  selectedTemplateIdAtom,
+} from '../../atoms/project';
 import { confirm, errorMessage, toast } from '../../atoms/feedback';
 import { tagInfo } from '../../data/constants';
-import { describeRecurrence } from '../../data/rrule';
+import {
+  describeRecurrence,
+  nextOccurrence,
+  rruleColor,
+} from '../../data/rrule';
+import { recurringIcon } from '../../data/recurringIcons';
+import { templateFormPrefill } from '../../data/recurringOccurrences';
 import { useViewAccess } from '../../hooks/useViews';
 import { usePerson } from '../../hooks/useUsers';
 import {
   useRecurringTaskMutations,
   useRecurringTasks,
 } from '../../hooks/useRecurringTasks';
-import { useThemeColors } from '../../hooks/useThemeColors';
+import { useTone } from '../../hooks/useThemeColors';
 import type { RecurringTemplate } from '../../data/recurringTemplate';
 import type { ProjectView } from '../../data/types';
-import { Badge, Button, EmptyState, IconButton, Input, Press, Skeleton } from '../ui';
+import {
+  Badge,
+  Button,
+  EmptyState,
+  IconButton,
+  Input,
+  Press,
+  Skeleton,
+} from '../ui';
 import { Avatar } from './shared';
 import { RecurringTaskFormModal } from './RecurringTaskFormModal';
 import { RecurringTaskViewModal } from './RecurringTaskViewModal';
@@ -27,8 +54,12 @@ import { RecurringTaskViewModal } from './RecurringTaskViewModal';
 // generates an actual task — the backend has no schedule that turns a template
 // into real rows yet, so this is purely the library itself: name it, tag it, set
 // its rule, done.
-export function RecurringTasksView({ view }: { view: ProjectView | undefined }) {
-  const c = useThemeColors();
+export function RecurringTasksView({
+  view,
+}: {
+  view: ProjectView | undefined;
+}) {
+  const toneOf = useTone();
   const { templates, isLoading, error, enabled } = useRecurringTasks(view);
   const { createTemplate, updateTemplate, deleteTemplate } =
     useRecurringTaskMutations(view);
@@ -39,6 +70,7 @@ export function RecurringTasksView({ view }: { view: ProjectView | undefined }) 
   // Same idea: a row click opens RecurringTaskViewModal, which is where
   // Edit/Delete actually live (ItemModal/ItemFormModal's split, for templates).
   const setSelectedId = useSetAtom(selectedTemplateIdAtom);
+  const setItemForm = useSetAtom(itemFormAtom);
   // Client-side, not server-side: /recurring/list takes only a tag list, no title
   // filter (unlike /tasks/list) — and a view's whole template library is one small
   // list fetched in one shot anyway, so filtering what's already loaded is enough.
@@ -46,13 +78,19 @@ export function RecurringTasksView({ view }: { view: ProjectView | undefined }) 
   const q = query.trim().toLowerCase();
   const visible = q
     ? templates.filter(
-        t => t.title.toLowerCase().includes(q) || t.description.toLowerCase().includes(q),
+        t =>
+          t.title.toLowerCase().includes(q) ||
+          t.description.toLowerCase().includes(q),
       )
     : templates;
 
   if (!view) {
     return (
-      <EmptyState icon={Repeat} title="Open a view" description="Pick a view to see its recurring templates." />
+      <EmptyState
+        icon={Repeat}
+        title="Open a view"
+        description="Pick a view to see its recurring templates."
+      />
     );
   }
   if (view.showRecurring === false) {
@@ -72,7 +110,8 @@ export function RecurringTasksView({ view }: { view: ProjectView | undefined }) 
   const remove = async (t: RecurringTemplate) => {
     const ok = await confirm({
       title: `Delete “${t.title}”?`,
-      message: 'This only removes the template — it won’t touch any tasks already made from it.',
+      message:
+        'This only removes the template — it won’t touch any tasks already made from it.',
       confirmLabel: 'Delete',
       destructive: true,
     });
@@ -96,8 +135,12 @@ export function RecurringTasksView({ view }: { view: ProjectView | undefined }) 
           {templates.length === 0
             ? 'No templates yet'
             : q
-              ? `${visible.length} of ${templates.length} template${templates.length === 1 ? '' : 's'}`
-              : `${templates.length} template${templates.length === 1 ? '' : 's'}`}
+            ? `${visible.length} of ${templates.length} template${
+                templates.length === 1 ? '' : 's'
+              }`
+            : `${templates.length} template${
+                templates.length === 1 ? '' : 's'
+              }`}
         </Text>
 
         {templates.length > 0 ? (
@@ -109,7 +152,12 @@ export function RecurringTasksView({ view }: { view: ProjectView | undefined }) 
               placeholder="Search templates by name…"
               right={
                 query ? (
-                  <IconButton icon={X} label="Clear search" size="sm" onPress={() => setQuery('')} />
+                  <IconButton
+                    icon={X}
+                    label="Clear search"
+                    size="sm"
+                    onPress={() => setQuery('')}
+                  />
                 ) : undefined
               }
             />
@@ -136,7 +184,11 @@ export function RecurringTasksView({ view }: { view: ProjectView | undefined }) 
             description="A template is a reusable rule — name, tag and an RFC 5545 schedule — for the kind of thing that repeats."
             action={
               canCreate ? (
-                <Button variant="primary" icon={Plus} onPress={() => setForm({ mode: 'new' })}>
+                <Button
+                  variant="primary"
+                  icon={Plus}
+                  onPress={() => setForm({ mode: 'new' })}
+                >
                   New template
                 </Button>
               ) : undefined
@@ -151,49 +203,85 @@ export function RecurringTasksView({ view }: { view: ProjectView | undefined }) 
           />
         ) : (
           <View className="gap-2">
-            {visible.map(t => (
-              <Press
-                key={t.id}
-                feedback="subtle"
-                accessibilityRole="button"
-                accessibilityLabel={`Open ${t.title}`}
-                onPress={() => setSelectedId(t.id)}
-                className="flex-row items-center gap-3 rounded-xl border border-border-main bg-bg-card px-3.5 py-3"
-              >
-                <View className="h-9 w-9 items-center justify-center rounded-lg bg-muted">
-                  <Repeat size={16} color={c.text} />
-                </View>
-                <View className="flex-1">
-                  <Text numberOfLines={1} className="text-sm font-medium text-text-heading">
-                    {t.title}
-                  </Text>
-                  <Text numberOfLines={1} className="text-xs text-text-subtle">
-                    {describeRecurrence(t.rrule) || t.rrule} · Created{' '}
-                    {format(parseISO(t.createdAt), 'MMM d')}
-                  </Text>
-                </View>
-                <OwnerCell id={t.ownerId} />
-                <View className="self-center">
-                  <Badge label={tagInfo(t.tag).label} color={tagInfo(t.tag).color} />
-                </View>
-                {canEdit ? (
-                  <IconButton
-                    icon={Pencil}
-                    label={`Edit ${t.title}`}
-                    size="sm"
-                    onPress={() => setForm({ mode: 'edit', template: t })}
-                  />
-                ) : null}
-                {canDelete ? (
-                  <IconButton
-                    icon={Trash2}
-                    label={`Delete ${t.title}`}
-                    size="sm"
-                    onPress={() => remove(t)}
-                  />
-                ) : null}
-              </Press>
-            ))}
+            {visible.map(t => {
+              const tone = toneOf(rruleColor(t.rrule));
+              const Icon = recurringIcon(t.icon);
+              // No anchor date (see recurringTemplate.ts), so "next" counts
+              // forward from today — null once the rule has already run out
+              // (a past UNTIL/COUNT).
+              const next = nextOccurrence(t.rrule, parseISO(t.createdAt));
+              return (
+                <Press
+                  key={t.id}
+                  feedback="subtle"
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${t.title}`}
+                  onPress={() => setSelectedId(t.id)}
+                  className="flex-row items-center gap-3 rounded-xl border border-border-main bg-bg-card px-3.5 py-3"
+                >
+                  <View
+                    style={{ backgroundColor: tone.bg }}
+                    className="h-9 w-9 items-center justify-center rounded-lg"
+                  >
+                    <Icon size={16} color={tone.fg} />
+                  </View>
+                  <View className="flex-1">
+                    <Text
+                      numberOfLines={1}
+                      className="text-sm font-medium text-text-heading"
+                    >
+                      {t.title}
+                    </Text>
+                    <Text
+                      numberOfLines={1}
+                      className="text-xs text-text-subtle"
+                    >
+                      {describeRecurrence(t.rrule) || t.rrule}
+                      {t.time ? ` at ${t.time}` : ''}
+                      {next ? ` · Next ${format(next, 'MMM d')}` : ''} · Created{' '}
+                      {format(parseISO(t.createdAt), 'MMM d')}
+                    </Text>
+                  </View>
+                  <OwnerCell id={t.ownerId} />
+                  <View className="self-center">
+                    <Badge
+                      label={tagInfo(t.tag).label}
+                      color={tagInfo(t.tag).color}
+                    />
+                  </View>
+                  {canCreate ? (
+                    <IconButton
+                      icon={Plus}
+                      label={`Create task from ${t.title}`}
+                      size="sm"
+                      onPress={() =>
+                        setItemForm({
+                          mode: 'new',
+                          start: format(next ?? new Date(), 'yyyy-MM-dd'),
+                          fromTemplate: templateFormPrefill(t),
+                        })
+                      }
+                    />
+                  ) : null}
+                  {canEdit ? (
+                    <IconButton
+                      icon={Pencil}
+                      label={`Edit ${t.title}`}
+                      size="sm"
+                      onPress={() => setForm({ mode: 'edit', template: t })}
+                    />
+                  ) : null}
+                  {canDelete ? (
+                    <IconButton
+                      icon={Trash2}
+                      label={`Delete ${t.title}`}
+                      size="sm"
+                      onPress={() => remove(t)}
+                    />
+                  ) : null}
+                </Press>
+              );
+            })}
           </View>
         )}
       </ScrollView>

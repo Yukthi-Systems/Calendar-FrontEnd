@@ -144,7 +144,9 @@ export function parseRRule(text: string): RRule {
 
   for (const key of UNSUPPORTED_PARTS) {
     if (parts.has(key)) {
-      throw new RRuleError(`${key} is not supported (tasks have no time of day)`);
+      throw new RRuleError(
+        `${key} is not supported (tasks have no time of day)`,
+      );
     }
   }
 
@@ -319,6 +321,33 @@ export const RRULE_PRESETS = [
   { label: 'Yearly', rule: 'FREQ=YEARLY' },
 ] as const;
 
+// One color per recurrence pattern (matches RRULE_PRESETS' own labels), plus a
+// neutral fallback for a custom rule — any INTERVAL/BYDAY/etc. combination that
+// isn't exactly one of these five presets — or one that fails to parse at all.
+// Lets a glance at a template's repeat icon tell the pattern apart before
+// reading its description text.
+const RRULE_FREQ_COLORS: Record<
+  (typeof RRULE_PRESETS)[number]['label'],
+  string
+> = {
+  Daily: '#0ea5e9',
+  Weekly: '#8b5cf6',
+  Monthly: '#f59e0b',
+  Quarterly: '#10b981',
+  Yearly: '#ec4899',
+};
+export const CUSTOM_RRULE_COLOR = '#6b7280';
+
+export const rruleColor = (text: string): string => {
+  try {
+    const normalized = normalizeRRule(text);
+    const preset = RRULE_PRESETS.find(p => p.rule === normalized);
+    return preset ? RRULE_FREQ_COLORS[preset.label] : CUSTOM_RRULE_COLOR;
+  } catch {
+    return CUSTOM_RRULE_COLOR;
+  }
+};
+
 // ---------------------------------------------------------------- expand
 
 const dayIndex = (d: Weekday) => WEEKDAYS.indexOf(d);
@@ -391,7 +420,9 @@ const monthCandidates = (
   } else {
     // No explicit day: use the anchor's. A day the month lacks (the 31st, Feb 29)
     // clamps to the month's last day, never rolls into the next month.
-    days = [new Date(year, month, Math.min(anchor.getDate(), getDaysInMonth(first)))];
+    days = [
+      new Date(year, month, Math.min(anchor.getDate(), getDaysInMonth(first))),
+    ];
   }
   return days;
 };
@@ -435,20 +466,34 @@ function periodDates(rule: RRule, anchor: Date, k: number): Date[] {
       const back = (anchor.getDay() - wkstIdx + 7) % 7;
       const weekStart = addWeeks(addDays(anchor, -back), step);
       const days = rule.byDay
-        ? rule.byDay.map(b => addDays(weekStart, (dayIndex(b.day) - wkstIdx + 7) % 7))
+        ? rule.byDay.map(b =>
+            addDays(weekStart, (dayIndex(b.day) - wkstIdx + 7) % 7),
+          )
         : [addDays(weekStart, back)];
       return applySetPos(sortUnique(days.filter(monthOk)), rule.bySetPos);
     }
     case 'MONTHLY': {
-      const base = addMonths(new Date(anchor.getFullYear(), anchor.getMonth(), 1), step);
-      const days = monthCandidates(rule, anchor, base.getFullYear(), base.getMonth());
+      const base = addMonths(
+        new Date(anchor.getFullYear(), anchor.getMonth(), 1),
+        step,
+      );
+      const days = monthCandidates(
+        rule,
+        anchor,
+        base.getFullYear(),
+        base.getMonth(),
+      );
       return applySetPos(sortUnique(days.filter(monthOk)), rule.bySetPos);
     }
     case 'YEARLY': {
       const year = anchor.getFullYear() + step;
       // BYDAY with no month/month-day narrows the whole year (e.g. 20MO = 20th Monday).
       if (rule.byDay && !rule.byMonth && !rule.byMonthDay) {
-        const days = byDayInSpan(rule.byDay, new Date(year, 0, 1), new Date(year, 11, 31));
+        const days = byDayInSpan(
+          rule.byDay,
+          new Date(year, 0, 1),
+          new Date(year, 11, 31),
+        );
         return applySetPos(sortUnique(days), rule.bySetPos);
       }
       const months = rule.byMonth?.map(m => m - 1) ?? [anchor.getMonth()];
@@ -551,10 +596,38 @@ function periodStartAfter(rule: RRule, anchor: Date, k: number): Date {
     case 'WEEKLY':
       return addWeeks(anchor, step - 1);
     case 'MONTHLY':
-      return new Date(addMonths(new Date(anchor.getFullYear(), anchor.getMonth(), 1), step));
+      return new Date(
+        addMonths(new Date(anchor.getFullYear(), anchor.getMonth(), 1), step),
+      );
     case 'YEARLY':
       return new Date(addYears(new Date(anchor.getFullYear(), 0, 1), step));
   }
+}
+
+// A recurring template has no anchor/start date of its own (see
+// recurringTemplate.ts) — `anchor` stands in for one, and should always be
+// the template's own `createdAt`. That (not "today") is what fixes the
+// pattern's phase: an anchor of "today" would make a Weekly template land on
+// a different weekday depending what day it's *viewed* on, and would hide
+// every matching date earlier in the month than today even though the
+// pattern genuinely covers them. `from` is where the search starts (today,
+// for "next"; a calendar page's own start, for a full range) — same 3-year
+// search window ItemFormModal's own "next: …" preview uses for a task's
+// Repeats field. Returns null when the rule has already run out (a past
+// UNTIL/COUNT) or doesn't parse.
+export function nextOccurrence(
+  text: string,
+  anchor: Date,
+  from: Date = new Date(),
+): Date | null {
+  const rule = tryParseRRule(text);
+  if (!rule) {
+    return null;
+  }
+  const a = startOfDay(anchor);
+  const f = startOfDay(from);
+  const hits = expandRRule(rule, a, f, addDays(f, 366 * 3));
+  return hits[0]?.date ?? null;
 }
 
 // ---------------------------------------------------------------- describe
@@ -604,14 +677,20 @@ const joinList = (items: string[]) =>
 
 // Plain-English summary, e.g. "Every 2 weeks on Monday and Friday, 10 times".
 export function describeRRule(rule: RRule): string {
-  const unit = { DAILY: 'day', WEEKLY: 'week', MONTHLY: 'month', YEARLY: 'year' }[
-    rule.freq
-  ];
+  const unit = {
+    DAILY: 'day',
+    WEEKLY: 'week',
+    MONTHLY: 'month',
+    YEARLY: 'year',
+  }[rule.freq];
   let text =
     rule.interval === 1
-      ? { DAILY: 'Daily', WEEKLY: 'Weekly', MONTHLY: 'Monthly', YEARLY: 'Yearly' }[
-          rule.freq
-        ]
+      ? {
+          DAILY: 'Daily',
+          WEEKLY: 'Weekly',
+          MONTHLY: 'Monthly',
+          YEARLY: 'Yearly',
+        }[rule.freq]
       : `Every ${rule.interval} ${unit}s`;
   if (rule.freq === 'MONTHLY' && rule.interval === 3 && !hasBy(rule)) {
     text = 'Quarterly';
@@ -620,7 +699,9 @@ export function describeRRule(rule: RRule): string {
   if (rule.byDay?.length) {
     text += ` on ${joinList(
       rule.byDay.map(d =>
-        d.n === undefined ? DAY_NAME[d.day] : `the ${ordinal(d.n)} ${DAY_NAME[d.day]}`,
+        d.n === undefined
+          ? DAY_NAME[d.day]
+          : `the ${ordinal(d.n)} ${DAY_NAME[d.day]}`,
       ),
     )}`;
   }

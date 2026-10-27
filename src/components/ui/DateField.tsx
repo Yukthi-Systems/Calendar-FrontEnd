@@ -475,21 +475,38 @@ export function DateTimeField({
     { label: 'Next week', date: nextMonday(today) },
   ].filter(q => !minD || format(q.date, DATE_FMT) >= format(minD, DATE_FMT));
 
+  // The calendar already hides past days (via `min`) — a day with no time left
+  // to pick needs the same treatment: once the chosen day is today, every slot
+  // already behind the clock is disabled too (unless it's the value already
+  // saved there, so re-opening an existing past time doesn't lock it out).
+  const todayStr = format(today, DATE_FMT);
+  const isToday = (draftDate || todayStr) === todayStr;
+  const nowHM = format(new Date(), 'HH:mm');
   const timeOption = (s: string, label = s) => {
     const active = s === value.time;
+    const disabled = isToday && !!s && s < nowHM && s !== value.time;
     return (
       <Press
         key={s || 'all-day'}
         feedback="none"
         accessibilityRole="button"
-        accessibilityState={{ selected: active }}
+        accessibilityState={{ selected: active, disabled }}
+        disabled={disabled}
         onPress={() => pickTime(s)}
         style={stacked ? { height: 30 } : { height: SLOT_H }}
-        className={`justify-center rounded-md px-2.5 ${active ? 'bg-accent' : 'hover:bg-hover'}`}
+        className={`justify-center rounded-md px-2.5 ${
+          active ? 'bg-accent' : disabled ? '' : 'hover:bg-hover'
+        }`}
       >
         <Text
           numberOfLines={1}
-          className={`text-sm ${active ? 'font-semibold text-accent-foreground' : 'text-text-heading'}`}
+          className={`text-sm ${
+            active
+              ? 'font-semibold text-accent-foreground'
+              : disabled
+              ? 'text-text-subtle opacity-40'
+              : 'text-text-heading'
+          }`}
         >
           {label}
         </Text>

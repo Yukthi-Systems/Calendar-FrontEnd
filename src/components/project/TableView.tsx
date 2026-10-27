@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import {
@@ -10,6 +10,7 @@ import {
   Filter,
   ListTodo,
   Plus,
+  Repeat,
   X,
 } from 'lucide-react-native';
 import {
@@ -19,10 +20,17 @@ import {
   taskFiltersAtom,
   tasksLoadingAtom,
 } from '../../atoms/project';
-import { STATUSES, TAGS } from '../../data/constants';
+import { allowedStatuses, allowedTags } from '../../data/constants';
 import { MAX_DEPTH, hasSubtasks } from '../../data/tree';
 import { showsField } from '../../data/viewFields';
+import {
+  isVirtualRecurringId,
+  nextVirtualOccurrences,
+  parseVirtualRecurringId,
+  templateFormPrefill,
+} from '../../data/recurringOccurrences';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
+import { useRecurringTasks } from '../../hooks/useRecurringTasks';
 import { useViewAccess } from '../../hooks/useViews';
 import { errorMessage, toast } from '../../atoms/feedback';
 import type { ProjectView, Status, TaskTag, WorkItem } from '../../data/types';
@@ -31,6 +39,7 @@ import { useUserSearch, usePeople, type Person } from '../../hooks/useUsers';
 import {
   Button,
   Chip,
+  DateField,
   EmptyState,
   IconButton,
   Popover,
@@ -251,12 +260,16 @@ export function TableView({ view }: { view: ProjectView }) {
   const filterActive =
     filters.statuses.length > 0 ||
     filters.tags.length > 0 ||
-    filters.assigneeIds.length > 0;
+    filters.assigneeIds.length > 0 ||
+    !!filters.dueFrom ||
+    !!filters.dueTo;
   const passesFilter = (i: WorkItem) =>
     (filters.statuses.length === 0 || filters.statuses.includes(i.status)) &&
     (filters.tags.length === 0 || filters.tags.includes(i.tag)) &&
     (filters.assigneeIds.length === 0 ||
-      i.assigneeIds.some(id => filters.assigneeIds.includes(id)));
+      i.assigneeIds.some(id => filters.assigneeIds.includes(id))) &&
+    (!filters.dueFrom || i.end >= filters.dueFrom) &&
+    (!filters.dueTo || i.end <= filters.dueTo);
   // A loaded task's root ancestor decides whether it's shown — keeps a whole
   // subtree together instead of promoting a filtered-out parent's children to
   // orphan top-level rows (buildRows treats a missing parent as "top level").
@@ -275,8 +288,24 @@ export function TableView({ view }: { view: ProjectView }) {
     ? allItems.filter(i => passesFilter(rootOf(i)))
     : allItems;
 
+  // Each recurring template's own next occurrence, shown as one extra row
+  // sorted into the table by that date like a real task — see
+  // recurringOccurrences.ts. Synthetic, never written to itemsAtom; same
+  // quick filters apply to them (a template's tag/status/assignee reads the
+  // same way a real task's would).
+  const { templates: recurringTemplates } = useRecurringTasks(
+    view.showRecurring === false ? undefined : view,
+  );
+  const virtualOccurrences =
+    view.showRecurring === false
+      ? []
+      : nextVirtualOccurrences(recurringTemplates).filter(v =>
+          filterActive ? passesFilter(v.item) : true,
+        );
+  const displayItems = [...items, ...virtualOccurrences.map(v => v.item)];
+
   const people = usePeople(
-    items.flatMap(i => [...i.assigneeIds, i.createdById, i.ownerId]),
+    displayItems.flatMap(i => [...i.assigneeIds, i.createdById, i.ownerId]),
   );
   const tasksLoading = useAtomValue(tasksLoadingAtom);
   const setForm = useSetAtom(itemFormAtom);
@@ -327,12 +356,41 @@ export function TableView({ view }: { view: ProjectView }) {
         ? f.assigneeIds.filter(a => a !== id)
         : [...f.assigneeIds, id],
     }));
+  const setDueFrom = (dueFrom: string) => setFilters(f => ({ ...f, dueFrom }));
+  const setDueTo = (dueTo: string) => setFilters(f => ({ ...f, dueTo }));
   const clearFilters = () =>
-    setFilters({ statuses: [], tags: [], assigneeIds: [] });
+    setFilters({
+      statuses: [],
+      tags: [],
+      assigneeIds: [],
+      dueFrom: '',
+      dueTo: '',
+    });
   const filterCount =
-    filters.statuses.length + filters.tags.length + filters.assigneeIds.length;
+    filters.statuses.length +
+    filters.tags.length +
+    filters.assigneeIds.length +
+    (filters.dueFrom || filters.dueTo ? 1 : 0);
 
-  const sorted = [...items].sort((a, b) => {
+  // The filter is session-wide (taskFiltersAtom), not per view, so a status/tag
+  // picked while looking at one view could silently keep filtering another one
+  // that doesn't even offer it — drop whichever of the current selection this
+  // view's own statusFilter/tagFilter no longer allows.
+  useEffect(() => {
+    const okStatuses = allowedStatuses(view.statusFilter).map(s => s.key);
+    const okTags = allowedTags(view.tagFilter).map(t => t.key);
+    setFilters(f => {
+      const statuses = f.statuses.filter(s => okStatuses.includes(s));
+      const tags = f.tags.filter(t => okTags.includes(t));
+      return statuses.length === f.statuses.length &&
+        tags.length === f.tags.length
+        ? f
+        : { ...f, statuses, tags };
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when this view's own filter allow-lists change
+  }, [view.statusFilter, view.tagFilter]);
+
+  const sorted = [...displayItems].sort((a, b) => {
     const x = sortValue(a, sort.key, people);
     const y = sortValue(b, sort.key, people);
     return (x < y ? -1 : x > y ? 1 : 0) * sort.dir;
@@ -394,7 +452,29 @@ export function TableView({ view }: { view: ProjectView }) {
     setForm({ mode: 'new', parentId: parent.id });
   };
 
-  if (!tasksLoading && allItems.length === 0) {
+  // A recurring-occurrence row isn't a real task to open — it opens the
+  // normal "new task" form instead, prefilled from its template and dated to
+  // this occurrence (see recurringOccurrences.ts).
+  const openVirtual = (virtualId: string) => {
+    const parsed = parseVirtualRecurringId(virtualId);
+    const template = parsed
+      ? recurringTemplates.find(t => t.id === parsed.templateId)
+      : undefined;
+    if (!parsed || !template) {
+      return;
+    }
+    setForm({
+      mode: 'new',
+      start: parsed.date,
+      fromTemplate: templateFormPrefill(template),
+    });
+  };
+
+  if (
+    !tasksLoading &&
+    allItems.length === 0 &&
+    virtualOccurrences.length === 0
+  ) {
     return (
       <EmptyState
         icon={ListTodo}
@@ -417,7 +497,8 @@ export function TableView({ view }: { view: ProjectView }) {
 
   const titleCell = (row: TaskRow) => {
     const { item, depth, guides, last } = row;
-    const kids = hasSubtasks(item) && subtasksEnabled;
+    const virtual = isVirtualRecurringId(item.id);
+    const kids = !virtual && hasSubtasks(item) && subtasksEnabled;
     const open = expanded.has(item.id);
     return (
       <>
@@ -444,15 +525,22 @@ export function TableView({ view }: { view: ProjectView }) {
         </View>
         <Text
           numberOfLines={1}
-          className={`ml-1 shrink text-sm text-text-heading ${
-            depth === 1 ? 'font-medium' : ''
-          }`}
+          className={`ml-1 shrink text-sm ${
+            virtual ? 'text-text-subtle' : 'text-text-heading'
+          } ${depth === 1 ? 'font-medium' : ''}`}
         >
           {item.title}
         </Text>
         {item.recurrence ? (
           <View className="ml-1.5">
             <RecurrenceIcon freq={item.recurrence} />
+          </View>
+        ) : virtual ? (
+          <View className="ml-1.5 flex-row items-center gap-1 rounded-md bg-muted px-1.5 py-0.5">
+            <Repeat size={10} color={c.subtle} />
+            <Text className="text-2xs font-medium text-text-subtle">
+              Recurring
+            </Text>
           </View>
         ) : null}
         {kids ? (
@@ -471,7 +559,16 @@ export function TableView({ view }: { view: ProjectView }) {
           </View>
         ) : null}
         <View className="flex-1" />
-        {subtasksEnabled && canCreate && depth < MAX_DEPTH ? (
+        {virtual ? (
+          <View className="reveal-on-hover pr-1">
+            <IconButton
+              icon={Plus}
+              size="sm"
+              label={`Create task from ${item.title}`}
+              onPress={() => openVirtual(item.id)}
+            />
+          </View>
+        ) : subtasksEnabled && canCreate && depth < MAX_DEPTH ? (
           <View className="reveal-on-hover pr-1">
             <IconButton
               icon={Plus}
@@ -552,17 +649,22 @@ export function TableView({ view }: { view: ProjectView }) {
       );
     }
     const child = row.depth > 1;
+    const virtual = isVirtualRecurringId(row.item.id);
     return (
       <Press
         key={row.key}
         feedback="none"
         accessibilityRole="button"
-        accessibilityLabel={row.item.title}
-        onPress={() => select(row.item.id)}
+        accessibilityLabel={
+          virtual ? `Create task from ${row.item.title}` : row.item.title
+        }
+        onPress={() =>
+          virtual ? openVirtual(row.item.id) : select(row.item.id)
+        }
         style={{ height: child ? CHILD_ROW_H : ROW_H }}
         className={`group flex-row border-b border-border-main hover:bg-hover ${
           child ? 'bg-muted/40' : ''
-        }`}
+        } ${virtual ? 'border-dashed bg-muted/20' : ''}`}
       >
         {columns.map(col => (
           <View
@@ -603,7 +705,7 @@ export function TableView({ view }: { view: ProjectView }) {
           <Popover
             open={filterOpen}
             onClose={() => setFilterOpen(false)}
-            width={300}
+            width={320}
             variant="menu"
             renderTrigger={ref => (
               <View ref={ref}>
@@ -624,7 +726,7 @@ export function TableView({ view }: { view: ProjectView }) {
                   Status
                 </Text>
                 <View className="flex-row flex-wrap gap-1.5">
-                  {STATUSES.map(s => (
+                  {allowedStatuses(view.statusFilter).map(s => (
                     <Chip
                       key={s.key}
                       label={s.label}
@@ -640,7 +742,7 @@ export function TableView({ view }: { view: ProjectView }) {
                   Tag
                 </Text>
                 <View className="flex-row flex-wrap gap-1.5">
-                  {TAGS.map(t => (
+                  {allowedTags(view.tagFilter).map(t => (
                     <Chip
                       key={t.key}
                       label={t.label}
@@ -663,6 +765,35 @@ export function TableView({ view }: { view: ProjectView }) {
                   onToggle={toggleAssigneeFilter}
                   onQueryChange={setAssigneeQuery}
                 />
+              </View>
+              <View>
+                <Text className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-text-subtle">
+                  Due date
+                </Text>
+                <View className="flex-row items-center gap-1.5">
+                  <View className="flex-1">
+                    <DateField
+                      mode="date"
+                      value={filters.dueFrom}
+                      onChange={setDueFrom}
+                      max={filters.dueTo || undefined}
+                      clearable
+                      placeholder="From"
+                      accessibilityLabel="Due from"
+                    />
+                  </View>
+                  <View className="flex-1">
+                    <DateField
+                      mode="date"
+                      value={filters.dueTo}
+                      onChange={setDueTo}
+                      min={filters.dueFrom || undefined}
+                      clearable
+                      placeholder="To"
+                      accessibilityLabel="Due to"
+                    />
+                  </View>
+                </View>
               </View>
               {filterCount > 0 ? (
                 <Press
@@ -692,7 +823,7 @@ export function TableView({ view }: { view: ProjectView }) {
         </View>
       </View>
 
-      {filterActive && items.length === 0 ? (
+      {filterActive && displayItems.length === 0 ? (
         <EmptyState
           compact
           icon={Filter}

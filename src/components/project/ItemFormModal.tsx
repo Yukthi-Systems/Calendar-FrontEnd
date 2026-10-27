@@ -17,7 +17,12 @@ import {
 import { allowedStatuses, allowedTags } from '../../data/constants';
 import { useActiveView } from '../../hooks/useViews';
 import { currentUserIdAtom } from '../../atoms/members';
-import { useMyProfile, usePeople, useUserSearch, type Person } from '../../hooks/useUsers';
+import {
+  useMyProfile,
+  usePeople,
+  useUserSearch,
+  type Person,
+} from '../../hooks/useUsers';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
 import { yearlyRecurrenceNeedsLeapWarning } from '../../data/recurrence';
 import {
@@ -66,7 +71,6 @@ const validDate = (s: string) =>
   /^\d{4}-\d{2}-\d{2}$/.test(s) && isValid(parseDate(s));
 const validTime = (s: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(s);
 
-
 // Create or edit a work item. Opened via itemFormAtom from the "+" button, Kanban
 // columns and the item detail sheet.
 export function ItemFormModal() {
@@ -79,12 +83,8 @@ export function ItemFormModal() {
   const { people: searchHits } = useUserSearch(assigneeQuery);
   const me = useMyProfile();
   const setSelected = useSetAtom(selectedItemIdAtom);
-  const {
-    addItem,
-    editItem,
-    isServerBacked,
-    unavailableReason,
-  } = useTaskMutations();
+  const { addItem, editItem, isServerBacked, unavailableReason } =
+    useTaskMutations();
   const [saving, setSaving] = useState(false);
 
   const editing =
@@ -108,7 +108,9 @@ export function ItemFormModal() {
   const selectedPeople = usePeople(assigneeIds);
   const pickablePeople: Person[] = [
     ...new Map(
-      [me, ...selectedPeople.values(), ...searchHits].map(p => [p.id, p] as const),
+      [me, ...selectedPeople.values(), ...searchHits].map(
+        p => [p.id, p] as const,
+      ),
     ).values(),
   ];
   const [start, setStart] = useState('');
@@ -157,36 +159,46 @@ export function ItemFormModal() {
       return;
     }
     const today = new Date();
-    setTitle(editing?.title ?? '');
-    setDescription(editing?.description ?? '');
-    const pick = <K extends string>(wanted: K | undefined, options: { key: K }[]) =>
+    // Prefilled from a recurring template's "Create task" action — title,
+    // description, tag and time of day, same fields the template itself has.
+    const fromTemplate = form.mode === 'new' ? form.fromTemplate : undefined;
+    setTitle(editing?.title ?? fromTemplate?.title ?? '');
+    setDescription(editing?.description ?? fromTemplate?.description ?? '');
+    const pick = <K extends string>(
+      wanted: K | undefined,
+      options: { key: K }[],
+    ) =>
       wanted && options.some(o => o.key === wanted) ? wanted : options[0].key;
     setStatus(
       pick(
-        editing?.status ?? (form.mode === 'new' ? form.status : undefined) ?? 'not_started',
+        editing?.status ??
+          (form.mode === 'new' ? form.status : undefined) ??
+          'not_started',
         statusOptions,
       ),
     );
-    setTag(pick(editing?.tag ?? 'other', tagOptions));
+    setTag(pick(editing?.tag ?? fromTemplate?.tag ?? 'other', tagOptions));
     setAssigneeIds(editing ? editing.assigneeIds : parent?.assigneeIds ?? []);
     const presetStart =
       form.mode === 'new' && form.start ? parseDate(form.start) : null;
     setStart(
-      editing?.start ??
-        parent?.start ??
-        format(presetStart ?? today, DATE_FMT),
+      editing?.start ?? parent?.start ?? format(presetStart ?? today, DATE_FMT),
     );
-    setEnd(editing?.end ?? parent?.end ?? format(presetStart ?? today, DATE_FMT));
+    setEnd(
+      editing?.end ?? parent?.end ?? format(presetStart ?? today, DATE_FMT),
+    );
     // Editing keeps the task's own times (none = all day); a subtask starts with
-    // its parent's; anything brand new defaults to all day too — a time is
-    // only ever set if the person picks one.
+    // its parent's; a template's time of day (if it set one) carries over to
+    // both ends; anything else brand new defaults to all day — a time is only
+    // ever set if the person (or the template) actually gave one.
     const source = editing ?? parent;
-    setStartTime(source?.startTime ?? '');
-    setEndTime(source?.endTime ?? '');
+    setStartTime(source?.startTime ?? fromTemplate?.time ?? '');
+    setEndTime(source?.endTime ?? fromTemplate?.time ?? '');
     const savedRule = migrateRecurrence(editing?.recurrence);
     setRecurrence(savedRule);
     setCustomRule(
-      !!savedRule && !RRULE_PRESETS.some(p => p.rule === safeNormalize(savedRule)),
+      !!savedRule &&
+        !RRULE_PRESETS.some(p => p.rule === safeNormalize(savedRule)),
     );
     setCustomText(savedRule ?? '');
     setReminders(editing?.reminders ?? []);
@@ -194,8 +206,7 @@ export function ItemFormModal() {
     setAttempted(false);
     setMoreOpen(
       !!editing &&
-        (!!editing.recurrence ||
-          (editing.reminders ?? []).length > 0),
+        (!!editing.recurrence || (editing.reminders ?? []).length > 0),
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form]);
@@ -325,7 +336,10 @@ export function ItemFormModal() {
       // Save, assign, then the list is re-read from the server (useTaskMutations).
       const { failedAssignees } = editing
         ? await editItem({ ...editing, ...fields }, changes)
-        : await addItem({ parentId: parent?.id ?? null, ...fields }, changes).then(r => {
+        : await addItem(
+            { parentId: parent?.id ?? null, ...fields },
+            changes,
+          ).then(r => {
             setSelected(r.id);
             return r;
           });
@@ -334,15 +348,21 @@ export function ItemFormModal() {
           `Saved, but ${failedAssignees.length} assignee change${
             failedAssignees.length === 1 ? '' : 's'
           } were refused`,
-          { description: 'You may not have permission to assign people on this task.' },
+          {
+            description:
+              'You may not have permission to assign people on this task.',
+          },
         );
       }
       close();
       toast.success(editing ? 'Changes saved' : 'Task created');
     } catch (err) {
-      toast.error(editing ? 'Couldn’t save changes' : 'Couldn’t create the task', {
-        description: errorMessage(err, 'Please try again.'),
-      });
+      toast.error(
+        editing ? 'Couldn’t save changes' : 'Couldn’t create the task',
+        {
+          description: errorMessage(err, 'Please try again.'),
+        },
+      );
     } finally {
       setSaving(false);
     }
@@ -350,13 +370,11 @@ export function ItemFormModal() {
 
   const show = (e: string | null) => (attempted ? e : null);
   // Ordering problems between start and due show straight away.
-  const ordering = errors.end === 'Due date is before the start' || errors.end === 'Due time is before the start';
+  const ordering =
+    errors.end === 'Due date is before the start' ||
+    errors.end === 'Due time is before the start';
   const endError = ordering ? errors.end : show(errors.end);
-  const title_ = editing
-    ? 'Edit task'
-    : parent
-    ? 'New subtask'
-    : 'New task';
+  const title_ = editing ? 'Edit task' : parent ? 'New subtask' : 'New task';
   const subtitle = editing
     ? undefined
     : parent
@@ -418,7 +436,9 @@ export function ItemFormModal() {
           label="Tag"
           required
           hint={
-            tagOptions.length < 6 ? `“${activeView?.name}” only shows these tags.` : null
+            tagOptions.length < 6
+              ? `“${activeView?.name}” only shows these tags.`
+              : null
           }
         >
           <View className="flex-row flex-wrap gap-1.5">
@@ -438,17 +458,23 @@ export function ItemFormModal() {
           label="Assignees"
           right={
             assigneeIds.length > 0 ? (
-              <Text className="text-xs text-text-subtle">{assigneeIds.length} selected</Text>
+              <Text className="text-xs text-text-subtle">
+                {assigneeIds.length} selected
+              </Text>
             ) : null
           }
           hint={
             isServerBacked && (toAssign.length > 0 || toUnassign.length > 0)
               ? `${[
                   toAssign.length > 0 ? `${toAssign.length} to add` : null,
-                  toUnassign.length > 0 ? `${toUnassign.length} to remove` : null,
+                  toUnassign.length > 0
+                    ? `${toUnassign.length} to remove`
+                    : null,
                 ]
                   .filter(Boolean)
-                  .join(', ')} when you save. Removing someone needs permission on the task — it’ll be skipped (not blocked) if you don’t have it.`
+                  .join(
+                    ', ',
+                  )} when you save. Removing someone needs permission on the task — it’ll be skipped (not blocked) if you don’t have it.`
               : assigneeIds.length === 0
               ? 'Nobody selected — this task will be unassigned.'
               : !isServerBacked && assigneeIds.includes(CURRENT_USER_ID)
@@ -458,16 +484,16 @@ export function ItemFormModal() {
         >
           <MultiSelectDropdown
             label="Assignees"
-            options={pickablePeople.filter(
-              m => !isServerBacked || m.id !== CURRENT_USER_ID,
-            ).map(m => ({
-              id: m.id,
-              label: m.name,
-              hint: m.email,
-              color: m.color,
-              locked: !isServerBacked && m.id === CURRENT_USER_ID,
-              lockedLabel: 'You',
-            }))}
+            options={pickablePeople
+              .filter(m => !isServerBacked || m.id !== CURRENT_USER_ID)
+              .map(m => ({
+                id: m.id,
+                label: m.name,
+                hint: m.email,
+                color: m.color,
+                locked: !isServerBacked && m.id === CURRENT_USER_ID,
+                lockedLabel: 'You',
+              }))}
             selectedIds={assigneeIds}
             onToggle={toggleAssignee}
             onQueryChange={setAssigneeQuery}
@@ -525,14 +551,10 @@ export function ItemFormModal() {
           <Text className="text-sm font-medium text-text-main hover:text-text-heading">
             More options
           </Text>
-          {!moreOpen &&
-          (recurrence || reminders.length > 0) ? (
+          {!moreOpen && (recurrence || reminders.length > 0) ? (
             <Text className="text-xs text-text-subtle">
               ·{' '}
-              {[
-                recurrence && 'repeats',
-                reminders.length > 0 && 'reminders',
-              ]
+              {[recurrence && 'repeats', reminders.length > 0 && 'reminders']
                 .filter(Boolean)
                 .join(', ')}
             </Text>
@@ -541,7 +563,13 @@ export function ItemFormModal() {
 
         {moreOpen ? (
           <View>
-            <Field label="Repeats" error={show(errors.recurrence) ?? (customRule ? errors.recurrence : null)}>
+            <Field
+              label="Repeats"
+              error={
+                show(errors.recurrence) ??
+                (customRule ? errors.recurrence : null)
+              }
+            >
               <View className="flex-row flex-wrap gap-1.5">
                 <Chip
                   label="Doesn’t repeat"
@@ -604,10 +632,13 @@ export function ItemFormModal() {
               ) : null}
               {needsLeapWarning ? (
                 <View className="mt-3">
-                  <Callout kind="warning" title="Feb 29 only exists in leap years">
+                  <Callout
+                    kind="warning"
+                    title="Feb 29 only exists in leap years"
+                  >
                     <Text className="mb-2 text-sm text-text-main">
-                      In every other year this task will land on Feb 28 instead —
-                      never March 1.
+                      In every other year this task will land on Feb 28 instead
+                      — never March 1.
                     </Text>
                     <Checkbox
                       checked={leapAck}
@@ -658,7 +689,9 @@ export function ItemFormModal() {
                           key={o.days}
                           label={o.label}
                           active={r.offsetDays === o.days}
-                          onPress={() => updateReminder(r.id, { offsetDays: o.days })}
+                          onPress={() =>
+                            updateReminder(r.id, { offsetDays: o.days })
+                          }
                         />
                       ))}
                     </View>

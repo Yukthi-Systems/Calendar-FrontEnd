@@ -46,19 +46,38 @@ export interface TaskFilters {
   statuses: Status[];
   tags: TaskTag[];
   assigneeIds: string[];
+  // 'yyyy-MM-dd', or '' for unset — filters on the task's Due date (item.end).
+  dueFrom: string;
+  dueTo: string;
 }
 export const taskFiltersAtom = atom<TaskFilters>({
   statuses: [],
   tags: [],
   assigneeIds: [],
+  dueFrom: '',
+  dueTo: '',
 });
-
-
 
 // Which item form is open: creating (optionally into a status column), editing one, or closed.
 export type ItemFormState =
   // `start` ('yyyy-MM-dd'): prefill the dates, e.g. from a calendar day.
-  | { mode: 'new'; status?: Status; parentId?: string; start?: string }
+  // `fromTemplate`: prefill title/description/tag/time from a recurring
+  // template (see recurringOccurrences.ts's "turn into a real task" flow —
+  // the schema's own comment says this, not auto-generation, is the intended
+  // way a template ever becomes an actual task) — the created task has no
+  // further link back to the template once saved, same as any other task.
+  | {
+      mode: 'new';
+      status?: Status;
+      parentId?: string;
+      start?: string;
+      fromTemplate?: {
+        title: string;
+        description: string;
+        tag: TaskTag;
+        time: string;
+      };
+    }
   | { mode: 'edit'; id: string }
   | null;
 export const itemFormAtom = atom<ItemFormState>(null);

@@ -19,9 +19,26 @@ export interface RecurringTemplate {
   rrule: string;
   // 'yyyy-MM-dd', like WorkItem.start/end — see taskSync.ts's fromTimestamp.
   createdAt: string;
+  // 'HH:mm', or '' for unset — what time of day this is for (no anchor date,
+  // so not a timestamp, just a time). There's no column for it, only the
+  // free-form `details` JSONB the schema already sets aside for "UI colours,
+  // etc." — stored there as `details.time`, same spot the icon below (and a
+  // future per-template colour) also live.
+  time: string;
+  // A key into RECURRING_ICONS (data/recurringIcons.ts); 'repeat' (the default)
+  // for anything saved before this existed, or a key that isn't recognized.
+  // Stored as `details.icon`, same reasoning as `time` above.
+  icon: string;
 }
 
+const DEFAULT_ICON = 'repeat';
+const templateTime = (details: Record<string, unknown>): string =>
+  typeof details.time === 'string' ? details.time : '';
+const templateIcon = (details: Record<string, unknown>): string =>
+  typeof details.icon === 'string' ? details.icon : DEFAULT_ICON;
+
 export function templateFromServer(dto: RecurringTaskDto): RecurringTemplate {
+  const details = dto.details ?? {};
   return {
     id: String(dto.recurring_task_id),
     ownerId: dto.owner_id,
@@ -30,8 +47,18 @@ export function templateFromServer(dto: RecurringTaskDto): RecurringTemplate {
     tag: TAG_FROM_BACKEND[dto.task_tag] ?? 'other',
     rrule: dto.rrule,
     createdAt: dto.created_at.slice(0, 10),
+    time: templateTime(details),
+    icon: templateIcon(details),
   };
 }
+
+const templateDetails = (t: {
+  time: string;
+  icon: string;
+}): Record<string, unknown> => ({
+  ...(t.time ? { time: t.time } : {}),
+  ...(t.icon && t.icon !== DEFAULT_ICON ? { icon: t.icon } : {}),
+});
 
 export function templateToCreatePayload(
   t: Omit<RecurringTemplate, 'id' | 'ownerId' | 'createdAt'>,
@@ -39,7 +66,7 @@ export function templateToCreatePayload(
   return {
     title: t.title,
     description: t.description,
-    details: {},
+    details: templateDetails(t),
     rrule: t.rrule,
     task_tag: BACKEND_TAG[t.tag],
   };
@@ -52,7 +79,7 @@ export function templateToUpdatePayload(
     recurring_task_id: Number(t.id),
     title: t.title,
     description: t.description,
-    details: {},
+    details: templateDetails(t),
     rrule: t.rrule,
     task_tag: BACKEND_TAG[t.tag],
   };
@@ -73,5 +100,7 @@ const ALL_TAGS: TaskTag[] = [
 export function allTemplateTags(
   view: { tagFilter?: TaskTag[] } | undefined,
 ): BackendTaskTag[] {
-  return (view?.tagFilter?.length ? view.tagFilter : ALL_TAGS).map(t => BACKEND_TAG[t]);
+  return (view?.tagFilter?.length ? view.tagFilter : ALL_TAGS).map(
+    t => BACKEND_TAG[t],
+  );
 }

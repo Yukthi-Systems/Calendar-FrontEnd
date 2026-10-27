@@ -20,6 +20,7 @@ import { statusInfo } from '../../data/constants';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { usePeople, usePerson, type Person } from '../../hooks/useUsers';
 import { describeRecurrence } from '../../data/rrule';
+import { isVirtualRecurringId } from '../../data/recurringOccurrences';
 import { subtaskProgress } from '../../data/tree';
 import { showsField } from '../../data/viewFields';
 import type { Status, ViewField, WorkItem } from '../../data/types';
@@ -85,7 +86,11 @@ export function Avatar({
   const m = usePerson(id);
   const me = useAtomValue(currentUserIdAtom);
   return (
-    <Tooltip label={id && id === me ? `You (${m?.name ?? '…'})` : m?.name ?? 'Unassigned'}>
+    <Tooltip
+      label={
+        id && id === me ? `You (${m?.name ?? '…'})` : m?.name ?? 'Unassigned'
+      }
+    >
       <InitialsAvatar
         color={m?.color ?? '#9ca3af'}
         initials={m?.initials ?? '?'}
@@ -142,9 +147,7 @@ export function AssigneeAvatars({
         </View>
       ))}
       {rest > 0 ? (
-        <Tooltip
-          label={namesOf(ids.slice(max), people)}
-        >
+        <Tooltip label={namesOf(ids.slice(max), people)}>
           <View
             style={{
               width: size,
@@ -171,7 +174,11 @@ export function AssigneeAvatars({
 // Comma-separated names for an assignee list, given people resolved with
 // usePeople (table sorting, detail sheet).
 // With `me`, I'm listed first, as "You".
-export const namesOf = (ids: string[], people: Map<string, Person>, me?: string) =>
+export const namesOf = (
+  ids: string[],
+  people: Map<string, Person>,
+  me?: string,
+) =>
   ids.length === 0
     ? 'Unassigned'
     : (me ? meFirst(ids, me) : ids)
@@ -265,7 +272,9 @@ export function DueDate({
   const now = new Date();
   const days = differenceInCalendarDays(parseISO(item.end), now);
   // With a due time, overdue is exact; an all-day task is due by the day's end.
-  const dueAt = item.endTime ? parseISO(`${item.end}T${item.endTime}`) : endOfDay(parseISO(item.end));
+  const dueAt = item.endTime
+    ? parseISO(`${item.end}T${item.endTime}`)
+    : endOfDay(parseISO(item.end));
   const overdue = dueAt < now;
   const tint = done
     ? 'text-text-main'
@@ -311,24 +320,36 @@ export function ItemRow({
   onPress?: () => void;
 }) {
   const select = useSetAtom(selectedItemIdAtom);
+  const c = useThemeColors();
+  const virtual = isVirtualRecurringId(item.id);
   return (
     <Press
       feedback="subtle"
       accessibilityRole="button"
       onPress={onPress ?? (() => select(item.id))}
-      className="flex-row items-center gap-2.5 rounded-lg border border-border-main bg-bg-card px-3 py-2 hover:border-border-strong hover:bg-hover"
+      className={`flex-row items-center gap-2.5 rounded-lg border bg-bg-card px-3 py-2 hover:border-border-strong hover:bg-hover ${
+        virtual
+          ? 'border-dashed border-border-main opacity-80'
+          : 'border-border-main'
+      }`}
     >
-      {showsField(fields, 'status') ? <StatusIcon status={item.status} /> : null}
+      {showsField(fields, 'status') && !virtual ? (
+        <StatusIcon status={item.status} />
+      ) : null}
       <View className="flex-1">
         <View className="flex-row items-center gap-1.5">
           <Text
             numberOfLines={1}
-            className="shrink text-sm font-medium text-text-heading"
+            className={`shrink text-sm font-medium ${
+              virtual ? 'text-text-subtle' : 'text-text-heading'
+            }`}
           >
             {item.title}
           </Text>
           {item.recurrence ? (
             <RecurrenceIcon freq={item.recurrence} size={11} />
+          ) : virtual ? (
+            <Repeat size={11} color={c.subtle} />
           ) : null}
         </View>
         <View className="mt-0.5 flex-row items-center gap-2">
@@ -417,12 +438,17 @@ export function MultiSelectDropdown({
         {selected.length > 0 ? (
           <View className="flex-1 flex-row items-center gap-2">
             <AssigneeAvatars ids={selected.map(o => o.id)} size={20} max={4} />
-            <Text numberOfLines={1} className="flex-1 text-base text-text-heading">
+            <Text
+              numberOfLines={1}
+              className="flex-1 text-base text-text-heading"
+            >
               {selected.map(o => o.label).join(', ')}
             </Text>
           </View>
         ) : (
-          <Text className="flex-1 text-base text-text-subtle">{placeholder}</Text>
+          <Text className="flex-1 text-base text-text-subtle">
+            {placeholder}
+          </Text>
         )}
         <ChevronDown size={15} color={c.subtle} />
       </Press>
@@ -463,7 +489,10 @@ export function MultiSelectDropdown({
                 <View className="flex-1">
                   <Text className="text-sm text-text-heading">{o.label}</Text>
                   {o.hint ? (
-                    <Text numberOfLines={1} className="text-xs text-text-subtle">
+                    <Text
+                      numberOfLines={1}
+                      className="text-xs text-text-subtle"
+                    >
                       {o.hint}
                     </Text>
                   ) : null}
