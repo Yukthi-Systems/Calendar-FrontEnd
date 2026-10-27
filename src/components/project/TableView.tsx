@@ -456,6 +456,9 @@ export function TableView({ view }: { view: ProjectView }) {
   // normal "new task" form instead, prefilled from its template and dated to
   // this occurrence (see recurringOccurrences.ts).
   const openVirtual = (virtualId: string) => {
+    if (!canCreate) {
+      return;
+    }
     const parsed = parseVirtualRecurringId(virtualId);
     const template = parsed
       ? recurringTemplates.find(t => t.id === parsed.templateId)
@@ -559,7 +562,7 @@ export function TableView({ view }: { view: ProjectView }) {
           </View>
         ) : null}
         <View className="flex-1" />
-        {virtual ? (
+        {virtual && canCreate ? (
           <View className="reveal-on-hover pr-1">
             <IconButton
               icon={Plus}
@@ -656,10 +659,16 @@ export function TableView({ view }: { view: ProjectView }) {
         feedback="none"
         accessibilityRole="button"
         accessibilityLabel={
-          virtual ? `Create task from ${row.item.title}` : row.item.title
+          virtual && canCreate
+            ? `Create task from ${row.item.title}`
+            : row.item.title
         }
         onPress={() =>
-          virtual ? openVirtual(row.item.id) : select(row.item.id)
+          virtual
+            ? canCreate
+              ? openVirtual(row.item.id)
+              : undefined
+            : select(row.item.id)
         }
         style={{ height: child ? CHILD_ROW_H : ROW_H }}
         className={`group flex-row border-b border-border-main hover:bg-hover ${

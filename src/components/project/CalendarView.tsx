@@ -204,12 +204,18 @@ export function CalendarView({ view }: { view: ProjectView }) {
   const fields = view.fields;
   const setForm = useSetAtom(itemFormAtom);
   const select = useSetAtom(selectedItemIdAtom);
+  const { canCreate } = useViewAccess(view);
   // Routes a click on any occurrence bar/card/row: a real task opens its
-  // detail sheet as always; a virtual one opens "new task" prefilled instead.
+  // detail sheet as always; a virtual one opens "new task" prefilled instead
+  // — but only when this view allows creating tasks, same as every other
+  // "new task" entry point here.
   const openOccurrence = (item: WorkItem) => {
     const parsed = parseVirtualRecurringId(item.id);
     if (!parsed) {
       select(item.id);
+      return;
+    }
+    if (!canCreate) {
       return;
     }
     const template = recurringTemplates.find(t => t.id === parsed.templateId);
@@ -248,7 +254,6 @@ export function CalendarView({ view }: { view: ProjectView }) {
     setSelected(day);
     setMode('day');
   };
-  const { canCreate } = useViewAccess(view);
   const newTaskOn = canCreate
     ? (day: Date) => setForm({ mode: 'new', start: format(day, DATE_FMT) })
     : undefined;
