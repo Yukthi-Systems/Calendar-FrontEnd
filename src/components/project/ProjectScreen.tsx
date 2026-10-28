@@ -306,7 +306,11 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
         <View className="h-7 w-7 items-center justify-center rounded-lg bg-accent">
           <CalendarCheck2 size={16} color={c.accentForeground} strokeWidth={2.25} />
         </View>
-        <Text className="flex-1 text-base font-semibold text-text-heading">YTC</Text>
+        {/* The workspace is the organization's — its name, from the user's record
+            (SSO session as a fallback); "YTC" only until that's known. */}
+        <Text numberOfLines={1} className="flex-1 text-base font-semibold text-text-heading">
+          {profile.organization || 'YTC'}
+        </Text>
       </View>
 
       <View className="flex-row items-center gap-1.5 px-3 pb-4">

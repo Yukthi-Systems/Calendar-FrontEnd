@@ -506,8 +506,14 @@ export function MultiSelectDropdown({
             );
           })}
           {filtered.length === 0 ? (
+            // Nothing typed yet → say how to find people; too short for the
+            // people search (2+ characters) → keep typing; else a real "no match".
             <Text className="py-8 text-center text-sm text-text-main">
-              No one matches “{query}”.
+              {!query.trim()
+                ? 'Type a name or email to find people.'
+                : onQueryChange && query.trim().length < 2
+                ? 'Keep typing — at least 2 characters.'
+                : `No one matches “${query.trim()}”.`}
             </Text>
           ) : null}
         </ScrollView>
