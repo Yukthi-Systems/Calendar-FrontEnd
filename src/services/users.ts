@@ -1,6 +1,21 @@
 import { apiRequest } from './apiClient';
 import type { UserInfoResponse, UserSearchResult } from './types';
 
+// PATCH /user/update-fcm-token — body is just the raw token string (not an
+// object), single token per user (the server overwrites, doesn't append), so
+// signing in on a new device silently replaces push delivery to the old one.
+export const updateFcmToken = async (
+  accessToken: string,
+  fcmToken: string,
+): Promise<void> => {
+  await apiRequest('/user/update-fcm-token', {
+    method: 'PATCH',
+    accessToken,
+    body: JSON.stringify(fcmToken),
+    parseJson: false,
+  });
+};
+
 // GET /user/info/{user_id} — 403 for another organization, 404 when unknown.
 export const fetchUserInfo = async (
   accessToken: string,

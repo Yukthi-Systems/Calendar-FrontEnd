@@ -8,6 +8,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
+  Bell,
   CalendarCheck2,
   CalendarDays,
   Check,
@@ -33,6 +34,7 @@ import {
   searchOpenAtom,
   type ContentMode,
 } from '../../atoms/project';
+import { alertFormAtom, alertsOpenAtom } from '../../atoms/alerts';
 import { profileOpenAtom } from '../../atoms/profile';
 import { useMyProfile, usePerson } from '../../hooks/useUsers';
 import { errorMessage, toast } from '../../atoms/feedback';
@@ -47,6 +49,7 @@ import {
   type ViewDraftFields,
 } from '../../hooks/useViews';
 import { useTasksSync } from '../../hooks/useTasksSync';
+import { useTaskAlertMutations } from '../../hooks/useTaskAlerts';
 import { useRefresh } from '../../hooks/useRefresh';
 import { useShortcuts } from '../../hooks/useShortcuts';
 import { VIEW_TYPES } from '../../data/constants';
@@ -62,6 +65,8 @@ import {
   SegmentedControl,
   Skeleton,
 } from '../ui';
+import { AlertFormModal } from './AlertFormModal';
+import { AlertsScreen } from './AlertsScreen';
 import { CalendarView } from './CalendarView';
 import { ItemFormModal } from './ItemFormModal';
 import { ItemModal } from './ItemModal';
@@ -106,6 +111,12 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   const setItemForm = useSetAtom(itemFormAtom);
   const setRecurringForm = useSetAtom(recurringFormAtom);
   const setSearchOpen = useSetAtom(searchOpenAtom);
+  // The left-menu "Alerts" screen — unlike contentMode (tasks/recurring),
+  // this is view-independent (see atoms/alerts.ts), so it's a separate
+  // on/off switch rather than another contentMode value.
+  const [alertsOpen, setAlertsOpen] = useAtom(alertsOpenAtom);
+  const [alertForm, setAlertForm] = useAtom(alertFormAtom);
+  const { createAlert, editAlert } = useTaskAlertMutations();
   const [mobileHome, setMobileHome] = useState(true);
   const setProfileOpen = useSetAtom(profileOpenAtom);
   const profile = useMyProfile();
@@ -176,6 +187,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
       const id = await createView(draft);
       if (id) {
         setActiveId(id);
+        setAlertsOpen(false);
       }
       toast.success(`Created “${draft.name}”`);
     } catch (err) {
@@ -252,6 +264,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
           accessibilityState={{ selected: isActive }}
           onPress={() => {
             setActiveId(v.id);
+            setAlertsOpen(false);
             setViewPickerOpen(false);
           }}
           className={`h-8 flex-1 flex-row items-center gap-2.5 rounded-lg pl-2.5 pr-8 ${
@@ -393,14 +406,17 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
 
       <View className="gap-0.5 px-3 pb-3">
         {MODE_OPTIONS.map(opt => {
-          const isActive = contentMode === opt.key;
+          const isActive = !alertsOpen && contentMode === opt.key;
           return (
             <Press
               key={opt.key}
               feedback="subtle"
               accessibilityRole="tab"
               accessibilityState={{ selected: isActive }}
-              onPress={() => setContentMode(opt.key)}
+              onPress={() => {
+                setContentMode(opt.key);
+                setAlertsOpen(false);
+              }}
               className={`h-8 flex-row items-center gap-2.5 rounded-lg pl-2.5 ${
                 isActive ? 'bg-hover' : 'hover:bg-hover/70'
               }`}
@@ -420,6 +436,33 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
             </Press>
           );
         })}
+      </View>
+
+      {/* Alerts has nothing to do with any one view (see atoms/alerts.ts), so
+          it's its own nav row, not one of the per-view MODE_OPTIONS tabs above. */}
+      <View className="px-3 pb-3">
+        <Press
+          feedback="subtle"
+          accessibilityRole="tab"
+          accessibilityState={{ selected: alertsOpen }}
+          onPress={() => setAlertsOpen(true)}
+          className={`h-8 flex-row items-center gap-2.5 rounded-lg pl-2.5 ${
+            alertsOpen ? 'bg-hover' : 'hover:bg-hover/70'
+          }`}
+        >
+          <Bell
+            size={16}
+            color={alertsOpen ? c.heading : c.text}
+            strokeWidth={2}
+          />
+          <Text
+            className={`text-sm ${
+              alertsOpen ? 'font-medium text-text-heading' : 'text-text-main'
+            }`}
+          >
+            Alerts
+          </Text>
+        </Press>
       </View>
 
       <View className="flex-1" />
@@ -509,6 +552,15 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
       ) : null}
     </View>
   ) : null;
+
+  const alertsHeader = (
+    <View className="h-14 flex-row items-center gap-3 border-b border-border-main bg-bg-card px-6">
+      <Bell size={18} color={c.text} />
+      <Text className="flex-1 text-base font-semibold text-text-heading">
+        Alerts
+      </Text>
+    </View>
+  );
 
   const content = !ready ? (
     <View className="flex-1 gap-3 p-6">
@@ -650,10 +702,29 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
         <View className="flex-1 flex-row">
           {rail}
           <View className="flex-1">
-            {viewHeader}
-            <View className="flex-1">{content}</View>
+            {alertsOpen ? alertsHeader : viewHeader}
+            <View className="flex-1">
+              {alertsOpen ? <AlertsScreen /> : content}
+            </View>
           </View>
         </View>
+      ) : alertsOpen ? (
+        <>
+          <View className="flex-row items-center gap-1 border-b border-border-main bg-bg-card px-2 pb-1 pt-2">
+            <IconButton
+              icon={ChevronLeft}
+              label="Back"
+              onPress={() => setAlertsOpen(false)}
+              size="lg"
+            />
+            <Text className="text-base font-semibold text-text-heading">
+              Alerts
+            </Text>
+          </View>
+          <View className="flex-1">
+            <AlertsScreen />
+          </View>
+        </>
       ) : mobileHome ? (
         <MobileHome
           views={views}
@@ -663,6 +734,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
             setMobileHome(false);
           }}
           onNewView={() => openNewView()}
+          onOpenAlerts={() => setAlertsOpen(true)}
           onOpenProfile={() => setProfileOpen(true)}
           onSearch={openSearch}
         />
@@ -704,6 +776,35 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
       <ItemModal />
       <ItemFormModal />
       <SearchModal />
+      <AlertFormModal
+        visible={!!alertForm}
+        form={alertForm}
+        onClose={() => setAlertForm(null)}
+        onSave={async draft => {
+          if (!alertForm) {
+            return;
+          }
+          const taskId = Number(alertForm.taskId);
+          if (alertForm.mode === 'edit') {
+            await editAlert({
+              taskId,
+              currentAlertAt: alertForm.alert.alert_at,
+              newAlertAt: draft.alertAt,
+              notifyViaEmail: draft.notifyViaEmail,
+              notifyViaPush: draft.notifyViaPush,
+            });
+            toast.success('Alert saved');
+          } else {
+            await createAlert({
+              taskId,
+              alertAt: draft.alertAt,
+              notifyViaEmail: draft.notifyViaEmail,
+              notifyViaPush: draft.notifyViaPush,
+            });
+            toast.success('Alert created');
+          }
+        }}
+      />
       <ViewModal
         visible={modalView !== undefined}
         view={modalView ?? null}

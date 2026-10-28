@@ -2,7 +2,14 @@ import { useMemo } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { useAtomValue } from 'jotai';
 import { endOfDay, format, parseISO, startOfDay } from 'date-fns';
-import { AlertCircle, CalendarClock, ChevronRight, Plus, Search } from 'lucide-react-native';
+import {
+  AlertCircle,
+  Bell,
+  CalendarClock,
+  ChevronRight,
+  Plus,
+  Search,
+} from 'lucide-react-native';
 import { itemsAtom } from '../../atoms/project';
 import { useMyProfile } from '../../hooks/useUsers';
 import { VIEW_TYPES } from '../../data/constants';
@@ -18,6 +25,7 @@ export function MobileHome({
   activeId,
   onOpenView,
   onNewView,
+  onOpenAlerts,
   onOpenProfile,
   onSearch,
 }: {
@@ -25,6 +33,7 @@ export function MobileHome({
   activeId: string;
   onOpenView: (id: string) => void;
   onNewView: () => void;
+  onOpenAlerts: () => void;
   onOpenProfile: () => void;
   onSearch: () => void;
 }) {
@@ -50,15 +59,14 @@ export function MobileHome({
     ).length;
     const overdue = items.filter(
       i =>
-        i.end < todayStr &&
-        i.status !== 'completed' &&
-        i.status !== 'rejected',
+        i.end < todayStr && i.status !== 'completed' && i.status !== 'rejected',
     ).length;
     return { active, overdue };
   }, [items]);
 
   const hour = new Date().getHours();
-  const greeting = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
+  const greeting =
+    hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   const firstName = profile.name.split(' ')[0];
 
   return (
@@ -79,7 +87,11 @@ export function MobileHome({
           onPress={onOpenProfile}
           className="rounded-full"
         >
-          <InitialsAvatar color={profile.color} initials={profile.initials} size={38} />
+          <InitialsAvatar
+            color={profile.color}
+            initials={profile.initials}
+            size={38}
+          />
         </Press>
       </View>
 
@@ -110,6 +122,22 @@ export function MobileHome({
         />
       </View>
 
+      {/* Alerts has nothing to do with any one view (see atoms/alerts.ts) —
+          its own entry, not folded into the Views list below. */}
+      <Press
+        feedback="subtle"
+        accessibilityRole="button"
+        accessibilityLabel="Open alerts"
+        onPress={onOpenAlerts}
+        className="h-12 flex-row items-center gap-3 rounded-xl border border-border-main bg-bg-card px-3.5"
+      >
+        <Bell size={16} color={c.text} />
+        <Text className="flex-1 text-base font-medium text-text-heading">
+          Alerts
+        </Text>
+        <ChevronRight size={16} color={c.subtle} />
+      </Press>
+
       <View>
         <Text className="mb-2 px-1 text-2xs font-semibold uppercase tracking-wider text-text-subtle">
           Views
@@ -135,10 +163,15 @@ export function MobileHome({
                     isActive ? 'bg-accent-soft' : 'bg-muted'
                   }`}
                 >
-                  {Icon ? <Icon size={18} color={isActive ? c.accent : c.text} /> : null}
+                  {Icon ? (
+                    <Icon size={18} color={isActive ? c.accent : c.text} />
+                  ) : null}
                 </View>
                 <View className="flex-1">
-                  <Text numberOfLines={1} className="text-base font-medium text-text-heading">
+                  <Text
+                    numberOfLines={1}
+                    className="text-base font-medium text-text-heading"
+                  >
                     {v.name}
                   </Text>
                   <Text numberOfLines={1} className="text-xs text-text-main">
@@ -189,7 +222,9 @@ function Stat({
         <Text className="text-xs font-medium text-text-main">{label}</Text>
       </View>
       <Text
-        className={`text-3xl font-semibold ${emphasize ? 'text-destructive' : 'text-text-heading'}`}
+        className={`text-3xl font-semibold ${
+          emphasize ? 'text-destructive' : 'text-text-heading'
+        }`}
       >
         {value}
       </Text>

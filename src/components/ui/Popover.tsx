@@ -70,8 +70,9 @@ export function Popover({
       anim.setValue(0);
       return;
     }
-    triggerRef.current?.measureInWindow((x: number, y: number, w: number, h: number) =>
-      setAnchor({ x, y, width: w, height: h }),
+    triggerRef.current?.measureInWindow(
+      (x: number, y: number, w: number, h: number) =>
+        setAnchor({ x, y, width: w, height: h }),
     );
   }, [open, docked, anim, triggerRef]);
 
@@ -93,7 +94,11 @@ export function Popover({
       <>
         {renderTrigger?.(triggerRef)}
         <Sheet visible={open} onClose={onClose} size="sm">
-          <View className={variant === 'menu' ? 'p-2' : 'items-center px-4 pb-4 pt-1'}>
+          <View
+            className={
+              variant === 'menu' ? 'p-2' : 'items-center px-4 pb-4 pt-1'
+            }
+          >
             {children}
           </View>
         </Sheet>
@@ -109,16 +114,31 @@ export function Popover({
   const left = anchor
     ? Math.min(Math.max(MARGIN, anchor.x), window.width - width - MARGIN)
     : 0;
+  // Clamped the same way as `left`: picking "below" only means it's the
+  // better of two options, not that it actually fits — a trigger sitting low
+  // inside a tall outer popover (or just a short window) can leave no room
+  // either way, and without this the panel ran straight past the bottom edge
+  // with no scroll to reach the rest of it (e.g. the quick-pick row under a
+  // date picker's calendar).
   const top = anchor
-    ? below
-      ? anchor.y + anchor.height + GAP
-      : anchor.y - GAP - panelH
+    ? Math.min(
+        Math.max(
+          MARGIN,
+          below ? anchor.y + anchor.height + GAP : anchor.y - GAP - panelH,
+        ),
+        window.height - panelH - MARGIN,
+      )
     : 0;
 
   return (
     <>
       {renderTrigger?.(triggerRef)}
-      <Modal visible={open} transparent animationType="none" onRequestClose={onClose}>
+      <Modal
+        visible={open}
+        transparent
+        animationType="none"
+        onRequestClose={onClose}
+      >
         <Pressable
           ref={backdropRef}
           accessibilityLabel="Close"
@@ -142,7 +162,12 @@ export function Popover({
                       outputRange: [below ? -6 : 6, 0],
                     }),
                   },
-                  { scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] }) },
+                  {
+                    scale: anim.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.97, 1],
+                    }),
+                  },
                 ],
               },
             ]}

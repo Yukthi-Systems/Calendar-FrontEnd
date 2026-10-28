@@ -20,6 +20,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { queryClient } from './src/services/queryClient';
 import { bootAuth } from './src/services/authStore';
 import { bootNotifications } from './src/services/notificationStore';
+import { bootPush } from './src/services/pushStore';
 import { bootWidgetSync } from './src/services/widgetSync';
 import { useAuth } from './src/hooks/useAuth';
 import { useSsoAutoLogin } from './src/hooks/useSsoAutoLogin';
@@ -38,6 +39,7 @@ function App() {
     const signal = { cancelled: false };
     bootAuth(signal);
     bootNotifications();
+    bootPush();
     bootWidgetSync();
     seedDemoIfRequested();
     return () => {
@@ -94,7 +96,9 @@ function AppContent() {
       <SafeAreaView className="flex-1 bg-bg-main">
         <View className="flex-1 items-center justify-center gap-3 px-6">
           <ActivityIndicator color={accent} />
-          <Text className="text-sm text-text-subtle">Restoring your session…</Text>
+          <Text className="text-sm text-text-subtle">
+            Restoring your session…
+          </Text>
         </View>
       </SafeAreaView>
     );

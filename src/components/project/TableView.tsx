@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import {
@@ -14,11 +14,13 @@ import {
   X,
 } from 'lucide-react-native';
 import {
+  EMPTY_TASK_FILTERS,
   itemFormAtom,
   itemsAtom,
   selectedItemIdAtom,
   taskFiltersAtom,
   tasksLoadingAtom,
+  type TaskFilters,
 } from '../../atoms/project';
 import { allowedStatuses, allowedTags } from '../../data/constants';
 import { MAX_DEPTH, hasSubtasks } from '../../data/tree';
@@ -31,7 +33,7 @@ import {
 } from '../../data/recurringOccurrences';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
 import { useRecurringTasks } from '../../hooks/useRecurringTasks';
-import { useViewAccess } from '../../hooks/useViews';
+import { useViewAccess, useViewMutations } from '../../hooks/useViews';
 import { errorMessage, toast } from '../../atoms/feedback';
 import type { ProjectView, Status, TaskTag, WorkItem } from '../../data/types';
 import { useThemeColors } from '../../hooks/useThemeColors';
@@ -311,7 +313,8 @@ export function TableView({ view }: { view: ProjectView }) {
   const setForm = useSetAtom(itemFormAtom);
   const select = useSetAtom(selectedItemIdAtom);
   const { loadChildren, subtasksEnabled } = useTaskMutations();
-  const { canCreate } = useViewAccess(view);
+  const { canCreate, canEdit: canEditView } = useViewAccess(view);
+  const { updateView } = useViewMutations();
   const c = useThemeColors();
   const columns = COLUMNS.filter(
     col => col.key === 'title' || showsField(view.fields, col.key),
@@ -358,28 +361,53 @@ export function TableView({ view }: { view: ProjectView }) {
     }));
   const setDueFrom = (dueFrom: string) => setFilters(f => ({ ...f, dueFrom }));
   const setDueTo = (dueTo: string) => setFilters(f => ({ ...f, dueTo }));
-  const clearFilters = () =>
-    setFilters({
-      statuses: [],
-      tags: [],
-      assigneeIds: [],
-      dueFrom: '',
-      dueTo: '',
-    });
+  const clearFilters = () => setFilters(EMPTY_TASK_FILTERS);
   const filterCount =
     filters.statuses.length +
     filters.tags.length +
     filters.assigneeIds.length +
     (filters.dueFrom || filters.dueTo ? 1 : 0);
 
-  // The filter is session-wide (taskFiltersAtom), not per view, so a status/tag
-  // picked while looking at one view could silently keep filtering another one
-  // that doesn't even offer it, or just surprise someone who switched views and
-  // didn't expect the old chips to still be applied — reset on every view change.
+  // The filter atom is session-wide (taskFiltersAtom), not per view, so a
+  // status/tag picked while looking at one view could silently keep filtering
+  // another one that doesn't even offer it — load this view's own saved
+  // filter (view.quickFilter, round-tripped through ui_info by viewSync.ts)
+  // on every view change, instead of carrying over whatever was showing.
   useEffect(() => {
-    clearFilters();
+    setFilters(view.quickFilter ?? EMPTY_TASK_FILTERS);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when the active view changes
   }, [view.id]);
+
+  // Save the filter back onto the view (so it's there again next time anyone
+  // opens it) once someone's done adjusting it, not on every single chip
+  // toggle — "done" being whenever the filter popover goes from open to
+  // closed, however that happened (trigger button, backdrop, Escape).
+  const quickFilterEqual = (a: TaskFilters, b: TaskFilters) =>
+    JSON.stringify([...a.statuses].sort()) ===
+      JSON.stringify([...b.statuses].sort()) &&
+    JSON.stringify([...a.tags].sort()) === JSON.stringify([...b.tags].sort()) &&
+    JSON.stringify([...a.assigneeIds].sort()) ===
+      JSON.stringify([...b.assigneeIds].sort()) &&
+    a.dueFrom === b.dueFrom &&
+    a.dueTo === b.dueTo;
+  const wasFilterOpen = useRef(filterOpen);
+  useEffect(() => {
+    if (wasFilterOpen.current && !filterOpen && canEditView) {
+      const saved = view.quickFilter ?? EMPTY_TASK_FILTERS;
+      if (!quickFilterEqual(filters, saved)) {
+        updateView({
+          ...view,
+          quickFilter: filterCount > 0 ? filters : undefined,
+        }).catch(err => {
+          toast.error('Couldn’t save the filter', {
+            description: errorMessage(err, 'Please try again.'),
+          });
+        });
+      }
+    }
+    wasFilterOpen.current = filterOpen;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to the popover's own open/close
+  }, [filterOpen]);
 
   const sorted = [...displayItems].sort((a, b) => {
     const x = sortValue(a, sort.key, people);

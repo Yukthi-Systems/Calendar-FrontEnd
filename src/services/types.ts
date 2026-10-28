@@ -163,6 +163,24 @@ export interface CommentDbDto {
   updated_at: string;
 }
 
+// GET /alerts/list/{task_id}, GET /alerts/list-all row shape. Alerts are
+// entirely self-scoped (Tasks-Main-API's own comment: "All alerts are
+// associated only with self") — no view_id anywhere, and this carries no
+// task title/tag, only the task_id; the UI resolves a title itself from
+// whatever's already loaded, falling back to "Task #<id>" when it isn't.
+export interface TaskAlertDto {
+  task_id: number;
+  alert_recipient_id: string;
+  alert_at: string;
+  notify_via_email: boolean;
+  notify_via_push: boolean;
+  // Set by the background job once it's actually sent — an alert can still
+  // be deleted after, but editing it at that point is pointless (see
+  // data/taskAlerts.ts's isAlertEditable).
+  notification_sent: boolean;
+  created_at: string;
+}
+
 // GET /tasks/get, GET /tasks/list/{view_id} row shape.
 export interface TaskInfoDto {
   task_id: number;

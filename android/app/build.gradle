@@ -124,3 +124,11 @@ dependencies {
         implementation jscFlavor
     }
 }
+
+// Push notifications (Firebase) — @react-native-firebase/{app,messaging} are
+// already npm-installed and will autolink, but the native Firebase SDK also
+// needs this plugin applied *and* a real google-services.json dropped into
+// this directory (android/app/) first. The plugin fails the whole Gradle
+// build immediately if that file is missing, so this stays commented out
+// until it's actually there — see README.md.
+// apply plugin: "com.google.gms.google-services"

@@ -51,6 +51,7 @@ import {
   SheetHeader,
 } from '../ui';
 import { CommentsSection } from './CommentsSection';
+import { TaskAlertsSection } from './TaskAlertsSection';
 import {
   AssigneeAvatars,
   DueDate,
@@ -600,6 +601,10 @@ export function ItemModal() {
                   )}
                 </>
               )}
+            </View>
+
+            <View className="mb-6">
+              <TaskAlertsSection taskId={item.id} taskTitle={item.title} />
             </View>
 
             <CommentsSection taskId={item.id} />

@@ -38,6 +38,42 @@ launch, refreshed a minute before expiry, and torn down on both the API and SSO 
   copied into the store `fetch` uses (`@preeternal/react-native-cookie-manager`).
 - Session logic lives in `src/services/authStore.ts`; components read it through `useAuth()`.
 
+# Push notifications (Firebase)
+
+Task Alerts' `notify_via_push` is delivered through Firebase Cloud Messaging. This is
+separate from the client-only local reminders (`src/services/notifications.*`, Notifee on
+native / the browser Notification API on web) — push comes from the server, local reminders
+never leave the device.
+
+- **Web** (`src/services/push.web.ts`) uses the Firebase JS SDK. Set the `FIREBASE_*` keys in
+  `.env` (see `.env.example`) from the Firebase console's *Add app → Web* flow, plus
+  `FIREBASE_VAPID_KEY` from *Project settings → Cloud Messaging → Web Push certificates* (not
+  generated for this project yet — web push silently stays off, with a console warning, until
+  it is). `web/firebase-messaging-sw.js` handles background delivery and is copied into
+  `web-build/` by `webpack.config.js`'s `CopyWebpackPlugin` — it ships with `__FIREBASE_*__`
+  placeholders (a service worker can't read `.env`/`window._env_`), which `env.sh` fills in from
+  the container's `FIREBASE_*` env vars at container start, the same way it writes
+  `env-config.js` for `API_URL`/`SSO_URL`/`SSO_APP_ID`. A container started with any
+  `FIREBASE_*` var unset gets that field blanked out, so background push fails to initialize
+  until it's set. Local dev (`npm run web`) never runs `env.sh`, so this file is served with the
+  placeholders as-is there — set up a local override if you need to test background push from
+  dev.
+- **iOS/Android** (`src/services/push.native.ts`) use `@react-native-firebase/{app,messaging}`,
+  which auto-configure from native config files instead of `FIREBASE_*` env vars:
+  - **Android**: drop `google-services.json` into `android/app/`, then uncomment the
+    `apply plugin: "com.google.gms.google-services"` line at the bottom of
+    `android/app/build.gradle` (left commented out on purpose — Gradle fails the whole build
+    immediately if that file is missing).
+  - **iOS**: add `GoogleService-Info.plist` to the Xcode project (drag it into
+    `ios/YTCFronend/` *via Xcode*, not just the filesystem, so it's registered in the
+    project — a hand edit to the `.pbxproj` is not the supported path), then run
+    `cd ios && pod install`. `AppDelegate.swift` already calls `FirebaseApp.configure()`,
+    guarded to skip it (not crash) until that file exists.
+  - Both files are already `.gitignore`d — never commit them.
+- The server stores one FCM token per user (`PATCH /user/update-fcm-token`, overwrites, no
+  per-device list) — signing in on a new device replaces push delivery to the old one.
+  Registration happens automatically on sign-in (`src/services/pushStore.ts`'s `bootPush`).
+
 # State & styling
 
 - **State: [jotai](https://jotai.org).** Atoms live in `src/atoms/` (same layout as

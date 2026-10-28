@@ -1246,15 +1246,23 @@ function YearBody({
       occurrencesBetween(items, new Date(year, 0, 1), new Date(year, 11, 31)),
     [items, year],
   );
+  // Always 4 columns × 3 rows, at any viewport width — a fixed-size row
+  // (rather than flex-wrap, which reflows to however many 220px-wide cards
+  // fit) never shows 7-then-5 or any other uneven split.
+  const rows = [months.slice(0, 4), months.slice(4, 8), months.slice(8, 12)];
   return (
-    <ScrollView contentContainerClassName="flex-row flex-wrap gap-3 pb-10">
-      {months.map(m => (
-        <MiniMonth
-          key={m.toISOString()}
-          month={m}
-          occ={occ}
-          onSelectDay={onSelectDay}
-        />
+    <ScrollView contentContainerClassName="gap-3 pb-10">
+      {rows.map(row => (
+        <View key={row[0].toISOString()} className="flex-row gap-3">
+          {row.map(m => (
+            <MiniMonth
+              key={m.toISOString()}
+              month={m}
+              occ={occ}
+              onSelectDay={onSelectDay}
+            />
+          ))}
+        </View>
       ))}
     </ScrollView>
   );
@@ -1278,7 +1286,7 @@ function MiniMonth({
   const current = isSameMonth(month, new Date());
   return (
     <View
-      style={{ minWidth: 220, flexGrow: 1, flexBasis: 220 }}
+      style={{ flex: 1, minWidth: 0 }}
       className={`rounded-xl border bg-bg-card p-3 ${
         current ? 'border-accent/40' : 'border-border-main'
       }`}

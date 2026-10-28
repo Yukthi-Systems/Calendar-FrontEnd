@@ -4,7 +4,12 @@ import {
   STATUS_FROM_BACKEND,
   TAG_FROM_BACKEND,
 } from './constants';
-import type { ProjectView, ViewField, ViewType } from './types';
+import type {
+  ProjectView,
+  TaskQuickFilter,
+  ViewField,
+  ViewType,
+} from './types';
 import type {
   CreateTaskViewPayload,
   TaskViewDbDto,
@@ -21,8 +26,32 @@ const FIELD_KEYS: string[] = ['status', 'assignee', 'creator', 'owner', 'end'];
 const isViewType = (v: unknown): v is ViewType =>
   typeof v === 'string' && (VIEW_TYPES as string[]).includes(v);
 
-export function viewFromServer(dto: TaskViewDbDto, shared = false): ProjectView {
-  const ui = (dto.ui_info ?? {}) as { type?: unknown; fields?: unknown };
+// Loose shape check, not a deep enum validation — ui_info.filter is written
+// only by this app (see TableView's persistFilter), so this just guards
+// against a stale/missing shape, not a hostile payload.
+function isQuickFilterShape(v: unknown): v is TaskQuickFilter {
+  if (!v || typeof v !== 'object') {
+    return false;
+  }
+  const f = v as Record<string, unknown>;
+  return (
+    Array.isArray(f.statuses) &&
+    Array.isArray(f.tags) &&
+    Array.isArray(f.assigneeIds) &&
+    typeof f.dueFrom === 'string' &&
+    typeof f.dueTo === 'string'
+  );
+}
+
+export function viewFromServer(
+  dto: TaskViewDbDto,
+  shared = false,
+): ProjectView {
+  const ui = (dto.ui_info ?? {}) as {
+    type?: unknown;
+    fields?: unknown;
+    filter?: unknown;
+  };
   return {
     id: String(dto.view_id),
     ownerId: dto.owner_id,
@@ -31,16 +60,21 @@ export function viewFromServer(dto: TaskViewDbDto, shared = false): ProjectView 
     type: isViewType(ui.type) ? ui.type : 'table',
     description: dto.description || undefined,
     fields: Array.isArray(ui.fields)
-      ? (ui.fields as string[]).filter((f): f is ViewField => FIELD_KEYS.includes(f))
+      ? (ui.fields as string[]).filter((f): f is ViewField =>
+          FIELD_KEYS.includes(f),
+        )
       : undefined,
     statusFilter: dto.status_filter
       .map(s => STATUS_FROM_BACKEND[s])
       .filter(Boolean),
-    tagFilter: dto.task_tag_filter.map(t => TAG_FROM_BACKEND[t]).filter(Boolean),
+    tagFilter: dto.task_tag_filter
+      .map(t => TAG_FROM_BACKEND[t])
+      .filter(Boolean),
     showRecurring: dto.show_recurring,
     showComments: dto.show_comments,
     showSubtasks: dto.show_subtasks,
     showAssigned: dto.show_assigned,
+    quickFilter: isQuickFilterShape(ui.filter) ? ui.filter : undefined,
   };
 }
 
@@ -50,7 +84,11 @@ export function viewToCreatePayload(
   return {
     view_name: view.name,
     description: view.description ?? '',
-    ui_info: { type: view.type, fields: view.fields ?? null },
+    ui_info: {
+      type: view.type,
+      fields: view.fields ?? null,
+      filter: view.quickFilter ?? null,
+    },
     status_filter: (view.statusFilter ?? []).map(s => BACKEND_STATUS[s]),
     task_tag_filter: (view.tagFilter ?? []).map(t => BACKEND_TAG[t]),
     show_recurring: view.showRecurring ?? false,

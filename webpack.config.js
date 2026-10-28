@@ -1,6 +1,7 @@
 const path = require('path');
 const webpack = require('webpack');
 const HtmlWebpackPlugin = require('html-webpack-plugin');
+const CopyWebpackPlugin = require('copy-webpack-plugin');
 const Dotenv = require('dotenv-webpack');
 
 // Web target for the same App.tsx the native (Metro) build uses, via react-native-web.
@@ -93,6 +94,18 @@ module.exports = (_env, argv) => {
       }),
       new HtmlWebpackPlugin({
         template: path.resolve(__dirname, 'web/index.html'),
+      }),
+      // firebase-messaging-sw.js is a plain script the browser requests
+      // directly at the site root (background push delivery) — it's not
+      // part of the app bundle, so devServer's `static` option (dev only)
+      // isn't enough; this copies it into web-build/ for production too.
+      new CopyWebpackPlugin({
+        patterns: [
+          {
+            from: path.resolve(__dirname, 'web/firebase-messaging-sw.js'),
+            to: path.resolve(__dirname, 'web-build/firebase-messaging-sw.js'),
+          },
+        ],
       }),
       new Dotenv({
         path: path.resolve(__dirname, '.env'),

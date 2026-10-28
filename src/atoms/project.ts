@@ -1,5 +1,5 @@
 import { atom } from 'jotai';
-import type { Status, TaskTag, WorkItem } from '../data/types';
+import type { Status, TaskQuickFilter, TaskTag, WorkItem } from '../data/types';
 import type { RecurringTemplate } from '../data/recurringTemplate';
 
 // Views themselves come from the server (src/hooks/useViews.ts). This is only
@@ -41,22 +41,18 @@ export const tasksLoadingAtom = atom(false);
 // chips on top of whatever's loaded) — a client-side narrowing of itemsAtom,
 // separate from a view's own statusFilter/tagFilter (which gate what the
 // server returns at all, for everyone who opens the view). Empty array on any
-// field = no filter on that dimension. UI state only, never persisted.
-export interface TaskFilters {
-  statuses: Status[];
-  tags: TaskTag[];
-  assigneeIds: string[];
-  // 'yyyy-MM-dd', or '' for unset — filters on the task's Due date (item.end).
-  dueFrom: string;
-  dueTo: string;
-}
-export const taskFiltersAtom = atom<TaskFilters>({
+// field = no filter on that dimension. Mirrors the active view's own
+// `quickFilter` (see data/types.ts) — TableView loads it in on view change and
+// saves it back out, so this atom is just the live editing copy, not storage.
+export type TaskFilters = TaskQuickFilter;
+export const EMPTY_TASK_FILTERS: TaskFilters = {
   statuses: [],
   tags: [],
   assigneeIds: [],
   dueFrom: '',
   dueTo: '',
-});
+};
+export const taskFiltersAtom = atom<TaskFilters>(EMPTY_TASK_FILTERS);
 
 // Which item form is open: creating (optionally into a status column), editing one, or closed.
 export type ItemFormState =

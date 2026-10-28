@@ -41,7 +41,11 @@ export function CommentsSection({ taskId }: { taskId: string }) {
   const c = useThemeColors();
   const me = useAtomValue(currentUserIdAtom);
   const view = useActiveView();
-  const canLoad = !!view && isServerTaskId(taskId);
+  // Also gated server-side (task_view_permission.show_comments) — checking it
+  // here too means the request is never even sent when it's off, instead of
+  // firing and failing every time a task opens (e.g. right after creating a
+  // subtask, which selects and opens the new one).
+  const canLoad = !!view && !!view.showComments && isServerTaskId(taskId);
   const viewId = view ? Number(view.id) : 0;
   const numericTaskId = Number(taskId);
 
@@ -124,11 +128,13 @@ export function CommentsSection({ taskId }: { taskId: string }) {
               key={cm.comment_id}
               comment={cm}
               onEdit={content =>
-                editComment({ commentId: cm.comment_id, content }).catch(err => {
-                  toast.error('Couldn’t update the comment', {
-                    description: errorMessage(err, 'Please try again.'),
-                  });
-                })
+                editComment({ commentId: cm.comment_id, content }).catch(
+                  err => {
+                    toast.error('Couldn’t update the comment', {
+                      description: errorMessage(err, 'Please try again.'),
+                    });
+                  },
+                )
               }
               onDelete={async () => {
                 const ok = await confirm({
@@ -147,7 +153,10 @@ export function CommentsSection({ taskId }: { taskId: string }) {
                 }
               }}
               onReact={emoji =>
-                react({ commentId: cm.comment_id, patch: toggleReaction(cm, emoji, me) }).catch(err => {
+                react({
+                  commentId: cm.comment_id,
+                  patch: toggleReaction(cm, emoji, me),
+                }).catch(err => {
                   toast.error('Couldn’t react to the comment', {
                     description: errorMessage(err, 'Please try again.'),
                   });
@@ -228,7 +237,13 @@ function CommentRow({
 
         {editing ? (
           <View className="mt-1 gap-2">
-            <Input value={draft} onChangeText={setDraft} multiline minHeight={40} autoFocus />
+            <Input
+              value={draft}
+              onChangeText={setDraft}
+              multiline
+              minHeight={40}
+              autoFocus
+            />
             <View className="flex-row gap-2">
               <Button size="sm" variant="primary" onPress={save}>
                 Save
@@ -246,7 +261,9 @@ function CommentRow({
             </View>
           </View>
         ) : (
-          <Text className="mt-0.5 text-sm text-text-main">{comment.content}</Text>
+          <Text className="mt-0.5 text-sm text-text-main">
+            {comment.content}
+          </Text>
         )}
 
         <View className="mt-1.5 flex-row flex-wrap items-center gap-1.5">
@@ -300,7 +317,12 @@ function CommentRow({
                 size="sm"
                 onPress={() => setEditing(true)}
               />
-              <IconButton icon={Trash2} label="Delete comment" size="sm" onPress={onDelete} />
+              <IconButton
+                icon={Trash2}
+                label="Delete comment"
+                size="sm"
+                onPress={onDelete}
+              />
             </>
           ) : null}
         </View>

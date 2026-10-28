@@ -73,12 +73,21 @@ export interface WorkItem {
 
 // Optional per-field toggles for the Table and Calendar layouts (the task title
 // is always shown). Undefined means every field for that layout is shown.
-export type ViewField =
-  | 'status'
-  | 'assignee'
-  | 'creator'
-  | 'owner'
-  | 'end';
+export type ViewField = 'status' | 'assignee' | 'creator' | 'owner' | 'end';
+
+// TableView's own quick filter (status/tag/assignee/due-range chips) — a
+// client-side narrowing of whatever the view's statusFilter/tagFilter already
+// let through, not a second server-side gate. Saved onto the view itself (in
+// ui_info, alongside `type`/`fields` — see viewSync.ts) so it's there again
+// next time anyone opens this view, not just for the person who set it.
+export interface TaskQuickFilter {
+  statuses: Status[];
+  tags: TaskTag[];
+  assigneeIds: string[];
+  // 'yyyy-MM-dd', or '' for unset — filters on the task's Due date (item.end).
+  dueFrom: string;
+  dueTo: string;
+}
 
 export interface ProjectView {
   // The server's view_id (numeric string) — every view is a Tasks-Main-API row.
@@ -100,5 +109,6 @@ export interface ProjectView {
   showComments?: boolean;
   showSubtasks?: boolean;
   showAssigned?: boolean;
+  // Undefined = no filter saved for this view yet (or it was cleared).
+  quickFilter?: TaskQuickFilter;
 }
-
