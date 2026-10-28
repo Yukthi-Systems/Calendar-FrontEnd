@@ -9,11 +9,14 @@ export function LoginScreen({
   errorMsg,
   ssoPending,
   isLogoutParam,
+  sessionEnded = false,
   onLogin,
 }: {
   errorMsg: string | null;
   ssoPending: boolean;
   isLogoutParam: boolean;
+  // Signed out by the hourly SSO check, not by the user.
+  sessionEnded?: boolean;
   onLogin: () => void;
 }) {
   const c = useThemeColors();
@@ -39,6 +42,11 @@ export function LoginScreen({
           ) : ssoPending ? (
             <Callout kind="info" title="Waiting for SSO">
               Finish signing in in the window that just opened.
+            </Callout>
+          ) : sessionEnded ? (
+            <Callout kind="warning" title="Your session has ended">
+              You were signed out of Yukthi SSO, or your session expired. Sign in again to
+              continue.
             </Callout>
           ) : isLogoutParam ? (
             <Callout kind="info">You’ve been signed out.</Callout>

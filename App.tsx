@@ -107,6 +107,7 @@ function AppContent() {
           errorMsg={errorMsg}
           ssoPending={sso.ssoPending}
           isLogoutParam={sso.isLogoutParam}
+          sessionEnded={sso.sessionEnded}
           onLogin={sso.handleManualLogin}
         />
       </SafeAreaView>

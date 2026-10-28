@@ -1,9 +1,12 @@
 import { getDefaultStore } from 'jotai';
+import { AppState } from 'react-native';
 import {
   openSsoLoginAndAuthenticate,
   silentSsoAuthenticate,
   isReturningFromSsoRedirect,
   ssoLogout,
+  isSsoSessionActive,
+  fetchSsoUserInfo,
 } from './sso';
 import { apiLogout, fetchSession, refreshSession } from './auth';
 import { HttpError } from './apiClient';
@@ -13,6 +16,7 @@ import {
   sessionFlag,
   isAfterLogout,
   markLoggedOut,
+  markSessionEnded,
   clearAuthReturnState,
 } from './runtime';
 import type { AuthPayload, BackendUserInfo, SsoProfile } from './types';
@@ -141,6 +145,90 @@ const scheduleProactiveRefresh = () => {
     refreshAccessToken();
   }, delay);
 };
+
+// ── Hourly SSO check ────────────────────────────────────────────────────────
+// While signed in, ask SSO directly every hour (and on returning to the app once an
+// hour has passed — background tabs throttle timers):
+//  - validateSession: no SSO session any more (signed out elsewhere, expired,
+//    revoked) → end ours too and ask to sign in again. SSO unreachable → keep the
+//    session and try next time; a network blip is not a sign-out.
+//  - getUserInfo: fresh profile from SSO's database → name / phone / 2FA in the app.
+const SSO_CHECK_MS = 60 * 60_000;
+let ssoCheckTimer: ReturnType<typeof setInterval> | null = null;
+let lastSsoCheck = 0;
+let ssoCheckInFlight = false;
+
+const methodsFrom = (info: {
+  is_app_2fa_enabled: boolean;
+  is_sms_2fa_enabled: boolean;
+  is_email_2fa_enabled: boolean;
+}) =>
+  [
+    info.is_app_2fa_enabled && 'app',
+    info.is_sms_2fa_enabled && 'sms',
+    info.is_email_2fa_enabled && 'email',
+  ].filter((m): m is string => !!m);
+
+export const runSsoCheck = async () => {
+  if (!store.get(tokenAtom) || ssoCheckInFlight) {
+    return;
+  }
+  ssoCheckInFlight = true;
+  lastSsoCheck = Date.now();
+  try {
+    let active: boolean;
+    try {
+      active = await isSsoSessionActive();
+    } catch (err) {
+      console.warn('SSO session check failed; will retry at the next check', err);
+      return;
+    }
+    if (!active) {
+      clearSession();
+      markSessionEnded();
+      return;
+    }
+    const info = await fetchSsoUserInfo().catch(() => null);
+    const prev = store.get(userAtom);
+    if (info && prev) {
+      const profile: SsoProfile = {
+        first_name: info.first_name,
+        last_name: info.last_name ?? undefined,
+        phone: info.primary_phone || undefined,
+        two_factor_methods: methodsFrom(info),
+      };
+      store.set(userAtom, buildUser(prev, profile, prev));
+    }
+  } finally {
+    ssoCheckInFlight = false;
+  }
+};
+
+const startSsoChecks = () => {
+  if (ssoCheckTimer) {
+    return;
+  }
+  lastSsoCheck = Date.now();
+  ssoCheckTimer = setInterval(runSsoCheck, SSO_CHECK_MS);
+};
+
+const stopSsoChecks = () => {
+  if (ssoCheckTimer) {
+    clearInterval(ssoCheckTimer);
+    ssoCheckTimer = null;
+  }
+};
+
+// Runs whenever there's a session (sign-in, restored session) and stops with it.
+store.sub(tokenAtom, () => (store.get(tokenAtom) ? startSsoChecks() : stopSsoChecks()));
+if (store.get(tokenAtom)) {
+  startSsoChecks();
+}
+AppState.addEventListener('change', state => {
+  if (state === 'active' && store.get(tokenAtom) && Date.now() - lastSsoCheck >= SSO_CHECK_MS) {
+    runSsoCheck();
+  }
+});
 
 // Single-flight: concurrent 401s share one refresh.
 let refreshInFlight: Promise<string | null> | null = null;

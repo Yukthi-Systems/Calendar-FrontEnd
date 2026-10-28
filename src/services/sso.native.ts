@@ -5,6 +5,7 @@ import { ssoLogin } from './auth';
 import { extractSsoProfile, getSsoAppId, getSsoUrl } from './ssoProfile';
 import { requestSsoLogin } from './ssoLoginRequest';
 import type { SsoAuthResponse } from './types';
+import type { SSOUserInfo } from '@rjyspl/phoenix-sso-react';
 
 // iOS/Android: there are no popups or iframes, so the SSO login page runs in an
 // in-app WebView (SsoLoginModal.native.tsx) in `mode=popup`, with a shimmed
@@ -71,3 +72,24 @@ export const ssoLogout = async (): Promise<void> => {
       : CookieManager.clearAll());
   }
 };
+
+// Same two checks as the web SDK's validateSession / getUserInfo (which are plain
+// cookie-carrying GETs) — fetch here shares the SSO cookie (see syncWebViewCookies).
+// 401 = no session → null; any other failure throws ("couldn't check").
+const getWithSession = async <T>(path: string): Promise<T | null> => {
+  await syncWebViewCookies();
+  const res = await fetch(`${getSsoUrl()}${path}`, { method: 'GET', credentials: 'include' });
+  if (res.status === 401) {
+    return null;
+  }
+  if (!res.ok) {
+    throw new Error(`SSO request to ${path} failed with status ${res.status}`);
+  }
+  return (await res.json()) as T;
+};
+
+export const isSsoSessionActive = async (): Promise<boolean> =>
+  (await getWithSession('/auth/session')) !== null;
+
+export const fetchSsoUserInfo = (): Promise<SSOUserInfo | null> =>
+  getWithSession<SSOUserInfo>('/user/my-info');

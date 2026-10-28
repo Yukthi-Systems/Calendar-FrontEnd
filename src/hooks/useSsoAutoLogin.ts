@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { SSO_ENABLED } from '../config/features';
 import { AUTO_SSO_ATTEMPTED_KEY } from '../services/authStore';
-import { isAfterLogout, sessionFlag } from '../services/runtime';
+import { isAfterLogout, isSessionEnded, sessionFlag } from '../services/runtime';
 
 // Auto-starts SSO at most once per session (web: tab, native: app launch), so a
 // failure shows the login screen instead of looping.
@@ -66,5 +66,5 @@ export function useSsoAutoLogin({
     }
   };
 
-  return { ssoPending, isLogoutParam, handleManualLogin };
+  return { ssoPending, isLogoutParam, sessionEnded: isSessionEnded(), handleManualLogin };
 }

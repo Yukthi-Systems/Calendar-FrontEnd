@@ -23,6 +23,7 @@ export const sessionFlag = {
 };
 
 let loggedOut = false;
+let sessionEnded = false;
 
 export const isAfterLogout = (): boolean => loggedOut;
 
@@ -30,6 +31,15 @@ export const markLoggedOut = (): void => {
   loggedOut = true;
 };
 
+// Signed out because the SSO session ended (hourly check) — not by the user.
+export const markSessionEnded = (): void => {
+  loggedOut = true;
+  sessionEnded = true;
+};
+
+export const isSessionEnded = (): boolean => sessionEnded;
+
 export const clearAuthReturnState = (): void => {
   loggedOut = false;
+  sessionEnded = false;
 };

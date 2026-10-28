@@ -51,13 +51,23 @@ export const sessionFlag = {
   },
 };
 
+// Any `logout=` — signed out by the user (`true`) or because the SSO session ended
+// (`expired`); either way, don't sign straight back in automatically.
 export const isAfterLogout = (): boolean =>
-  new URLSearchParams(window.location.search).get('logout') === 'true';
+  new URLSearchParams(window.location.search).has('logout');
 
 // Full reload so no signed-in state survives.
 export const markLoggedOut = (): void => {
   window.location.search = 'logout=true';
 };
+
+// Signed out because the SSO session ended (hourly check) — not by the user.
+export const markSessionEnded = (): void => {
+  window.location.search = 'logout=expired';
+};
+
+export const isSessionEnded = (): boolean =>
+  new URLSearchParams(window.location.search).get('logout') === 'expired';
 
 // After sign-in: drops query params left over from the SSO round trip / logout.
 export const clearAuthReturnState = (): void => {

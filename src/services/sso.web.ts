@@ -4,6 +4,9 @@ import {
   checkSilentAuth,
   ssoLogout as sdkSsoLogout,
   PopupBlockedError,
+  validateSession,
+  getUserInfo,
+  type SSOUserInfo,
 } from '@rjyspl/phoenix-sso-react';
 import { ssoLogin } from './auth';
 import { extractSsoProfile, getSsoAppId, getSsoUrl } from './ssoProfile';
@@ -80,3 +83,12 @@ export const isReturningFromSsoRedirect = (): boolean =>
 
 // Clears the SSO session cookies.
 export const ssoLogout = (): Promise<void> => sdkSsoLogout(getSsoUrl());
+
+// Is the SSO session still alive? `false` = signed out at SSO (401, incl. a session
+// waiting on 2FA); throws when SSO can't be reached — "couldn't check", not "signed out".
+export const isSsoSessionActive = async (): Promise<boolean> =>
+  (await validateSession(getSsoUrl())) !== null;
+
+// The signed-in user's profile, fresh from SSO's database (not the cached session);
+// null when there's no session. Throws when SSO can't be reached.
+export const fetchSsoUserInfo = (): Promise<SSOUserInfo | null> => getUserInfo(getSsoUrl());
