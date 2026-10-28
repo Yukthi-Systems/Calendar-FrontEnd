@@ -3,7 +3,13 @@ import { useAtomValue } from 'jotai';
 import { tokenAtom } from '../atoms/auth';
 import { listTasks } from '../services/tasks';
 import { withAuthRetry } from '../services/authRetry';
-import { buildSearchFilter, taskFromServer, type TaskSearch } from '../data/taskSync';
+import {
+  buildSearchFilter,
+  searchWords,
+  taskFromServer,
+  titleHasWords,
+  type TaskSearch,
+} from '../data/taskSync';
 import { useDebouncedValue } from './useDebouncedValue';
 import type { ProjectView } from '../data/types';
 
@@ -49,7 +55,10 @@ export function useTaskSearch(view: ProjectView | undefined, search: TaskSearch,
   });
 
   return {
-    results: (query.data?.pages ?? []).flat().map(taskFromServer),
+    results: (query.data?.pages ?? [])
+      .flat()
+      .map(taskFromServer)
+      .filter(t => titleHasWords(t.title, searchWords(debounced.title))),
     // True while the typed filters haven't been sent yet, or the request is out.
     isSearching: query.isFetching || debouncedKey !== key,
     isLoading: query.isLoading,

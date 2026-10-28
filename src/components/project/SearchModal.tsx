@@ -10,7 +10,7 @@ import {
   selectedItemIdAtom,
 } from '../../atoms/project';
 import { allowedStatuses, allowedTags, tagInfo } from '../../data/constants';
-import { searchableTitle } from '../../data/taskSync';
+import { searchableTitle, searchWords } from '../../data/taskSync';
 import type { Status, TaskTag, WorkItem } from '../../data/types';
 import { useActiveView } from '../../hooks/useViews';
 import { useTaskSearch } from '../../hooks/useTaskSearch';
@@ -70,11 +70,20 @@ export function SearchModal() {
     `${from.date} ${from.time || '00:00'}` > `${to.date} ${to.time || '23:59'}`
       ? '“From” is after “To”.'
       : null;
+  // Nothing is listed until there's something to search for: a title, or a filter
+  // narrowed from its default (all statuses / tags on, no dates). Opening search
+  // shouldn't dump the whole view.
+  const hasQuery =
+    searchWords(title).length > 0 ||
+    !!from.date ||
+    !!to.date ||
+    statuses.length !== statusOptions.length ||
+    tags.length !== tagOptions.length;
   const { results, isSearching, isLoading, error, hasMore, loadMore, loadingMore } =
     useTaskSearch(
       view,
       { title, statuses, tags, from: from.date, to: to.date, fromTime: from.time, toTime: to.time },
-      open,
+      open && hasQuery,
     );
 
   const close = () => setOpen(false);
@@ -86,14 +95,16 @@ export function SearchModal() {
     setSelectedId(item.id);
   };
 
+  // Search matches words in any order, punctuation ignored — say so when it matters.
   const typed = title.trim();
-  const cleaned = searchableTitle(title);
-  const titleNote =
-    typed && cleaned !== typed
-      ? cleaned
-        ? `Searching for “${cleaned}” — only letters, numbers and spaces are matched.`
-        : 'Only letters, numbers and spaces are matched — showing every title.'
-      : null;
+  const words = searchWords(title);
+  const titleNote = !typed
+    ? null
+    : words.length === 0
+    ? 'Only letters and numbers are matched — showing every title.'
+    : words.length > 1 || searchableTitle(title) !== typed
+    ? `Titles containing ${words.map(w => `“${w}”`).join(' + ')} (punctuation is ignored).`
+    : null;
 
   const blocker =
     statuses.length === 0
@@ -198,6 +209,13 @@ export function SearchModal() {
             <EmptyState compact icon={SearchX} title={blocker} description="Adjust the filters above to search." />
           ) : !view ? (
             <EmptyState compact icon={Search} title="Open a view to search" description="Search looks through the current view’s tasks." />
+          ) : !hasQuery ? (
+            <EmptyState
+              compact
+              icon={Search}
+              title={`Search “${view.name}”`}
+              description="Type part of a title, or narrow by status, tag or dates."
+            />
           ) : error ? (
             <EmptyState
               compact

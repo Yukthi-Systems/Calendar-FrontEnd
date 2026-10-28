@@ -196,6 +196,22 @@ export const searchableTitle = (raw: string) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+// The typed words, lowercased, punctuation dropped: "V3 - ss" → ["v3", "ss"].
+export const searchWords = (raw: string) =>
+  searchableTitle(raw).toLowerCase().split(' ').filter(Boolean);
+
+// Title search matches words, not the exact phrase: the API only takes one string
+// of letters/digits/spaces, so "v3 - ss" sent as "v3 ss" would miss
+// "V3 - SSO …". The server gets the longest word (narrows the most); the hook then
+// keeps titles containing every typed word (titleHasWords).
+const serverTitle = (raw: string) =>
+  searchWords(raw).reduce((a, w) => (w.length > a.length ? w : a), '');
+
+export const titleHasWords = (title: string, words: string[]) => {
+  const t = searchableTitle(title).toLowerCase();
+  return words.every(w => t.includes(w));
+};
+
 export interface TaskSearch {
   title: string;
   statuses: Status[];
@@ -224,7 +240,7 @@ export function buildSearchFilter(
   cursor?: { cursor_start_at: string; cursor_task_id: number },
 ): TaskFilterQuery {
   const wide = wideTaskWindow();
-  const title = searchableTitle(s.title);
+  const title = serverTitle(s.title);
   return {
     ...(title ? { title_contains: title } : null),
     any_of_task_status: s.statuses.map(k => BACKEND_STATUS[k]),
