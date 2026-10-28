@@ -382,11 +382,16 @@ export function MultiSelectDropdown({
   onToggle,
   placeholder,
   onQueryChange,
+  trigger,
 }: {
   // Called as the search box changes, for pickers that also search remotely.
   onQueryChange?: (query: string) => void;
   // Sheet title, shown while the picker is open. Falls back to `placeholder`.
   label?: string;
+  // Replaces the default "chip row + chevron" trigger (e.g. an avatar list
+  // with its own "+" button) — called with the function that opens the sheet.
+  // The sheet/search/list themselves are unchanged either way.
+  trigger?: (open: () => void) => ReactNode;
   // `locked`: shown checked (if it is) but can't be toggled off — e.g. you can
   // never remove yourself as an assignee, only add yourself; or (once a task is
   // server-backed) nobody can be unassigned at all, since the API only has an
@@ -429,29 +434,37 @@ export function MultiSelectDropdown({
 
   return (
     <View>
-      <Press
-        feedback="none"
-        accessibilityRole="button"
-        onPress={() => setOpen(true)}
-        className="min-h-[36px] flex-row items-center gap-2 rounded-lg border border-border-main bg-bg-card px-3 py-1.5 hover:border-border-strong"
-      >
-        {selected.length > 0 ? (
-          <View className="flex-1 flex-row items-center gap-2">
-            <AssigneeAvatars ids={selected.map(o => o.id)} size={20} max={4} />
-            <Text
-              numberOfLines={1}
-              className="flex-1 text-base text-text-heading"
-            >
-              {selected.map(o => o.label).join(', ')}
+      {trigger ? (
+        trigger(() => setOpen(true))
+      ) : (
+        <Press
+          feedback="none"
+          accessibilityRole="button"
+          onPress={() => setOpen(true)}
+          className="min-h-[36px] flex-row items-center gap-2 rounded-lg border border-border-main bg-bg-card px-3 py-1.5 hover:border-border-strong"
+        >
+          {selected.length > 0 ? (
+            <View className="flex-1 flex-row items-center gap-2">
+              <AssigneeAvatars
+                ids={selected.map(o => o.id)}
+                size={20}
+                max={4}
+              />
+              <Text
+                numberOfLines={1}
+                className="flex-1 text-base text-text-heading"
+              >
+                {selected.map(o => o.label).join(', ')}
+              </Text>
+            </View>
+          ) : (
+            <Text className="flex-1 text-base text-text-subtle">
+              {placeholder}
             </Text>
-          </View>
-        ) : (
-          <Text className="flex-1 text-base text-text-subtle">
-            {placeholder}
-          </Text>
-        )}
-        <ChevronDown size={15} color={c.subtle} />
-      </Press>
+          )}
+          <ChevronDown size={15} color={c.subtle} />
+        </Press>
+      )}
 
       <Sheet visible={open} onClose={close} size="sm">
         <SheetHeader title={label ?? placeholder} onClose={close} />

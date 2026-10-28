@@ -17,7 +17,13 @@ import {
 } from '../ui';
 import { STATUSES, TAGS, VIEW_TYPES } from '../../data/constants';
 import { fieldOptionsFor } from '../../data/viewFields';
-import type { ProjectView, Status, TaskTag, ViewField, ViewType } from '../../data/types';
+import type {
+  ProjectView,
+  Status,
+  TaskTag,
+  ViewField,
+  ViewType,
+} from '../../data/types';
 
 const ALL_STATUSES = STATUSES.map(s => s.key);
 const ALL_TAGS = TAGS.map(t => t.key);
@@ -25,7 +31,9 @@ const ALL_TAGS = TAGS.map(t => t.key);
 const filterHint = (picked: number, total: number, one: string, many: string) =>
   picked === total
     ? `Every ${one} is shown.`
-    : `Only the selected ${picked === 1 ? one : many} ${picked === 1 ? 'is' : 'are'} shown.`;
+    : `Only the selected ${picked === 1 ? one : many} ${
+        picked === 1 ? 'is' : 'are'
+      } shown.`;
 
 export interface ViewDraft {
   name: string;
@@ -46,6 +54,7 @@ export interface ViewDraft {
 export function ViewModal({
   visible,
   view,
+  initial,
   onClose,
   onSave,
   onDelete,
@@ -53,6 +62,11 @@ export function ViewModal({
 }: {
   visible: boolean;
   view: ProjectView | null;
+  // Starting point for a brand-new view (e.g. the "Create your first view"
+  // quick picks) — a name and layout to open the form pre-filled with,
+  // instead of either creating it outright or starting from a blank form.
+  // Ignored once `view` is set (editing always starts from the view itself).
+  initial?: { name?: string; type?: ViewType };
   onClose: () => void;
   onSave: (draft: ViewDraft) => void;
   onDelete: () => void;
@@ -72,21 +86,23 @@ export function ViewModal({
 
   useEffect(() => {
     if (visible) {
-      const nextType = view?.type ?? 'table';
-      setName(view?.name ?? '');
+      const nextType = view?.type ?? initial?.type ?? 'table';
+      setName(view?.name ?? initial?.name ?? '');
       setDescription(view?.description ?? '');
       setType(nextType);
       setFields(view?.fields ?? allFieldKeys(nextType));
       // The server stores "everything" as an empty filter; the form shows it as
       // every chip checked, which is what it means.
-      setStatusFilter(view?.statusFilter?.length ? view.statusFilter : ALL_STATUSES);
+      setStatusFilter(
+        view?.statusFilter?.length ? view.statusFilter : ALL_STATUSES,
+      );
       setTagFilter(view?.tagFilter?.length ? view.tagFilter : ALL_TAGS);
       setShowRecurring(view?.showRecurring ?? false);
       setShowComments(view?.showComments ?? false);
       setShowSubtasks(view?.showSubtasks ?? true);
       setShowAssigned(view?.showAssigned ?? false);
     }
-  }, [visible, view]);
+  }, [visible, view, initial]);
 
   const options = fieldOptionsFor(type);
   const trimmed = name.trim();
@@ -124,21 +140,36 @@ export function ViewModal({
     on: boolean;
     set: (v: boolean) => void;
   }[] = [
-    { key: 'recurring', label: 'Recurring tasks', on: showRecurring, set: setShowRecurring },
+    {
+      key: 'recurring',
+      label: 'Recurring tasks',
+      on: showRecurring,
+      set: setShowRecurring,
+    },
     {
       key: 'subtasks',
       label: 'Subtasks',
-      description: 'Off: subtasks can’t be listed, added or edited in this view.',
+      description:
+        'Off: subtasks can’t be listed, added or edited in this view.',
       on: showSubtasks,
       set: setShowSubtasks,
     },
-    { key: 'assigned', label: 'Tasks assigned to me', on: showAssigned, set: setShowAssigned },
-    { key: 'comments', label: 'Comments', on: showComments, set: setShowComments },
+    {
+      key: 'assigned',
+      label: 'Tasks assigned to me',
+      on: showAssigned,
+      set: setShowAssigned,
+    },
+    {
+      key: 'comments',
+      label: 'Comments',
+      on: showComments,
+      set: setShowComments,
+    },
   ];
 
   const save = () => {
-    const allSelected =
-      !!options && options.every(o => fields.includes(o.key));
+    const allSelected = !!options && options.every(o => fields.includes(o.key));
     onSave({
       name: trimmed,
       type,
@@ -151,7 +182,9 @@ export function ViewModal({
           ? ALL_STATUSES.filter(k => statusFilter.includes(k))
           : undefined,
       tagFilter:
-        tagFilter.length < ALL_TAGS.length ? ALL_TAGS.filter(k => tagFilter.includes(k)) : undefined,
+        tagFilter.length < ALL_TAGS.length
+          ? ALL_TAGS.filter(k => tagFilter.includes(k))
+          : undefined,
       showRecurring,
       showComments,
       showSubtasks,
@@ -164,7 +197,9 @@ export function ViewModal({
       <SheetHeader
         title={view ? 'Edit view' : 'New view'}
         description={
-          view ? undefined : 'A saved layout of your tasks, with its own filters.'
+          view
+            ? undefined
+            : 'A saved layout of your tasks, with its own filters.'
         }
         onClose={onClose}
       />
@@ -209,7 +244,9 @@ export function ViewModal({
                 >
                   <t.icon size={18} color={active ? c.accent : c.text} />
                   <View>
-                    <Text className="text-sm font-medium text-text-heading">{t.label}</Text>
+                    <Text className="text-sm font-medium text-text-heading">
+                      {t.label}
+                    </Text>
                     <Text className="text-xs text-text-main">{t.blurb}</Text>
                   </View>
                 </Press>
@@ -236,8 +273,15 @@ export function ViewModal({
 
         <Field
           label="Status filter"
-          hint={filterHint(statusFilter.length, ALL_STATUSES.length, 'status', 'statuses')}
-          error={statusFilter.length === 0 ? 'Pick at least one status.' : undefined}
+          hint={filterHint(
+            statusFilter.length,
+            ALL_STATUSES.length,
+            'status',
+            'statuses',
+          )}
+          error={
+            statusFilter.length === 0 ? 'Pick at least one status.' : undefined
+          }
         >
           <View className="flex-row flex-wrap gap-1.5">
             {STATUSES.map(st => (
@@ -275,7 +319,10 @@ export function ViewModal({
         <Field label="Also show" className="mb-0">
           <View className="rounded-xl border border-border-main px-3 py-1">
             {visibilityToggles.map((t, i) => (
-              <View key={t.key} className={i > 0 ? 'border-t border-border-main' : ''}>
+              <View
+                key={t.key}
+                className={i > 0 ? 'border-t border-border-main' : ''}
+              >
                 <Switch
                   value={t.on}
                   onChange={t.set}
@@ -292,11 +339,19 @@ export function ViewModal({
         left={
           view ? (
             <View className="flex-row items-center gap-1">
-              <Button variant="destructive-ghost" icon={Trash2} onPress={onDelete}>
+              <Button
+                variant="destructive-ghost"
+                icon={Trash2}
+                onPress={onDelete}
+              >
                 Delete
               </Button>
               {!view.shared ? (
-                <IconButton icon={Share2} label={`Share ${view.name}`} onPress={() => onShare(view)} />
+                <IconButton
+                  icon={Share2}
+                  label={`Share ${view.name}`}
+                  onPress={() => onShare(view)}
+                />
               ) : null}
             </View>
           ) : null

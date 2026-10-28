@@ -92,6 +92,15 @@ export function ItemFormModal() {
 
   // Only what the active view's filters allow — anything else the server refuses.
   const activeView = useActiveView();
+
+  // The task's owner/creator already have full access on their own, so being
+  // an assignee too would be redundant — keep them out of the picker rather
+  // than let someone add a no-op assignee. Editing: read straight off the
+  // task. Creating: the owner will be the view's owner (same one the server
+  // assigns a new task to); the creator will be CURRENT_USER_ID, already
+  // excluded below.
+  const taskOwnerId = editing?.ownerId ?? activeView?.ownerId;
+  const taskCreatorId = editing?.createdById;
   const statusOptions = allowedStatuses(activeView?.statusFilter);
   const tagOptions = allowedTags(activeView?.tagFilter);
 
@@ -486,6 +495,7 @@ export function ItemFormModal() {
             label="Assignees"
             options={pickablePeople
               .filter(m => !isServerBacked || m.id !== CURRENT_USER_ID)
+              .filter(m => m.id !== taskOwnerId && m.id !== taskCreatorId)
               .map(m => ({
                 id: m.id,
                 label: m.name,

@@ -15,6 +15,7 @@ import {
   selectedItemIdAtom,
   tasksLoadingAtom,
 } from '../../atoms/project';
+import { currentUserIdAtom } from '../../atoms/members';
 import { allowedStatuses, statusInfo, tagInfo } from '../../data/constants';
 import { errorMessage, toast } from '../../atoms/feedback';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
@@ -36,7 +37,10 @@ type Rect = { x: number; y: number; width: number; height: number };
 const measure = (v: ViewInstance | null): Promise<Rect | null> =>
   new Promise(resolve =>
     v
-      ? v.measureInWindow((x: number, y: number, width: number, height: number) => resolve({ x, y, width, height }))
+      ? v.measureInWindow(
+          (x: number, y: number, width: number, height: number) =>
+            resolve({ x, y, width, height }),
+        )
       : resolve(null),
   );
 
@@ -60,6 +64,13 @@ export function KanbanView({ view }: { view: ProjectView }) {
   const { editItem } = useTaskMutations();
   // Shared view: add / move only if the owner allowed it.
   const { canCreate, canEdit } = useViewAccess(view);
+  const CURRENT_USER_ID = useAtomValue(currentUserIdAtom);
+  // canEdit is the view's own coarse grant — the server also requires you to
+  // actually be the card's own task owner or creator (an assignee dragging a
+  // card they're only assigned to would be refused), so check both.
+  const canMove = (item: WorkItem) =>
+    canEdit &&
+    (item.ownerId === CURRENT_USER_ID || item.createdById === CURRENT_USER_ID);
   // Top-level tasks only — subtasks load lazily (useTasksSync's header comment),
   // so showing them as their own cards would make the board depend on whatever
   // happened to get fetched elsewhere.
@@ -67,7 +78,11 @@ export function KanbanView({ view }: { view: ProjectView }) {
 
   const move = (item: WorkItem, status: Status) =>
     editItem({ ...item, status })
-      .then(() => toast.success(`Moved to ${statusInfo(status).label}`, { duration: 2200 }))
+      .then(() =>
+        toast.success(`Moved to ${statusInfo(status).label}`, {
+          duration: 2200,
+        }),
+      )
       .catch(err =>
         toast.error('Couldn’t move the task', {
           description: errorMessage(err, 'Please try again.'),
@@ -84,7 +99,10 @@ export function KanbanView({ view }: { view: ProjectView }) {
     columns: { key: Status; rect: Rect }[];
     grab: { dx: number; dy: number };
   } | null>(null);
-  const [dragging, setDragging] = useState<{ item: WorkItem; width: number } | null>(null);
+  const [dragging, setDragging] = useState<{
+    item: WorkItem;
+    width: number;
+  } | null>(null);
   const [over, setOver] = useState<Status | null>(null);
   const overRef = useRef<Status | null>(null);
   // A drag ends with a pointer-up over the card — don't let that also open it.
@@ -106,7 +124,12 @@ export function KanbanView({ view }: { view: ProjectView }) {
     }
   };
 
-  const onDragStart = async (item: WorkItem, card: Rect, pageX: number, pageY: number) => {
+  const onDragStart = async (
+    item: WorkItem,
+    card: Rect,
+    pageX: number,
+    pageY: number,
+  ) => {
     const [root, ...cols] = await Promise.all([
       measure(rootRef.current),
       ...COLUMNS.map(c => measure(columnRefs.current.get(c.key) ?? null)),
@@ -116,7 +139,9 @@ export function KanbanView({ view }: { view: ProjectView }) {
     }
     geo.current = {
       root,
-      columns: COLUMNS.flatMap((c, i) => (cols[i] ? [{ key: c.key, rect: cols[i]! }] : [])),
+      columns: COLUMNS.flatMap((c, i) =>
+        cols[i] ? [{ key: c.key, rect: cols[i]! }] : [],
+      ),
       grab: { dx: pageX - card.x, dy: pageY - card.y },
     };
     ghost.setValue({ x: card.x - root.x, y: card.y - root.y });
@@ -129,7 +154,10 @@ export function KanbanView({ view }: { view: ProjectView }) {
     if (!g) {
       return;
     }
-    ghost.setValue({ x: pageX - g.grab.dx - g.root.x, y: pageY - g.grab.dy - g.root.y });
+    ghost.setValue({
+      x: pageX - g.grab.dx - g.root.x,
+      y: pageY - g.grab.dy - g.root.y,
+    });
     setOverColumn(columnAt(pageX, pageY));
   };
 
@@ -162,7 +190,8 @@ export function KanbanView({ view }: { view: ProjectView }) {
       >
         {COLUMNS.map(col => {
           const list = rootItems.filter(i => i.status === col.key);
-          const target = !!dragging && over === col.key && dragging.item.status !== col.key;
+          const target =
+            !!dragging && over === col.key && dragging.item.status !== col.key;
           return (
             <View
               key={col.key}
@@ -170,16 +199,27 @@ export function KanbanView({ view }: { view: ProjectView }) {
                 columnRefs.current.set(col.key, v);
               }}
               collapsable={false}
-              style={{ flexGrow: 1, flexBasis: 0, minWidth: 280, maxWidth: 380 }}
+              style={{
+                flexGrow: 1,
+                flexBasis: 0,
+                minWidth: 280,
+                maxWidth: 380,
+              }}
               className={`overflow-hidden rounded-xl border ${
-                target ? 'border-accent bg-accent-soft' : 'border-border-main bg-muted/60'
+                target
+                  ? 'border-accent bg-accent-soft'
+                  : 'border-border-main bg-muted/60'
               }`}
             >
               <View className="h-11 flex-row items-center gap-2 pl-3 pr-1.5">
                 <StatusIcon status={col.key} size={15} />
-                <Text className="text-sm font-semibold text-text-heading">{col.label}</Text>
+                <Text className="text-sm font-semibold text-text-heading">
+                  {col.label}
+                </Text>
                 {list.length > 0 ? (
-                  <Text className="text-sm text-text-subtle">{list.length}</Text>
+                  <Text className="text-sm text-text-subtle">
+                    {list.length}
+                  </Text>
                 ) : null}
                 <View className="flex-1" />
                 {canCreate ? (
@@ -196,7 +236,10 @@ export function KanbanView({ view }: { view: ProjectView }) {
               {loading && items.length === 0 ? (
                 <View className="gap-2 px-2">
                   {[0, 1].map(n => (
-                    <View key={n} className="gap-2 rounded-lg border border-border-main bg-bg-card p-3">
+                    <View
+                      key={n}
+                      className="gap-2 rounded-lg border border-border-main bg-bg-card p-3"
+                    >
                       <Skeleton className="h-3 w-10 rounded" />
                       <Skeleton className="h-3.5 w-48 rounded" />
                       <Skeleton className="h-5 w-16 rounded-full" />
@@ -207,14 +250,18 @@ export function KanbanView({ view }: { view: ProjectView }) {
                 <ScrollView
                   scrollEnabled={!dragging}
                   className="flex-1"
-                  contentContainerStyle={{ gap: 8, paddingHorizontal: 8, paddingBottom: 80 }}
+                  contentContainerStyle={{
+                    gap: 8,
+                    paddingHorizontal: 8,
+                    paddingBottom: 80,
+                  }}
                 >
                   {list.map(item => (
                     <DraggableCard
                       key={item.id}
                       item={item}
                       items={items}
-                      enabled={canEdit}
+                      enabled={canMove(item)}
                       lifted={dragging?.item.id === item.id}
                       onOpen={() => open(item.id)}
                       onDragStart={onDragStart}
@@ -234,7 +281,9 @@ export function KanbanView({ view }: { view: ProjectView }) {
                         feedback="subtle"
                         accessibilityRole="button"
                         accessibilityLabel={`Add task to ${col.label}`}
-                        onPress={() => setForm({ mode: 'new', status: col.key })}
+                        onPress={() =>
+                          setForm({ mode: 'new', status: col.key })
+                        }
                         className="group h-20 items-center justify-center rounded-lg border border-dashed border-border-strong hover:bg-bg-card"
                       >
                         <Text className="text-xs text-text-subtle group-hover:text-text-main">
@@ -243,7 +292,9 @@ export function KanbanView({ view }: { view: ProjectView }) {
                       </Press>
                     ) : (
                       <View className="h-20 items-center justify-center rounded-lg border border-dashed border-border-main">
-                        <Text className="text-xs text-text-subtle">No tasks</Text>
+                        <Text className="text-xs text-text-subtle">
+                          No tasks
+                        </Text>
                       </View>
                     )
                   ) : null}
@@ -268,7 +319,12 @@ export function KanbanView({ view }: { view: ProjectView }) {
           ]}
         >
           <View style={GHOST_SHADOW} className="rounded-lg">
-            <KanbanCard item={dragging.item} items={items} lifted={false} ghost />
+            <KanbanCard
+              item={dragging.item}
+              items={items}
+              lifted={false}
+              ghost
+            />
           </View>
         </Animated.View>
       ) : null}
@@ -295,7 +351,12 @@ function DraggableCard({
   enabled: boolean;
   lifted: boolean;
   onOpen: () => void;
-  onDragStart: (item: WorkItem, card: Rect, pageX: number, pageY: number) => void;
+  onDragStart: (
+    item: WorkItem,
+    card: Rect,
+    pageX: number,
+    pageY: number,
+  ) => void;
   onDragMove: (pageX: number, pageY: number) => void;
   onDragEnd: (drop: boolean) => void;
 }) {
@@ -317,11 +378,18 @@ function DraggableCard({
         onPanResponderGrant: (e, g) => {
           const startX = e.nativeEvent.pageX - g.dx;
           const startY = e.nativeEvent.pageY - g.dy;
-          ref.current?.measureInWindow((x: number, y: number, width: number, height: number) =>
-            latest.current.onDragStart(latest.current.item, { x, y, width, height }, startX, startY),
+          ref.current?.measureInWindow(
+            (x: number, y: number, width: number, height: number) =>
+              latest.current.onDragStart(
+                latest.current.item,
+                { x, y, width, height },
+                startX,
+                startY,
+              ),
           );
         },
-        onPanResponderMove: e => latest.current.onDragMove(e.nativeEvent.pageX, e.nativeEvent.pageY),
+        onPanResponderMove: e =>
+          latest.current.onDragMove(e.nativeEvent.pageX, e.nativeEvent.pageY),
         onPanResponderRelease: () => {
           armed.current = false;
           latest.current.onDragEnd(true);
@@ -390,11 +458,16 @@ function KanbanCard({
       delayLongPress={250}
       style={lifted ? { opacity: 0.35 } : undefined}
       className={`select-none gap-2 rounded-lg border bg-bg-card p-3 ${
-        ghost ? 'border-accent' : 'border-border-main hover:border-border-strong'
+        ghost
+          ? 'border-accent'
+          : 'border-border-main hover:border-border-strong'
       }`}
     >
       <View className="flex-row items-start gap-1.5">
-        <Text numberOfLines={3} className="flex-1 text-sm font-medium text-text-heading">
+        <Text
+          numberOfLines={3}
+          className="flex-1 text-sm font-medium text-text-heading"
+        >
           {item.title}
         </Text>
         {item.recurrence ? (
@@ -411,7 +484,12 @@ function KanbanCard({
           </Text>
         </View>
       ) : null}
-      <Badge label={tagInfo(item.tag).label} color={tagInfo(item.tag).color} size="sm" dot />
+      <Badge
+        label={tagInfo(item.tag).label}
+        color={tagInfo(item.tag).color}
+        size="sm"
+        dot
+      />
       <View className="mt-0.5 flex-row items-center gap-2.5">
         <AssigneeAvatars ids={item.assigneeIds} size={20} />
         <DueDate item={item} className="text-xs" />

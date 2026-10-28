@@ -374,26 +374,32 @@ export function TableView({ view }: { view: ProjectView }) {
 
   // The filter is session-wide (taskFiltersAtom), not per view, so a status/tag
   // picked while looking at one view could silently keep filtering another one
-  // that doesn't even offer it — drop whichever of the current selection this
-  // view's own statusFilter/tagFilter no longer allows.
+  // that doesn't even offer it, or just surprise someone who switched views and
+  // didn't expect the old chips to still be applied — reset on every view change.
   useEffect(() => {
-    const okStatuses = allowedStatuses(view.statusFilter).map(s => s.key);
-    const okTags = allowedTags(view.tagFilter).map(t => t.key);
-    setFilters(f => {
-      const statuses = f.statuses.filter(s => okStatuses.includes(s));
-      const tags = f.tags.filter(t => okTags.includes(t));
-      return statuses.length === f.statuses.length &&
-        tags.length === f.tags.length
-        ? f
-        : { ...f, statuses, tags };
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when this view's own filter allow-lists change
-  }, [view.statusFilter, view.tagFilter]);
+    clearFilters();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when the active view changes
+  }, [view.id]);
 
   const sorted = [...displayItems].sort((a, b) => {
     const x = sortValue(a, sort.key, people);
     const y = sortValue(b, sort.key, people);
-    return (x < y ? -1 : x > y ? 1 : 0) * sort.dir;
+    // Title/assignee/creator/owner are strings — plain < / > is case-sensitive
+    // (every uppercase letter sorts before any lowercase one in ASCII), so
+    // "Zebra" would land before "apple". localeCompare's base sensitivity
+    // ignores case (and accents); numeric also orders embedded numbers
+    // naturally ("Task 2" before "Task 10"). Status/Due stay as plain
+    // number/string compares — status is already a rank, and Due's
+    // 'yyyy-MM-dd HH:mm' string sorts correctly either way.
+    const cmp =
+      typeof x === 'string' && typeof y === 'string'
+        ? x.localeCompare(y, undefined, { sensitivity: 'base', numeric: true })
+        : x < y
+        ? -1
+        : x > y
+        ? 1
+        : 0;
+    return cmp * sort.dir;
   });
   // Views with show_subtasks off can't list subtasks (server rule) — nothing to expand.
   const rows = buildRows(

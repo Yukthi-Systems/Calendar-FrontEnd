@@ -4,7 +4,10 @@ import { tokenAtom } from '../atoms/auth';
 import { itemsAtom } from '../atoms/project';
 import { useActiveView } from './useViews';
 import { createTask, deleteTask, updateTask } from '../services/tasks';
-import { assignUserToTask, removeUserFromTask } from '../services/taskAssignees';
+import {
+  assignUserToTask,
+  removeUserFromTask,
+} from '../services/taskAssignees';
 import { drainPages, rootTasksKey } from './useTasksSync';
 import {
   isServerTaskId,
@@ -51,16 +54,22 @@ export function useTaskMutations() {
     return 'Open a view first — tasks are saved through a view.';
   };
   const ensure = (taskId?: string) => {
-    if (!canMutate || viewId === undefined || (taskId && !isServerTaskId(taskId))) {
+    if (
+      !canMutate ||
+      viewId === undefined ||
+      (taskId && !isServerTaskId(taskId))
+    ) {
       throw new Error(reasonUnavailable());
     }
     return viewId;
   };
 
   const write = useMutation({
-    mutationFn: (fn: (t: string) => Promise<unknown>) => withAuthRetry(token, fn),
+    mutationFn: (fn: (t: string) => Promise<unknown>) =>
+      withAuthRetry(token, fn),
   });
-  const call = <T,>(fn: (t: string) => Promise<T>) => write.mutateAsync(fn) as Promise<T>;
+  const call = <T>(fn: (t: string) => Promise<T>) =>
+    write.mutateAsync(fn) as Promise<T>;
 
   // ── Re-reading from the server ──────────────────────────────────────────
 
@@ -68,7 +77,8 @@ export function useTaskMutations() {
   const refreshRoots = (): Promise<TaskInfoDto[]> =>
     queryClient.fetchQuery({
       queryKey: rootTasksKey(activeView),
-      queryFn: () => withAuthRetry(token, t => drainPages(t, viewId!, activeView!)),
+      queryFn: () =>
+        withAuthRetry(token, t => drainPages(t, viewId!, activeView!)),
       staleTime: 0,
     });
 
@@ -102,17 +112,21 @@ export function useTaskMutations() {
     }
   };
 
-  const applyAssignees = async (vid: number, taskId: number, changes?: AssigneeChanges) => {
+  const applyAssignees = async (
+    vid: number,
+    taskId: number,
+    changes?: AssigneeChanges,
+  ) => {
     const failed: string[] = [];
     for (const id of changes?.add ?? []) {
-      await call(t => assignUserToTask(t, vid, { task_id: taskId, assignee_id: id })).catch(
-        () => failed.push(id),
-      );
+      await call(t =>
+        assignUserToTask(t, vid, { task_id: taskId, assignee_id: id }),
+      ).catch(() => failed.push(id));
     }
     for (const id of changes?.remove ?? []) {
-      await call(t => removeUserFromTask(t, vid, { task_id: taskId, assignee_id: id })).catch(
-        () => failed.push(id),
-      );
+      await call(t =>
+        removeUserFromTask(t, vid, { task_id: taskId, assignee_id: id }),
+      ).catch(() => failed.push(id));
     }
     return failed;
   };
@@ -124,13 +138,18 @@ export function useTaskMutations() {
   // re-read by (parent, title) — unique per owner server-side. Returns the new
   // id and any assignees the server refused.
   const addItem = async (
-    draft: Omit<WorkItem, 'id' | 'createdById' | 'ownerId' | 'totalSubtasks' | 'assigneeIds'>,
+    draft: Omit<
+      WorkItem,
+      'id' | 'createdById' | 'ownerId' | 'totalSubtasks' | 'assigneeIds'
+    >,
     changes?: AssigneeChanges,
   ): Promise<{ id: string; failedAssignees: string[] }> => {
     const vid = ensure();
     await call(t => createTask(t, vid, taskToCreatePayload(draft)));
     const level = draft.parentId
-      ? await withAuthRetry(token, t => drainPages(t, vid, activeView!, Number(draft.parentId)))
+      ? await withAuthRetry(token, t =>
+          drainPages(t, vid, activeView!, Number(draft.parentId)),
+        )
       : await refreshRoots();
     const created = level.find(r => r.title === draft.title);
     if (!created) {
@@ -138,7 +157,8 @@ export function useTaskMutations() {
         'The task was created, but the server list doesn’t show it yet — it will appear after the next refresh.',
       );
     }
-    const assigning = (changes?.add.length ?? 0) + (changes?.remove.length ?? 0) > 0;
+    const assigning =
+      (changes?.add.length ?? 0) + (changes?.remove.length ?? 0) > 0;
     const failedAssignees = await applyAssignees(vid, created.task_id, changes);
     if (assigning) {
       // Assignments changed the level just read — read it again.
@@ -169,11 +189,32 @@ export function useTaskMutations() {
     return { failedAssignees };
   };
 
+  // Assign-only: applies assignee changes without touching the task's own
+  // fields. The server's assign/remove endpoints are separate from
+  // updateTask and sit behind a looser bar (view-level edit access, not
+  // owner/creator-only the way editing the task's own fields is — see
+  // Tasks-Main-API's task_assignees service) — going through editItem here
+  // would send a redundant updateTask PATCH that a plain assignee isn't
+  // allowed to make, 403-ing a perfectly valid assignment. Used by the quick
+  // "add assignee" control on a task's detail view.
+  const assignItem = async (
+    item: WorkItem,
+    changes: AssigneeChanges,
+  ): Promise<{ failedAssignees: string[] }> => {
+    const vid = ensure(item.id);
+    const failedAssignees = await applyAssignees(vid, Number(item.id), changes);
+    await refreshLevelOf(item.parentId);
+    return { failedAssignees };
+  };
+
   // Delete (cascades to subtasks server-side), re-read.
   const removeItem = async (item: WorkItem): Promise<void> => {
     const vid = ensure(item.id);
     await call(t => deleteTask(t, vid, Number(item.id)));
-    const gone = new Set([item.id, ...descendantsOf(items, item.id).map(d => d.id)]);
+    const gone = new Set([
+      item.id,
+      ...descendantsOf(items, item.id).map(d => d.id),
+    ]);
     setItems(prev => prev.filter(i => !gone.has(i.id)));
     await refreshLevelOf(item.parentId);
   };
@@ -196,6 +237,7 @@ export function useTaskMutations() {
   return {
     addItem,
     editItem,
+    assignItem,
     removeItem,
     loadChildren,
     loadSubtree,

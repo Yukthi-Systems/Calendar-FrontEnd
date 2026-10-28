@@ -78,7 +78,11 @@ import { ViewModal } from './ViewModal';
 import { ShareViewModal } from './ShareViewModal';
 import { ViewMenuModal } from './ViewMenuModal';
 
-const MODE_OPTIONS: { key: ContentMode; label: string; icon: typeof ListTodo }[] = [
+const MODE_OPTIONS: {
+  key: ContentMode;
+  label: string;
+  icon: typeof ListTodo;
+}[] = [
   { key: 'tasks', label: 'Tasks', icon: ListTodo },
   { key: 'recurring', label: 'Recurring', icon: Repeat },
 ];
@@ -107,7 +111,8 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   const profile = useMyProfile();
   const { width } = useWindowDimensions();
   const c = useThemeColors();
-  const { views, myViews, sharedViews, ready, isLoading, error, refetch } = useViewList();
+  const { views, myViews, sharedViews, ready, isLoading, error, refetch } =
+    useViewList();
   const setActiveId = useSetAtom(activeViewIdAtom);
   const { createView, updateView, deleteView } = useViewMutations();
   useViewUrlSync();
@@ -115,6 +120,19 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   const [modalView, setModalView] = useState<ProjectView | null | undefined>(
     undefined,
   );
+  // A name/layout to pre-fill the "New view" form with, for the "Create your
+  // first view" quick picks below — opens the same modal instead of creating
+  // the view outright, so tags/status/etc are still up to the user.
+  const [newViewHint, setNewViewHint] = useState<
+    { name?: string; type?: 'table' | 'calendar' } | undefined
+  >(undefined);
+  const openNewView = (hint?: {
+    name?: string;
+    type?: 'table' | 'calendar';
+  }) => {
+    setNewViewHint(hint);
+    setModalView(null);
+  };
   const [shareView, setShareView] = useState<ProjectView | null>(null);
   // Tasks (the view's own table/kanban/roadmap/calendar) or that view's library
   // of recurring templates (/recurring) — both scoped to whichever view the
@@ -124,8 +142,12 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   // Which view's "⋯" action sheet (Share/Edit/Delete) is open, if any.
   const [menuView, setMenuView] = useState<ProjectView | null>(null);
   // The ⋯ button the menu drops down from; null (phone long-press) = bottom sheet.
-  const [menuAnchor, setMenuAnchor] = useState<RefObject<ViewInstance | null> | null>(null);
-  const openMenu = (v: ProjectView, anchor: RefObject<ViewInstance | null> | null = null) => {
+  const [menuAnchor, setMenuAnchor] =
+    useState<RefObject<ViewInstance | null> | null>(null);
+  const openMenu = (
+    v: ProjectView,
+    anchor: RefObject<ViewInstance | null> | null = null,
+  ) => {
     setMenuAnchor(anchor);
     setMenuView(v);
   };
@@ -145,7 +167,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
     n: () => contentMode === 'tasks' && ActiveView && canCreate && newTask(),
     r: refresh,
     '/': () => contentMode === 'tasks' && openSearch(),
-    v: () => setModalView(null),
+    v: () => openNewView(),
   });
 
   // Every write goes to the server; the list on screen is refetched from it.
@@ -166,6 +188,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   const save = async (draft: ViewDraftFields) => {
     const editing = modalView;
     setModalView(undefined);
+    setNewViewHint(undefined);
     if (!editing) {
       await create(draft);
       return;
@@ -253,8 +276,14 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
             </View>
           ) : null}
         </Press>
-        <View className={`absolute right-1 ${isActive ? '' : 'reveal-on-hover'}`}>
-          <MenuButton label={`Options for ${v.name}`} size="sm" onOpen={ref => openMenu(v, ref)} />
+        <View
+          className={`absolute right-1 ${isActive ? '' : 'reveal-on-hover'}`}
+        >
+          <MenuButton
+            label={`Options for ${v.name}`}
+            size="sm"
+            onOpen={ref => openMenu(v, ref)}
+          />
         </View>
       </View>
     );
@@ -263,7 +292,10 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   // The view switcher's dropdown content — the list that used to be the whole
   // rail, now tucked behind the trigger button instead of always on screen.
   const viewPickerList = (
-    <ScrollView className="max-h-[360px]" contentContainerClassName="gap-px p-1.5">
+    <ScrollView
+      className="max-h-[360px]"
+      contentContainerClassName="gap-px p-1.5"
+    >
       {isLoading ? (
         <View className="gap-2 px-1.5 py-1">
           <Skeleton className="h-6 w-40 rounded-md" />
@@ -285,7 +317,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
           accessibilityRole="button"
           onPress={() => {
             setViewPickerOpen(false);
-            setModalView(null);
+            openNewView();
           }}
           className="h-8 flex-row items-center gap-2.5 rounded-lg pl-2.5"
         >
@@ -304,11 +336,18 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
     <View className="w-[248px] border-r border-border-main bg-bg-main">
       <View className="flex-row items-center gap-2.5 px-4 pb-3 pt-4">
         <View className="h-7 w-7 items-center justify-center rounded-lg bg-accent">
-          <CalendarCheck2 size={16} color={c.accentForeground} strokeWidth={2.25} />
+          <CalendarCheck2
+            size={16}
+            color={c.accentForeground}
+            strokeWidth={2.25}
+          />
         </View>
         {/* The workspace is the organization's — its name, from the user's record
             (SSO session as a fallback); "YTC" only until that's known. */}
-        <Text numberOfLines={1} className="flex-1 text-base font-semibold text-text-heading">
+        <Text
+          numberOfLines={1}
+          className="flex-1 text-base font-semibold text-text-heading"
+        >
           {profile.organization || 'YTC'}
         </Text>
       </View>
@@ -329,7 +368,10 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
                 className="h-9 flex-row items-center gap-2 rounded-lg border border-border-main bg-bg-card px-2.5 hover:border-border-strong"
               >
                 {active ? viewIcon(active.type, c.text) : null}
-                <Text numberOfLines={1} className="flex-1 text-sm font-medium text-text-heading">
+                <Text
+                  numberOfLines={1}
+                  className="flex-1 text-sm font-medium text-text-heading"
+                >
                   {active?.name ?? 'Select a view'}
                 </Text>
                 <ChevronDown size={14} color={c.subtle} />
@@ -344,7 +386,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
           label="New view"
           onPress={() => {
             setViewPickerOpen(false);
-            setModalView(null);
+            openNewView();
           }}
         />
       </View>
@@ -363,7 +405,11 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
                 isActive ? 'bg-hover' : 'hover:bg-hover/70'
               }`}
             >
-              <opt.icon size={16} color={isActive ? c.heading : c.text} strokeWidth={2} />
+              <opt.icon
+                size={16}
+                color={isActive ? c.heading : c.text}
+                strokeWidth={2}
+              />
               <Text
                 className={`text-sm ${
                   isActive ? 'font-medium text-text-heading' : 'text-text-main'
@@ -385,9 +431,16 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
         onPress={() => setProfileOpen(true)}
         className="m-2 flex-row items-center gap-2.5 rounded-lg px-2 py-2 hover:bg-hover"
       >
-        <InitialsAvatar color={profile.color} initials={profile.initials} size={28} />
+        <InitialsAvatar
+          color={profile.color}
+          initials={profile.initials}
+          size={28}
+        />
         <View className="flex-1">
-          <Text numberOfLines={1} className="text-sm font-medium text-text-heading">
+          <Text
+            numberOfLines={1}
+            className="text-sm font-medium text-text-heading"
+          >
             {profile.name || 'Account'}
           </Text>
           {profile.email || profile.role ? (
@@ -405,7 +458,10 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
     <View className="h-14 flex-row items-center gap-3 border-b border-border-main bg-bg-card px-6">
       {viewIcon(active.type, c.text, 18)}
       <View className="flex-1 flex-row items-baseline gap-3">
-        <Text numberOfLines={1} className="text-base font-semibold text-text-heading">
+        <Text
+          numberOfLines={1}
+          className="text-base font-semibold text-text-heading"
+        >
           {active.name}
         </Text>
         {active.shared ? <SharedByBadge ownerId={active.ownerId} /> : null}
@@ -440,70 +496,80 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
           New task
         </Button>
       ) : null}
-      {contentMode === 'recurring' && canCreate ? (
-        <Button variant="primary" icon={Plus} onPress={() => setRecurringForm({ mode: 'new' })}>
+      {contentMode === 'recurring' &&
+      canCreate &&
+      active?.showRecurring !== false ? (
+        <Button
+          variant="primary"
+          icon={Plus}
+          onPress={() => setRecurringForm({ mode: 'new' })}
+        >
           New template
         </Button>
       ) : null}
     </View>
   ) : null;
 
-  const quickCreate = (type: 'table' | 'calendar') =>
-    create({
-      name: type === 'table' ? 'All tasks' : 'Calendar',
-      type,
-      showSubtasks: true,
-    });
-
-  const content =
-    !ready ? (
-      <View className="flex-1 gap-3 p-6">
-        <Skeleton className="h-8 w-64 rounded-lg" />
-        <Skeleton className="h-64 w-full rounded-xl" />
-      </View>
-    ) : error ? (
-      <EmptyState
-        icon={CloudOff}
-        title="Couldn’t load your views"
-        description={errorMessage(error, 'The server didn’t respond.')}
-        action={
-          <Button variant="primary" onPress={() => refetch()}>
-            Try again
+  const content = !ready ? (
+    <View className="flex-1 gap-3 p-6">
+      <Skeleton className="h-8 w-64 rounded-lg" />
+      <Skeleton className="h-64 w-full rounded-xl" />
+    </View>
+  ) : error ? (
+    <EmptyState
+      icon={CloudOff}
+      title="Couldn’t load your views"
+      description={errorMessage(error, 'The server didn’t respond.')}
+      action={
+        <Button variant="primary" onPress={() => refetch()}>
+          Try again
+        </Button>
+      }
+    />
+  ) : !active ? (
+    <EmptyState
+      icon={LayoutGrid}
+      title="Create your first view"
+      description="Views are saved layouts of your tasks — a table, a calendar, a board. Tasks always live inside a view."
+      action={
+        <View className="flex-row flex-wrap justify-center gap-2">
+          <Button
+            variant="primary"
+            icon={Table2}
+            onPress={() => openNewView({ name: 'All tasks', type: 'table' })}
+          >
+            Task table
           </Button>
-        }
-      />
-    ) : !active ? (
-      <EmptyState
-        icon={LayoutGrid}
-        title="Create your first view"
-        description="Views are saved layouts of your tasks — a table, a calendar, a board. Tasks always live inside a view."
-        action={
-          <View className="flex-row flex-wrap justify-center gap-2">
-            <Button variant="primary" icon={Table2} onPress={() => quickCreate('table')}>
-              Task table
-            </Button>
-            <Button icon={CalendarDays} onPress={() => quickCreate('calendar')}>
-              Calendar
-            </Button>
-            <Button variant="ghost" icon={Plus} onPress={() => setModalView(null)}>
-              Custom…
-            </Button>
-          </View>
-        }
-      />
-    ) : contentMode === 'recurring' ? (
-      <RecurringTasksView view={active} />
-    ) : ActiveView ? (
-      <>
-        {active.shared ? <SharedNote view={active} /> : null}
-        <ActiveView key={active.id} view={active} />
-      </>
-    ) : null;
+          <Button
+            icon={CalendarDays}
+            onPress={() => openNewView({ name: 'Calendar', type: 'calendar' })}
+          >
+            Calendar
+          </Button>
+          <Button variant="ghost" icon={Plus} onPress={() => openNewView()}>
+            Custom…
+          </Button>
+        </View>
+      }
+    />
+  ) : contentMode === 'recurring' ? (
+    <RecurringTasksView view={active} />
+  ) : ActiveView ? (
+    <>
+      {active.shared ? <SharedNote view={active} /> : null}
+      <ActiveView key={active.id} view={active} />
+    </>
+  ) : null;
 
   // ── Phone: header + tab strip ─────────────────────────────────────────────
   const phoneHeader = (
     <View className="flex-row items-center gap-1 border-b border-border-main bg-bg-card px-2 pb-1 pt-2">
-      <IconButton icon={ChevronLeft} label="Back to home" onPress={() => setMobileHome(true)} size="lg" />
+      <IconButton
+        icon={ChevronLeft}
+        label="Back to home"
+        onPress={() => setMobileHome(true)}
+        size="lg"
+      />
       <ScrollView
         horizontal
         showsHorizontalScrollIndicator={false}
@@ -528,7 +594,9 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
               <Text
                 numberOfLines={1}
                 className={`text-sm ${
-                  isActive ? 'font-semibold text-text-heading' : 'text-text-main'
+                  isActive
+                    ? 'font-semibold text-text-heading'
+                    : 'text-text-main'
                 }`}
               >
                 {v.name}
@@ -538,7 +606,12 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
         })}
       </ScrollView>
       {contentMode === 'tasks' ? (
-        <IconButton icon={Search} label="Search" onPress={openSearch} size="lg" />
+        <IconButton
+          icon={Search}
+          label="Search"
+          onPress={openSearch}
+          size="lg"
+        />
       ) : null}
       <IconButton
         icon={RefreshCw}
@@ -548,19 +621,31 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
         size="lg"
       />
       {active ? (
-        <MenuButton label="View options" size="lg" onOpen={ref => openMenu(active, ref)} />
+        <MenuButton
+          label="View options"
+          size="lg"
+          onOpen={ref => openMenu(active, ref)}
+        />
       ) : null}
     </View>
   );
 
   const modeToggle = active ? (
     <View className="border-b border-border-main bg-bg-card px-3 pb-2">
-      <SegmentedControl size="sm" options={MODE_OPTIONS} value={contentMode} onChange={setContentMode} />
+      <SegmentedControl
+        size="sm"
+        options={MODE_OPTIONS}
+        value={contentMode}
+        onChange={setContentMode}
+      />
     </View>
   ) : null;
 
   return (
-    <SafeAreaView edges={['top', 'left', 'right']} className="flex-1 bg-bg-main">
+    <SafeAreaView
+      edges={['top', 'left', 'right']}
+      className="flex-1 bg-bg-main"
+    >
       {wide ? (
         <View className="flex-1 flex-row">
           {rail}
@@ -577,7 +662,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
             setActiveId(id);
             setMobileHome(false);
           }}
-          onNewView={() => setModalView(null)}
+          onNewView={() => openNewView()}
           onOpenProfile={() => setProfileOpen(true)}
           onSearch={openSearch}
         />
@@ -586,13 +671,27 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
           {phoneHeader}
           {modeToggle}
           <View className="flex-1">{content}</View>
-          {canCreate && ((contentMode === 'tasks' && ActiveView) || contentMode === 'recurring') ? (
+          {canCreate &&
+          ((contentMode === 'tasks' && ActiveView) ||
+            (contentMode === 'recurring' &&
+              active?.showRecurring !== false)) ? (
             <View className="absolute bottom-6 right-5">
               <Press
                 accessibilityRole="button"
-                accessibilityLabel={contentMode === 'tasks' ? 'New task' : 'New template'}
-                onPress={contentMode === 'tasks' ? newTask : () => setRecurringForm({ mode: 'new' })}
-                style={{ elevation: 6, boxShadow: '0 8px 24px -6px rgba(0,0,0,0.35)' } as object}
+                accessibilityLabel={
+                  contentMode === 'tasks' ? 'New task' : 'New template'
+                }
+                onPress={
+                  contentMode === 'tasks'
+                    ? newTask
+                    : () => setRecurringForm({ mode: 'new' })
+                }
+                style={
+                  {
+                    elevation: 6,
+                    boxShadow: '0 8px 24px -6px rgba(0,0,0,0.35)',
+                  } as object
+                }
                 className="h-14 w-14 items-center justify-center rounded-2xl bg-accent"
               >
                 <Plus size={24} color={c.accentForeground} strokeWidth={2.25} />
@@ -608,7 +707,11 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
       <ViewModal
         visible={modalView !== undefined}
         view={modalView ?? null}
-        onClose={() => setModalView(undefined)}
+        initial={newViewHint}
+        onClose={() => {
+          setModalView(undefined);
+          setNewViewHint(undefined);
+        }}
         onSave={save}
         onDelete={() => modalView && remove(modalView)}
         onShare={onShareView}
@@ -653,7 +756,12 @@ function MenuButton({
   const ref = useRef<ViewInstance | null>(null);
   return (
     <View ref={ref} collapsable={false}>
-      <IconButton icon={Ellipsis} label={label} size={size} onPress={() => onOpen(ref)} />
+      <IconButton
+        icon={Ellipsis}
+        label={label}
+        size={size}
+        onPress={() => onOpen(ref)}
+      />
     </View>
   );
 }
@@ -681,7 +789,9 @@ function SharedNote({ view }: { view: ProjectView }) {
         <MessageSquareText size={14} color={c.subtle} />
       </View>
       <Text numberOfLines={2} className="flex-1 text-sm text-text-main">
-        <Text className="font-medium text-text-heading">{owner?.name ?? 'Owner'}: </Text>
+        <Text className="font-medium text-text-heading">
+          {owner?.name ?? 'Owner'}:{' '}
+        </Text>
         {note}
       </Text>
     </View>
