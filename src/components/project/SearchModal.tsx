@@ -261,10 +261,23 @@ export function SearchModal() {
   );
 }
 
-// "Oct 14 09:00" — with the time when the task has one.
-const day = (d: string, time: string | null) =>
-  `${format(parseISO(d), 'MMM d')}${time ? ` ${time}` : ''}`;
+// "Oct 19" · "Oct 19 · 10:30 – 23:59" (same day) · "Oct 19 – Oct 20" ·
+// "Oct 19 11:45 → Oct 29 23:59" — as short as the dates allow.
+const when = (item: WorkItem) => {
+  const d = (x: string) => format(parseISO(x), 'MMM d');
+  const sameDay = item.start === item.end;
+  if (!item.startTime && !item.endTime) {
+    return sameDay ? d(item.start) : `${d(item.start)} – ${d(item.end)}`;
+  }
+  if (sameDay) {
+    return `${d(item.start)} · ${item.startTime ?? 'All day'} – ${item.endTime ?? 'end of day'}`;
+  }
+  const at = (x: string, t: string | null) => (t ? `${d(x)} ${t}` : d(x));
+  return `${at(item.start, item.startTime)} → ${at(item.end, item.endTime)}`;
+};
 
+// Title with its dates underneath; tag and people in fixed-width columns on the
+// right so they line up down the list whatever the title or dates are.
 function ResultRow({ item, onPress }: { item: WorkItem; onPress: () => void }) {
   const tag = tagInfo(item.tag);
   return (
@@ -276,16 +289,20 @@ function ResultRow({ item, onPress }: { item: WorkItem; onPress: () => void }) {
       className="flex-row items-center gap-3 rounded-lg px-2 py-2 hover:bg-hover"
     >
       <StatusIcon status={item.status} />
-      <Text numberOfLines={1} className="flex-1 text-sm font-medium text-text-heading">
-        {item.title}
-      </Text>
-      {tag ? <Badge label={tag.label} color={tag.color} size="sm" /> : null}
-      <Text className="w-40 text-right text-xs text-text-subtle">
-        {item.start === item.end && !item.startTime && !item.endTime
-          ? day(item.start, null)
-          : `${day(item.start, item.startTime)} – ${day(item.end, item.endTime)}`}
-      </Text>
-      <AssigneeAvatars ids={item.assigneeIds} size={20} />
+      <View className="flex-1">
+        <Text numberOfLines={1} className="text-sm font-medium text-text-heading">
+          {item.title}
+        </Text>
+        <Text numberOfLines={1} className="mt-0.5 text-xs text-text-subtle">
+          {when(item)}
+        </Text>
+      </View>
+      <View className="w-24 items-start">
+        {tag ? <Badge label={tag.label} color={tag.color} size="sm" dot /> : null}
+      </View>
+      <View className="w-20 items-end">
+        <AssigneeAvatars ids={item.assigneeIds} size={20} />
+      </View>
     </Press>
   );
 }
