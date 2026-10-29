@@ -97,6 +97,25 @@ export function templateOccurrences(
   return out;
 }
 
+// Drops any occurrence that's already been turned into a real task (via
+// "Create task") — once that's happened, the preview row for that same date
+// is just noise alongside the task it produced. Nothing links a created task
+// back to the template it came from (see templateFormPrefill's comment
+// above), so title + date is the only signal available that this particular
+// occurrence already has a real task; an unrelated task that just happens to
+// share a title on some other date is left alone.
+export function withoutCreatedOccurrences(
+  occurrences: VirtualOccurrence[],
+  realItems: WorkItem[],
+): VirtualOccurrence[] {
+  const created = new Set(
+    realItems.map(i => `${i.title.trim().toLowerCase()}|${i.start}`),
+  );
+  return occurrences.filter(
+    v => !created.has(`${v.item.title.trim().toLowerCase()}|${v.date}`),
+  );
+}
+
 // One entry per template — its own next occurrence from today only (not
 // every date in a range), for TableView's flat list: a single preview row
 // sorted into the list by that date, the same way a real task would be. null

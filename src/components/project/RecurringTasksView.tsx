@@ -44,7 +44,6 @@ import {
 } from '../ui';
 import { Avatar } from './shared';
 import { RecurringTaskFormModal } from './RecurringTaskFormModal';
-import { RecurringTaskViewModal } from './RecurringTaskViewModal';
 
 // A library of reusable recurrence rules for this view (/recurring) — separate
 // from a task's own "Repeats" field, which already covers one task repeating on
@@ -62,11 +61,12 @@ export function RecurringTasksView({
   const { createTemplate, updateTemplate, deleteTemplate } =
     useRecurringTaskMutations(view);
   const { canCreate, canEdit, canDelete } = useViewAccess(view);
-  // Global, not local: the navbar's "New template" (ProjectScreen) opens this
+  // Global, not local: the navbar's "New event" (ProjectScreen) opens this
   // same modal, not just the rows/empty-state here.
   const [form, setForm] = useAtom(recurringFormAtom);
-  // Same idea: a row click opens RecurringTaskViewModal, which is where
-  // Edit/Delete actually live (ItemModal/ItemFormModal's split, for templates).
+  // A row click opens RecurringTaskViewModal (mounted globally in
+  // ProjectScreen — Table/Calendar's own occurrence clicks open the same
+  // one), which is where Create/Delete actually live.
   const setSelectedId = useSetAtom(selectedTemplateIdAtom);
   const setItemForm = useSetAtom(itemFormAtom);
   // Client-side, not server-side: /recurring/list takes only a tag list, no title
@@ -87,7 +87,7 @@ export function RecurringTasksView({
       <EmptyState
         icon={Repeat}
         title="Open a view"
-        description="Pick a view to see its recurring templates."
+        description="Pick a view to see its recurring events."
       />
     );
   }
@@ -95,7 +95,7 @@ export function RecurringTasksView({
     return (
       <EmptyState
         icon={Repeat}
-        title="Recurring templates are off for this view"
+        title="Recurring events are off for this view"
         description={
           view.shared
             ? 'Ask the view’s owner to turn them on.'
@@ -109,7 +109,7 @@ export function RecurringTasksView({
     const ok = await confirm({
       title: `Delete “${t.title}”?`,
       message:
-        'This only removes the template — it won’t touch any tasks already made from it.',
+        'This only removes the event — it won’t touch any tasks already made from it.',
       confirmLabel: 'Delete',
       destructive: true,
     });
@@ -118,9 +118,9 @@ export function RecurringTasksView({
     }
     try {
       await deleteTemplate(t);
-      toast.success('Template deleted');
+      toast.success('Event deleted');
     } catch (err) {
-      toast.error('Couldn’t delete the template', {
+      toast.error('Couldn’t delete the event', {
         description: errorMessage(err, 'Please try again.'),
       });
     }
@@ -131,14 +131,12 @@ export function RecurringTasksView({
       <ScrollView contentContainerClassName="px-4 pb-10 pt-4 lg:px-6">
         <Text className="mb-3 text-sm text-text-subtle">
           {templates.length === 0
-            ? 'No templates yet'
+            ? 'No events yet'
             : q
-            ? `${visible.length} of ${templates.length} template${
+            ? `${visible.length} of ${templates.length} event${
                 templates.length === 1 ? '' : 's'
               }`
-            : `${templates.length} template${
-                templates.length === 1 ? '' : 's'
-              }`}
+            : `${templates.length} event${templates.length === 1 ? '' : 's'}`}
         </Text>
 
         {templates.length > 0 ? (
@@ -147,7 +145,7 @@ export function RecurringTasksView({
               icon={Search}
               value={query}
               onChangeText={setQuery}
-              placeholder="Search templates by name…"
+              placeholder="Search events by name…"
               right={
                 query ? (
                   <IconButton
@@ -170,7 +168,7 @@ export function RecurringTasksView({
         ) : error ? (
           <EmptyState
             icon={CloudOff}
-            title="Couldn’t load templates"
+            title="Couldn’t load events"
             description={errorMessage(error, 'The server didn’t respond.')}
           />
         ) : !enabled ? (
@@ -178,8 +176,8 @@ export function RecurringTasksView({
         ) : templates.length === 0 ? (
           <EmptyState
             icon={Repeat}
-            title="No recurring templates"
-            description="A template is a reusable rule — name, tag and an RFC 5545 schedule — for the kind of thing that repeats."
+            title="No recurring events"
+            description="An event is a reusable rule — name, tag and an RFC 5545 schedule — for the kind of thing that repeats."
             action={
               canCreate ? (
                 <Button
@@ -187,7 +185,7 @@ export function RecurringTasksView({
                   icon={Plus}
                   onPress={() => setForm({ mode: 'new' })}
                 >
-                  New template
+                  New event
                 </Button>
               ) : undefined
             }
@@ -196,7 +194,7 @@ export function RecurringTasksView({
           <EmptyState
             compact
             icon={SearchX}
-            title="No matching templates"
+            title="No matching events"
             description="Try another name."
           />
         ) : (
@@ -298,7 +296,6 @@ export function RecurringTasksView({
           setForm(null);
         }}
       />
-      <RecurringTaskViewModal />
     </View>
   );
 }

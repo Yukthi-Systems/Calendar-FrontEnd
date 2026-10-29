@@ -68,6 +68,7 @@ import { AlertsScreen } from './AlertsScreen';
 import { CalendarView } from './CalendarView';
 import { ItemFormModal } from './ItemFormModal';
 import { ItemModal } from './ItemModal';
+import { RecurringTaskViewModal } from './RecurringTaskViewModal';
 import { KanbanView } from './KanbanView';
 import { ProfileEditModal } from './ProfileEditModal';
 import { ProfileModal } from './ProfileModal';
@@ -545,7 +546,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
           icon={Plus}
           onPress={() => setRecurringForm({ mode: 'new' })}
         >
-          New template
+          New event
         </Button>
       ) : null}
     </View>
@@ -749,7 +750,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
               <Press
                 accessibilityRole="button"
                 accessibilityLabel={
-                  contentMode === 'tasks' ? 'New task' : 'New template'
+                  contentMode === 'tasks' ? 'New task' : 'New event'
                 }
                 onPress={
                   contentMode === 'tasks'
@@ -773,6 +774,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
 
       <ItemModal />
       <ItemFormModal />
+      <RecurringTaskViewModal />
       <SearchModal />
       <AlertFormModal
         visible={!!alertForm}

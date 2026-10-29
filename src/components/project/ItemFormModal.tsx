@@ -82,6 +82,12 @@ export function ItemFormModal() {
     form?.mode === 'new' && form.parentId
       ? items.find(i => i.id === form.parentId)
       : undefined;
+  // Prefilled from a recurring event's "Create task" action (a template row
+  // in Table/Calendar, or its own view sheet) — this form is otherwise
+  // visually identical to editing a real task, so without this there's
+  // nothing on screen telling you it's about to create a brand new task
+  // rather than change anything that already exists.
+  const fromTemplate = form?.mode === 'new' ? form.fromTemplate : undefined;
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -131,9 +137,6 @@ export function ItemFormModal() {
       return;
     }
     const today = new Date();
-    // Prefilled from a recurring template's "Create task" action — title,
-    // description, tag and time of day, same fields the template itself has.
-    const fromTemplate = form.mode === 'new' ? form.fromTemplate : undefined;
     setTitle(editing?.title ?? fromTemplate?.title ?? '');
     setDescription(editing?.description ?? fromTemplate?.description ?? '');
     const pick = <K extends string>(
@@ -153,8 +156,22 @@ export function ItemFormModal() {
     setAssigneeIds(editing ? editing.assigneeIds : parent?.assigneeIds ?? []);
     const presetStart =
       form.mode === 'new' && form.start ? parseDate(form.start) : null;
+    const todayStr = format(today, DATE_FMT);
+    // A new subtask's Start: if the parent hasn't started yet (a future
+    // date), start the subtask on that same date. Otherwise, if the parent
+    // is overdue (its own Due date has already passed), there's no good
+    // date to guess at all — leave it empty and make the person choose.
+    // Otherwise the parent's currently active (started, not yet due), so
+    // today is the useful default.
+    const subtaskStart = parent
+      ? parent.start > todayStr
+        ? parent.start
+        : parent.end < todayStr
+        ? ''
+        : todayStr
+      : null;
     setStart(
-      editing?.start ?? parent?.start ?? format(presetStart ?? today, DATE_FMT),
+      editing?.start ?? subtaskStart ?? format(presetStart ?? today, DATE_FMT),
     );
     setEnd(
       editing?.end ?? parent?.end ?? format(presetStart ?? today, DATE_FMT),
@@ -182,8 +199,27 @@ export function ItemFormModal() {
     setStart(next);
   };
 
+  // A new subtask's title can't match an existing sibling's — case/whitespace
+  // insensitive, checked only when actually creating one (editing a subtask's
+  // own title obviously matches itself, and this isn't a rule for top-level
+  // tasks). Caught here, before Save ever calls the API, not after a 409 or
+  // some other server-side rejection.
+  const isDuplicateSiblingTitle =
+    !editing &&
+    !!parent &&
+    !!title.trim() &&
+    items.some(
+      i =>
+        i.parentId === parent.id &&
+        i.title.trim().toLowerCase() === title.trim().toLowerCase(),
+    );
+
   const errors = {
-    title: title.trim() ? null : 'Title is required',
+    title: !title.trim()
+      ? 'Title is required'
+      : isDuplicateSiblingTitle
+      ? 'A subtask with this name already exists'
+      : null,
     start: validDate(start) ? null : 'Use YYYY-MM-DD',
     end: !validDate(end)
       ? 'Use YYYY-MM-DD'
@@ -285,6 +321,8 @@ export function ItemFormModal() {
     ? undefined
     : parent
     ? `Under “${parent.title}”`
+    : fromTemplate
+    ? `From “${fromTemplate.title}” — creates a new task, the recurring event itself is unchanged`
     : undefined;
 
   return (

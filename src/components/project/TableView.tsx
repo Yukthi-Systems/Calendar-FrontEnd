@@ -16,6 +16,7 @@ import {
   itemFormAtom,
   itemsAtom,
   selectedItemIdAtom,
+  selectedTemplateIdAtom,
   taskFiltersAtom,
   tasksLoadingAtom,
   type TaskFilters,
@@ -28,6 +29,7 @@ import {
   nextVirtualOccurrences,
   parseVirtualRecurringId,
   templateFormPrefill,
+  withoutCreatedOccurrences,
 } from '../../data/recurringOccurrences';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
 import { useRecurringTasks } from '../../hooks/useRecurringTasks';
@@ -295,9 +297,10 @@ export function TableView({ view }: { view: ProjectView }) {
   const virtualOccurrences =
     view.showRecurring === false
       ? []
-      : nextVirtualOccurrences(recurringTemplates).filter(v =>
-          filterActive ? passesFilter(v.item) : true,
-        );
+      : withoutCreatedOccurrences(
+          nextVirtualOccurrences(recurringTemplates),
+          allItems,
+        ).filter(v => (filterActive ? passesFilter(v.item) : true));
   const displayItems = [...items, ...virtualOccurrences.map(v => v.item)];
 
   const people = usePeople(
@@ -306,6 +309,7 @@ export function TableView({ view }: { view: ProjectView }) {
   const tasksLoading = useAtomValue(tasksLoadingAtom);
   const setForm = useSetAtom(itemFormAtom);
   const select = useSetAtom(selectedItemIdAtom);
+  const selectTemplate = useSetAtom(selectedTemplateIdAtom);
   const { loadChildren, subtasksEnabled } = useTaskMutations();
   const { canCreate, canEdit: canEditView } = useViewAccess(view);
   const { updateView } = useViewMutations();
@@ -480,9 +484,19 @@ export function TableView({ view }: { view: ProjectView }) {
     setForm({ mode: 'new', parentId: parent.id });
   };
 
-  // A recurring-occurrence row isn't a real task to open — it opens the
-  // normal "new task" form instead, prefilled from its template and dated to
-  // this occurrence (see recurringOccurrences.ts).
+  // A recurring-occurrence row isn't a real task to open — clicking the row
+  // itself opens the event's own detail sheet (RecurringTaskViewModal, same
+  // one the Recurring tab's list opens), same as a real task row opens
+  // ItemModal. The row's dedicated "Create task" icon stays a direct
+  // shortcut into the normal "new task" form, prefilled from the template
+  // and dated to this occurrence (see recurringOccurrences.ts).
+  const openTemplateDetail = (virtualId: string) => {
+    const parsed = parseVirtualRecurringId(virtualId);
+    if (!parsed) {
+      return;
+    }
+    selectTemplate(parsed.templateId);
+  };
   const openVirtual = (virtualId: string) => {
     if (!canCreate) {
       return;
@@ -686,17 +700,9 @@ export function TableView({ view }: { view: ProjectView }) {
         key={row.key}
         feedback="none"
         accessibilityRole="button"
-        accessibilityLabel={
-          virtual && canCreate
-            ? `Create task from ${row.item.title}`
-            : row.item.title
-        }
+        accessibilityLabel={virtual ? `Open ${row.item.title}` : row.item.title}
         onPress={() =>
-          virtual
-            ? canCreate
-              ? openVirtual(row.item.id)
-              : undefined
-            : select(row.item.id)
+          virtual ? openTemplateDetail(row.item.id) : select(row.item.id)
         }
         style={{ height: child ? CHILD_ROW_H : ROW_H }}
         className={`group flex-row border-b border-border-main hover:bg-hover ${

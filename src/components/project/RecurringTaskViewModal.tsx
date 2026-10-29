@@ -3,14 +3,9 @@ import { useAtom, useSetAtom } from 'jotai';
 import { format, parseISO } from 'date-fns';
 import Clock from 'lucide-react-native/icons/clock';
 import Pencil from 'lucide-react-native/icons/pencil';
-import Plus from 'lucide-react-native/icons/plus';
 import Repeat from 'lucide-react-native/icons/repeat';
 import Trash2 from 'lucide-react-native/icons/trash';
-import {
-  itemFormAtom,
-  recurringFormAtom,
-  selectedTemplateIdAtom,
-} from '../../atoms/project';
+import { itemFormAtom, selectedTemplateIdAtom } from '../../atoms/project';
 import { confirm, errorMessage, toast } from '../../atoms/feedback';
 import { tagInfo } from '../../data/constants';
 import {
@@ -26,33 +21,26 @@ import {
   useRecurringTasks,
 } from '../../hooks/useRecurringTasks';
 import { useThemeColors, useTone } from '../../hooks/useThemeColors';
-import {
-  Badge,
-  Button,
-  IconButton,
-  Sheet,
-  SheetBody,
-  SheetFooter,
-  SheetHeader,
-} from '../ui';
+import { Badge, IconButton, Sheet, SheetBody, SheetHeader } from '../ui';
 import { PersonRow, Property } from './shared';
 
 const DATE_FMT = 'yyyy-MM-dd';
 
-// Detail sheet for one recurring template, opened from RecurringTasksView's
-// rows — same split as ItemModal/ItemFormModal: this is read-only plus
-// Edit/Delete, the actual edit form lives in RecurringTaskFormModal
-// (recurringFormAtom), opened from here.
+// Detail sheet for one recurring event, opened from RecurringTasksView's
+// rows — read-only plus Create/Delete. Editing the event's own definition
+// (title, rule, tag…) isn't offered here — that stays on the row's own
+// pencil icon in the list (RecurringTasksView, via recurringFormAtom), so
+// this sheet's actions only ever turn the event into a task or remove the
+// event itself, never something that merely looks like editing one.
 export function RecurringTaskViewModal() {
   const c = useThemeColors();
   const toneOf = useTone();
   const [selectedId, setSelectedId] = useAtom(selectedTemplateIdAtom);
-  const setForm = useSetAtom(recurringFormAtom);
   const setItemForm = useSetAtom(itemFormAtom);
   const view = useActiveView();
   const { templates } = useRecurringTasks(view);
   const { deleteTemplate } = useRecurringTaskMutations(view);
-  const { canCreate, canEdit, canDelete } = useViewAccess(view);
+  const { canCreate, canDelete } = useViewAccess(view);
   const template = templates.find(t => t.id === selectedId);
   const close = () => setSelectedId(null);
   const tone = template ? toneOf(rruleColor(template.rrule)) : null;
@@ -87,7 +75,7 @@ export function RecurringTaskViewModal() {
     const ok = await confirm({
       title: `Delete “${template.title}”?`,
       message:
-        'This only removes the template — it won’t touch any tasks already made from it.',
+        'This only removes the event — it won’t touch any tasks already made from it.',
       confirmLabel: 'Delete',
       destructive: true,
     });
@@ -97,49 +85,38 @@ export function RecurringTaskViewModal() {
     try {
       await deleteTemplate(template);
       close();
-      toast.success('Template deleted');
+      toast.success('Event deleted');
     } catch (err) {
-      toast.error('Couldn’t delete the template', {
+      toast.error('Couldn’t delete the event', {
         description: errorMessage(err, 'Please try again.'),
       });
     }
   };
 
   return (
-    <Sheet visible={!!template} onClose={close} size="sm">
+    <Sheet visible={!!template} onClose={close} size="lg">
       {template ? (
         <>
           <SheetHeader
             onClose={close}
             title={
-              <View className="flex-row items-center gap-2.5">
-                <View
-                  style={{ backgroundColor: tone?.bg }}
-                  className="h-7 w-7 items-center justify-center rounded-lg"
-                >
-                  <Icon size={14} color={tone?.fg} />
-                </View>
-                <Text className="text-xl font-semibold text-text-heading">
-                  {template.title}
-                </Text>
-              </View>
+              <Text className="text-xl font-semibold text-text-heading">
+                {template.title}
+              </Text>
             }
             actions={
               <>
-                {canEdit ? (
+                {canCreate ? (
                   <IconButton
                     icon={Pencil}
-                    label="Edit template"
-                    onPress={() => {
-                      setForm({ mode: 'edit', template });
-                      close();
-                    }}
+                    label="Create task"
+                    onPress={createTask}
                   />
                 ) : null}
                 {canDelete ? (
                   <IconButton
                     icon={Trash2}
-                    label="Delete template"
+                    label="Delete event"
                     color={c.destructive}
                     onPress={remove}
                   />
@@ -153,7 +130,7 @@ export function RecurringTaskViewModal() {
                 {template.description}
               </Text>
             ) : null}
-            <View className="rounded-xl border border-border-main">
+            <View className="mb-6 rounded-xl border border-border-main">
               <Property label="ID" first>
                 <Text className="text-sm text-text-heading">{template.id}</Text>
               </Property>
@@ -166,7 +143,7 @@ export function RecurringTaskViewModal() {
               </Property>
               <Property label="Repeats">
                 <View className="flex-row items-center gap-1.5">
-                  <Repeat size={13} color={tone?.fg ?? c.text} />
+                  <Icon size={13} color={tone?.fg ?? c.text} />
                   <Text className="text-sm text-text-heading">
                     {describeRecurrence(template.rrule) || template.rrule}
                   </Text>
@@ -207,13 +184,6 @@ export function RecurringTaskViewModal() {
               </Property>
             </View>
           </SheetBody>
-          {canCreate ? (
-            <SheetFooter>
-              <Button variant="primary" icon={Plus} onPress={createTask}>
-                Create task
-              </Button>
-            </SheetFooter>
-          ) : null}
         </>
       ) : null}
     </Sheet>

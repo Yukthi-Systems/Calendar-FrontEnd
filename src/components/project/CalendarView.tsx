@@ -39,14 +39,15 @@ import {
   itemFormAtom,
   itemsAtom,
   selectedItemIdAtom,
+  selectedTemplateIdAtom,
 } from '../../atoms/project';
 import { statusInfo } from '../../data/constants';
 import { occurrencesInRange } from '../../data/recurrence';
 import {
   isVirtualRecurringId,
   parseVirtualRecurringId,
-  templateFormPrefill,
   templateOccurrences,
+  withoutCreatedOccurrences,
 } from '../../data/recurringOccurrences';
 import { showsField } from '../../data/viewFields';
 import type { ProjectView, ViewField, WorkItem } from '../../data/types';
@@ -162,8 +163,10 @@ export function CalendarView({ view }: { view: ProjectView }) {
   // Recurring templates have no anchor date of their own (recurringTemplate.ts)
   // — their pattern is shown here as synthetic, display-only occurrences
   // (recurringOccurrences.ts), one per date they land on within whatever's
-  // currently visible. Clicking one opens the normal "new task" form prefilled
-  // from the template rather than a real task's detail sheet (openOccurrence).
+  // currently visible. Clicking one opens the event's own detail sheet
+  // (RecurringTaskViewModal, same as the Recurring tab's list), not a real
+  // task's detail sheet nor straight into creating one (openOccurrence) — the
+  // actual "Create task" action lives inside that detail sheet.
   const { templates: recurringTemplates } = useRecurringTasks(
     view.showRecurring === false ? undefined : view,
   );
@@ -189,8 +192,11 @@ export function CalendarView({ view }: { view: ProjectView }) {
     () =>
       view.showRecurring === false || recurringTemplates.length === 0
         ? []
-        : templateOccurrences(recurringTemplates, occRange[0], occRange[1]),
-    [view.showRecurring, recurringTemplates, occRange],
+        : withoutCreatedOccurrences(
+            templateOccurrences(recurringTemplates, occRange[0], occRange[1]),
+            allItems,
+          ),
+    [view.showRecurring, recurringTemplates, occRange, allItems],
   );
   const items = useMemo(
     () => [
@@ -202,29 +208,20 @@ export function CalendarView({ view }: { view: ProjectView }) {
   const fields = view.fields;
   const setForm = useSetAtom(itemFormAtom);
   const select = useSetAtom(selectedItemIdAtom);
+  const selectTemplate = useSetAtom(selectedTemplateIdAtom);
   const { canCreate } = useViewAccess(view);
-  // Routes a click on any occurrence bar/card/row: a real task opens its
-  // detail sheet as always; a virtual one opens "new task" prefilled instead
-  // — but only when this view allows creating tasks, same as every other
-  // "new task" entry point here.
+  // Routes a click on any occurrence bar/card/row: a real task opens its own
+  // detail sheet as always; a virtual one opens its event's detail sheet
+  // instead — RecurringTaskViewModal's own "Create task" button is where
+  // that view's canCreate actually gets checked, same as every other create
+  // entry point there.
   const openOccurrence = (item: WorkItem) => {
     const parsed = parseVirtualRecurringId(item.id);
     if (!parsed) {
       select(item.id);
       return;
     }
-    if (!canCreate) {
-      return;
-    }
-    const template = recurringTemplates.find(t => t.id === parsed.templateId);
-    if (!template) {
-      return;
-    }
-    setForm({
-      mode: 'new',
-      start: parsed.date,
-      fromTemplate: templateFormPrefill(template),
-    });
+    selectTemplate(parsed.templateId);
   };
   const { width } = useWindowDimensions();
   const split = width >= SPLIT;
@@ -728,7 +725,7 @@ function EventBar({
             ? `${item.title} · ${format(
                 seg.occ.start,
                 'MMM d',
-              )} · tap to create this task`
+              )} · recurring event`
             : `${item.title} · ${format(seg.occ.start, 'MMM d')} – ${format(
                 seg.occ.end,
                 'MMM d',
@@ -738,9 +735,7 @@ function EventBar({
         <Press
           feedback="subtle"
           accessibilityRole="button"
-          accessibilityLabel={
-            virtual ? `Create task from ${item.title}` : item.title
-          }
+          accessibilityLabel={virtual ? `Open ${item.title}` : item.title}
           onPress={() => onPress(item)}
           style={{
             flex: 1,
@@ -1010,9 +1005,7 @@ function DayCard({
     <Press
       feedback="subtle"
       accessibilityRole="button"
-      accessibilityLabel={
-        virtual ? `Create task from ${item.title}` : item.title
-      }
+      accessibilityLabel={virtual ? `Open ${item.title}` : item.title}
       onPress={() => onPress(item)}
       style={{
         borderLeftColor: color,

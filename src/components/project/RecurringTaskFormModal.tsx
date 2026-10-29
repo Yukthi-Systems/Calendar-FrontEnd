@@ -126,7 +126,7 @@ export function RecurringTaskFormModal({
       });
       close();
     } catch (err) {
-      toast.error('Couldn’t save the template', {
+      toast.error('Couldn’t save the event', {
         description: errorMessage(err, 'Please try again.'),
       });
     } finally {
@@ -137,7 +137,7 @@ export function RecurringTaskFormModal({
   return (
     <Sheet visible={visible} onClose={close} size="sm" dismissable={!saving}>
       <SheetHeader
-        title={template ? 'Edit template' : 'New recurring template'}
+        title={template ? 'Edit event' : 'New event'}
         onClose={close}
       />
       <SheetBody>
@@ -154,7 +154,7 @@ export function RecurringTaskFormModal({
           <Input
             value={description}
             onChangeText={setDescription}
-            placeholder="What this template is for"
+            placeholder="What this event is for"
             multiline
             minHeight={60}
           />
