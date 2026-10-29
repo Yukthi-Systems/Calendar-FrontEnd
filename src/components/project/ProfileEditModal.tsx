@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
-import { Building2, Mail, Phone } from 'lucide-react-native';
+import Building2 from 'lucide-react-native/icons/building-complex';
+import Mail from 'lucide-react-native/icons/mail';
+import Phone from 'lucide-react-native/icons/phone';
 import { useAtom, useSetAtom } from 'jotai';
 import { profileEditOpenAtom, profileOpenAtom } from '../../atoms/profile';
 import { useMyProfile, useUpdateMyInfo } from '../../hooks/useUsers';
@@ -63,7 +65,10 @@ export function ProfileEditModal() {
         isPublic: true,
         patch: { name: name.trim(), role: role.trim() },
       });
-      await update.mutateAsync({ isPublic: false, patch: { phone: phone.trim() } });
+      await update.mutateAsync({
+        isPublic: false,
+        patch: { phone: phone.trim() },
+      });
       toast.success('Profile updated');
       backToView();
     } catch (err) {
@@ -89,7 +94,11 @@ export function ProfileEditModal() {
           />
         </Field>
         <Field label="Role" hint="Shown to people in your organization.">
-          <Input value={role} onChangeText={setRole} placeholder="e.g. Tech Lead" />
+          <Input
+            value={role}
+            onChangeText={setRole}
+            placeholder="e.g. Tech Lead"
+          />
         </Field>
         <Field label="Phone" hint="Only you can see this.">
           <Input

@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from 'react';
 import { Animated, Platform, Text, View } from 'react-native';
-import { Check, Lock } from 'lucide-react-native';
+import Check from 'lucide-react-native/icons/check';
+import Lock from 'lucide-react-native/icons/lock';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { Press } from './Press';
 
@@ -66,7 +67,9 @@ export function Checkbox({
       accessibilityState={{ checked, disabled }}
       disabled={disabled}
       onPress={() => onChange(!checked)}
-      className={`flex-row items-start gap-2.5 py-1 ${disabled ? 'opacity-50' : ''}`}
+      className={`flex-row items-start gap-2.5 py-1 ${
+        disabled ? 'opacity-50' : ''
+      }`}
     >
       <View className="pt-px">
         <CheckboxBox checked={checked} />
@@ -116,7 +119,9 @@ export function Switch({
       accessibilityState={{ checked: value, disabled }}
       disabled={disabled}
       onPress={() => onChange(!value)}
-      className={`flex-row items-center gap-3 py-1.5 ${disabled ? 'opacity-50' : ''}`}
+      className={`flex-row items-center gap-3 py-1.5 ${
+        disabled ? 'opacity-50' : ''
+      }`}
     >
       <View className="flex-1">
         <Text className="text-sm text-text-heading">{label}</Text>
@@ -143,7 +148,12 @@ export function Switch({
             borderRadius: 7,
             backgroundColor: '#ffffff',
             transform: [
-              { translateX: anim.interpolate({ inputRange: [0, 1], outputRange: [0, 14] }) },
+              {
+                translateX: anim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0, 14],
+                }),
+              },
             ],
           }}
         />

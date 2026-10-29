@@ -8,7 +8,6 @@ import {
   isValid,
   parse,
 } from 'date-fns';
-import { ChevronDown, ChevronRight, Plus, X } from 'lucide-react-native';
 import {
   itemFormAtom,
   itemsAtom,
@@ -24,30 +23,15 @@ import {
   type Person,
 } from '../../hooks/useUsers';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
-import { yearlyRecurrenceNeedsLeapWarning } from '../../data/recurrence';
-import {
-  RRULE_PRESETS,
-  RRuleError,
-  describeRRule,
-  expandRRule,
-  migrateRecurrence,
-  normalizeRRule,
-  parseRRule,
-} from '../../data/rrule';
-import type { Reminder, Status, TaskTag } from '../../data/types';
-import { useThemeColors } from '../../hooks/useThemeColors';
+import type { Status, TaskTag } from '../../data/types';
 import { errorMessage, toast } from '../../atoms/feedback';
 import {
   Button,
   Callout,
-  Checkbox,
   Chip,
-  DateField,
   DateTimeField,
   Field,
-  IconButton,
   Input,
-  Press,
   Sheet,
   SheetBody,
   SheetFooter,
@@ -56,20 +40,10 @@ import {
 import { MultiSelectDropdown } from './shared';
 
 const DATE_FMT = 'yyyy-MM-dd';
-const REMINDER_OFFSETS = [
-  { days: 0, label: 'On due date' },
-  { days: 1, label: '1 day before' },
-  { days: 2, label: '2 days before' },
-  { days: 3, label: '3 days before' },
-  { days: 7, label: '1 week before' },
-];
-const MAX_REMINDERS = 2;
-const DEFAULT_REMINDER_TIME = '09:00';
 
 const parseDate = (s: string) => parse(s, DATE_FMT, new Date());
 const validDate = (s: string) =>
   /^\d{4}-\d{2}-\d{2}$/.test(s) && isValid(parseDate(s));
-const validTime = (s: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(s);
 
 // Create or edit a work item. Opened via itemFormAtom from the "+" button, Kanban
 // columns and the item detail sheet.
@@ -127,20 +101,9 @@ export function ItemFormModal() {
   // 'HH:mm' or '' — '' = all day (see WorkItem.startTime).
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
-  // Stored as an RRULE string. Presets set it directly; "Custom" edits the raw text.
-  const [recurrence, setRecurrence] = useState<string | null>(null);
-  const [customRule, setCustomRule] = useState(false);
-  const [customText, setCustomText] = useState('');
-  const [reminders, setReminders] = useState<Reminder[]>([]);
-  // Must be explicitly ticked before saving a yearly recurrence anchored on
-  // Feb 29 — see the warning banner below.
-  const [leapAck, setLeapAck] = useState(false);
   // Errors stay quiet until the first save attempt — no red text on a form
   // you've only just opened.
   const [attempted, setAttempted] = useState(false);
-  // Labels / repeats / reminders live behind "More options" unless in use.
-  const [moreOpen, setMoreOpen] = useState(false);
-  const c = useThemeColors();
 
   // Server-backed: adding and removing are their own API calls
   // (POST /assignees/create, DELETE /assignees/remove), sent by addItem/editItem
@@ -203,72 +166,9 @@ export function ItemFormModal() {
     const source = editing ?? parent;
     setStartTime(source?.startTime ?? fromTemplate?.time ?? '');
     setEndTime(source?.endTime ?? fromTemplate?.time ?? '');
-    const savedRule = migrateRecurrence(editing?.recurrence);
-    setRecurrence(savedRule);
-    setCustomRule(
-      !!savedRule &&
-        !RRULE_PRESETS.some(p => p.rule === safeNormalize(savedRule)),
-    );
-    setCustomText(savedRule ?? '');
-    setReminders(editing?.reminders ?? []);
-    setLeapAck(false);
     setAttempted(false);
-    setMoreOpen(
-      !!editing &&
-        (!!editing.recurrence || (editing.reminders ?? []).length > 0),
-    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form]);
-
-  // A yearly recurrence anchored on Feb 29 needs an explicit confirmation
-  // that non-leap years will land on Feb 28 instead — see the brief: "give a
-  // warning... confirm that we do... before" (i.e. before saving, not after).
-  const parsedRule = (() => {
-    if (!recurrence) {
-      return null;
-    }
-    try {
-      return parseRRule(recurrence);
-    } catch {
-      return null;
-    }
-  })();
-  // Free-typed rule text is validated as you type; the saved value only follows once valid.
-  const customError = (() => {
-    if (!customRule || !customText.trim()) {
-      return customRule ? 'Enter an RRULE, e.g. FREQ=WEEKLY;BYDAY=MO,FR' : null;
-    }
-    try {
-      parseRRule(customText);
-      return null;
-    } catch (err) {
-      return err instanceof RRuleError ? err.message : 'Invalid rule';
-    }
-  })();
-  const needsLeapWarning =
-    parsedRule?.freq === 'YEARLY' &&
-    !parsedRule.byMonthDay &&
-    !parsedRule.byDay &&
-    validDate(start) &&
-    yearlyRecurrenceNeedsLeapWarning(parseDate(start));
-
-  const addReminder = () =>
-    setReminders(prev =>
-      prev.length >= MAX_REMINDERS
-        ? prev
-        : [
-            ...prev,
-            {
-              id: `rem-${Date.now()}`,
-              offsetDays: 0,
-              time: DEFAULT_REMINDER_TIME,
-            },
-          ],
-    );
-  const updateReminder = (id: string, patch: Partial<Reminder>) =>
-    setReminders(prev => prev.map(r => (r.id === id ? { ...r, ...patch } : r)));
-  const removeReminder = (id: string) =>
-    setReminders(prev => prev.filter(r => r.id !== id));
 
   const close = () => setForm(null);
 
@@ -292,11 +192,8 @@ export function ItemFormModal() {
       : end === start && startTime && endTime && endTime < startTime
       ? 'Due time is before the start'
       : null,
-    reminders: reminders.some(r => !validTime(r.time)) ? 'Use HH:mm' : null,
-    recurrence: customError,
   };
-  const valid =
-    !Object.values(errors).some(Boolean) && (!needsLeapWarning || leapAck);
+  const valid = !Object.values(errors).some(Boolean);
   const canSaveNow = !unavailableReason;
 
   // What Save needs to actually tell the API, in each direction — newly
@@ -314,9 +211,6 @@ export function ItemFormModal() {
   const save = async () => {
     if (!valid) {
       setAttempted(true);
-      if (errors.recurrence || errors.reminders || needsLeapWarning) {
-        setMoreOpen(true);
-      }
       return;
     }
     if (!canSaveNow || saving) {
@@ -336,8 +230,11 @@ export function ItemFormModal() {
       end,
       startTime: startTime || null,
       endTime: endTime || null,
-      recurrence,
-      reminders,
+      // Recurrence and reminders are no longer editable from this form (see
+      // the removed Repeats/Reminders fields) — pass through whatever an
+      // existing task already has rather than wipe it on an unrelated edit.
+      recurrence: editing?.recurrence ?? null,
+      reminders: editing?.reminders ?? [],
     };
     const changes = { add: toAssign, remove: toUnassign };
     setSaving(true);
@@ -545,183 +442,6 @@ export function ItemFormModal() {
             </Field>
           </View>
         </View>
-
-        <Press
-          feedback="none"
-          accessibilityRole="button"
-          accessibilityState={{ expanded: moreOpen }}
-          onPress={() => setMoreOpen(o => !o)}
-          className="mb-3 flex-row items-center gap-1.5 self-start rounded-md py-1 pr-2"
-        >
-          {moreOpen ? (
-            <ChevronDown size={15} color={c.text} />
-          ) : (
-            <ChevronRight size={15} color={c.text} />
-          )}
-          <Text className="text-sm font-medium text-text-main hover:text-text-heading">
-            More options
-          </Text>
-          {!moreOpen && (recurrence || reminders.length > 0) ? (
-            <Text className="text-xs text-text-subtle">
-              ·{' '}
-              {[recurrence && 'repeats', reminders.length > 0 && 'reminders']
-                .filter(Boolean)
-                .join(', ')}
-            </Text>
-          ) : null}
-        </Press>
-
-        {moreOpen ? (
-          <View>
-            <Field
-              label="Repeats"
-              error={
-                show(errors.recurrence) ??
-                (customRule ? errors.recurrence : null)
-              }
-            >
-              <View className="flex-row flex-wrap gap-1.5">
-                <Chip
-                  label="Doesn’t repeat"
-                  active={recurrence === null && !customRule}
-                  onPress={() => {
-                    setRecurrence(null);
-                    setCustomRule(false);
-                  }}
-                />
-                {RRULE_PRESETS.map(p => (
-                  <Chip
-                    key={p.rule}
-                    label={p.label}
-                    active={!customRule && recurrence === p.rule}
-                    onPress={() => {
-                      setRecurrence(p.rule);
-                      setCustomRule(false);
-                      setCustomText(p.rule);
-                    }}
-                  />
-                ))}
-                <Chip
-                  label="Custom"
-                  active={customRule}
-                  onPress={() => {
-                    setCustomRule(true);
-                    setCustomText(recurrence ?? 'FREQ=WEEKLY;BYDAY=MO');
-                    setRecurrence(
-                      safeNormalize(recurrence ?? 'FREQ=WEEKLY;BYDAY=MO'),
-                    );
-                  }}
-                />
-              </View>
-              {customRule ? (
-                <View className="mt-2">
-                  <Input
-                    value={customText}
-                    onChangeText={(t: string) => {
-                      setCustomText(t);
-                      setRecurrence(safeNormalize(t));
-                    }}
-                    placeholder="FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,FR"
-                    autoCapitalize="characters"
-                    autoCorrect={false}
-                    invalid={!!customError}
-                  />
-                  <Text className="mt-1.5 text-xs text-text-subtle">
-                    RFC 5545 RRULE: FREQ, INTERVAL, COUNT or UNTIL, BYDAY,
-                    BYMONTHDAY, BYMONTH, BYSETPOS, WKST.
-                  </Text>
-                </View>
-              ) : null}
-              {parsedRule ? (
-                <Text className="mt-2 text-xs text-text-main">
-                  {describeRRule(parsedRule)}
-                  {validDate(start)
-                    ? ` · next: ${nextDates(parsedRule, start)}`
-                    : ''}
-                </Text>
-              ) : null}
-              {needsLeapWarning ? (
-                <View className="mt-3">
-                  <Callout
-                    kind="warning"
-                    title="Feb 29 only exists in leap years"
-                  >
-                    <Text className="mb-2 text-sm text-text-main">
-                      In every other year this task will land on Feb 28 instead
-                      — never March 1.
-                    </Text>
-                    <Checkbox
-                      checked={leapAck}
-                      onChange={setLeapAck}
-                      label="I understand — confirm to continue"
-                    />
-                  </Callout>
-                </View>
-              ) : null}
-            </Field>
-
-            <Field
-              label="Reminders"
-              right={
-                <Text className="text-xs text-text-subtle">
-                  {reminders.length}/{MAX_REMINDERS}
-                </Text>
-              }
-              error={show(errors.reminders)}
-            >
-              <View className="gap-2">
-                {reminders.map(r => (
-                  <View
-                    key={r.id}
-                    className="gap-2 rounded-lg border border-border-main bg-muted/50 p-2.5"
-                  >
-                    <View className="flex-row items-center gap-2">
-                      <View className="w-28">
-                        <DateField
-                          mode="time"
-                          value={r.time}
-                          onChange={t => updateReminder(r.id, { time: t })}
-                          invalid={!validTime(r.time) && attempted}
-                          accessibilityLabel="Reminder time"
-                        />
-                      </View>
-                      <View className="flex-1" />
-                      <IconButton
-                        icon={X}
-                        size="sm"
-                        label="Remove reminder"
-                        onPress={() => removeReminder(r.id)}
-                      />
-                    </View>
-                    <View className="flex-row flex-wrap gap-1.5">
-                      {REMINDER_OFFSETS.map(o => (
-                        <Chip
-                          key={o.days}
-                          label={o.label}
-                          active={r.offsetDays === o.days}
-                          onPress={() =>
-                            updateReminder(r.id, { offsetDays: o.days })
-                          }
-                        />
-                      ))}
-                    </View>
-                  </View>
-                ))}
-                {reminders.length < MAX_REMINDERS ? (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    icon={Plus}
-                    onPress={addReminder}
-                    className="self-start"
-                  >
-                    Add reminder
-                  </Button>
-                ) : null}
-              </View>
-            </Field>
-          </View>
-        ) : null}
       </SheetBody>
 
       <SheetFooter>
@@ -738,29 +458,5 @@ export function ItemFormModal() {
         </Button>
       </SheetFooter>
     </Sheet>
-  );
-}
-
-// Canonical text for a rule, or null when it doesn't parse yet (mid-typing).
-function safeNormalize(text: string | null): string | null {
-  if (!text) {
-    return null;
-  }
-  try {
-    return normalizeRRule(text);
-  } catch {
-    return null;
-  }
-}
-
-// First few upcoming occurrence dates, for the form's preview line.
-function nextDates(rule: ReturnType<typeof parseRRule>, start: string): string {
-  const anchor = parse(start, DATE_FMT, new Date());
-  const hits = expandRRule(rule, anchor, anchor, addDays(anchor, 366 * 3));
-  return (
-    hits
-      .slice(0, 3)
-      .map(h => format(h.date, 'MMM d'))
-      .join(', ') || '—'
   );
 }

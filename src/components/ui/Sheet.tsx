@@ -13,7 +13,7 @@ import {
   type ViewInstance,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { X } from 'lucide-react-native';
+import X from 'lucide-react-native/icons/x';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { newSheetId, openSheetsAtom } from '../../atoms/feedback';
 import { useThemeColors } from '../../hooks/useThemeColors';
@@ -140,16 +140,34 @@ export function Sheet({
 
   const panelMotion = docked
     ? {
-        opacity: anim.interpolate({ inputRange: [0, 0.4, 1], outputRange: [0, 1, 1] }),
+        opacity: anim.interpolate({
+          inputRange: [0, 0.4, 1],
+          outputRange: [0, 1, 1],
+        }),
         transform: [
-          { translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [48, 0] }) },
+          {
+            translateY: anim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [48, 0],
+            }),
+          },
         ],
       }
     : {
         opacity: anim,
         transform: [
-          { translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [10, 0] }) },
-          { scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.97, 1] }) },
+          {
+            translateY: anim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [10, 0],
+            }),
+          },
+          {
+            scale: anim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.97, 1],
+            }),
+          },
         ],
       };
 
@@ -202,7 +220,10 @@ export function Sheet({
             <View
               accessibilityViewIsModal
               style={[
-                { maxHeight: '100%', paddingBottom: docked ? insets.bottom : 0 },
+                {
+                  maxHeight: '100%',
+                  paddingBottom: docked ? insets.bottom : 0,
+                },
                 Platform.OS === 'web'
                   ? ({
                       boxShadow: dark
@@ -250,7 +271,9 @@ export function SheetHeader({
       <View className="flex-1">
         {eyebrow ? <View className="mb-1">{eyebrow}</View> : null}
         {typeof title === 'string' ? (
-          <Text className="text-lg font-semibold text-text-heading">{title}</Text>
+          <Text className="text-lg font-semibold text-text-heading">
+            {title}
+          </Text>
         ) : (
           title
         )}
@@ -264,7 +287,9 @@ export function SheetHeader({
       </View>
       <View className="-mr-1.5 -mt-0.5 flex-row items-center gap-0.5">
         {actions}
-        {onClose ? <IconButton icon={X} label="Close" onPress={onClose} /> : null}
+        {onClose ? (
+          <IconButton icon={X} label="Close" onPress={onClose} />
+        ) : null}
       </View>
     </View>
   );

@@ -1,14 +1,12 @@
 import { ScrollView, Text, View } from 'react-native';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { format, parseISO } from 'date-fns';
-import {
-  Bell,
-  CloudOff,
-  Mail,
-  Pencil,
-  Smartphone,
-  Trash2,
-} from 'lucide-react-native';
+import Bell from 'lucide-react-native/icons/bell';
+import CloudOff from 'lucide-react-native/icons/cloud-off';
+import Mail from 'lucide-react-native/icons/mail';
+import Pencil from 'lucide-react-native/icons/pencil';
+import Smartphone from 'lucide-react-native/icons/smartphone';
+import Trash2 from 'lucide-react-native/icons/trash';
 import { itemsAtom, selectedItemIdAtom } from '../../atoms/project';
 import { alertFormAtom } from '../../atoms/alerts';
 import { confirm, errorMessage, toast } from '../../atoms/feedback';

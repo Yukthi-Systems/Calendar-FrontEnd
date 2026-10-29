@@ -6,13 +6,11 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import {
-  CalendarCheck2,
-  ChevronLeft,
-  ChevronRight,
-  Plus,
-  Repeat,
-} from 'lucide-react-native';
+import CalendarCheck2 from 'lucide-react-native/icons/calendar-check-2';
+import ChevronLeft from 'lucide-react-native/icons/chevron-left';
+import ChevronRight from 'lucide-react-native/icons/chevron-right';
+import Plus from 'lucide-react-native/icons/plus';
+import Repeat from 'lucide-react-native/icons/repeat';
 import { useAtomValue, useSetAtom } from 'jotai';
 import {
   addDays,

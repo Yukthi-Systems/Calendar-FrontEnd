@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
-import { Plus, Search, Users, X } from 'lucide-react-native';
+import Plus from 'lucide-react-native/icons/plus';
+import Search from 'lucide-react-native/icons/search';
+import Users from 'lucide-react-native/icons/users';
+import X from 'lucide-react-native/icons/x';
 import { useAtomValue } from 'jotai';
 import { formatDistanceToNow, parseISO } from 'date-fns';
 import { currentUserIdAtom } from '../../atoms/members';
@@ -57,7 +60,9 @@ export function ShareViewModal({
   const people = usePeople((shares.data ?? []).map(s => s.user_id));
   const nameOf = (id: string) => (people.get(id)?.name ?? '').toLowerCase();
   const list = [...(shares.data ?? [])].sort(
-    (a, b) => nameOf(a.user_id).localeCompare(nameOf(b.user_id)) || a.user_id.localeCompare(b.user_id),
+    (a, b) =>
+      nameOf(a.user_id).localeCompare(nameOf(b.user_id)) ||
+      a.user_id.localeCompare(b.user_id),
   );
 
   return (
@@ -92,12 +97,19 @@ export function ShareViewModal({
         ) : (
           <View className="mb-5 overflow-hidden rounded-xl border border-border-main">
             {list.map((s, i) => (
-              <ShareRow key={s.user_id} viewId={view!.id} share={s} first={i === 0} />
+              <ShareRow
+                key={s.user_id}
+                viewId={view!.id}
+                share={s}
+                first={i === 0}
+              />
             ))}
           </View>
         )}
 
-        {view ? <AddPeople view={view} existing={list.map(s => s.user_id)} /> : null}
+        {view ? (
+          <AddPeople view={view} existing={list.map(s => s.user_id)} />
+        ) : null}
       </SheetBody>
       <SheetFooter>
         <Button variant="primary" onPress={onClose}>
@@ -131,7 +143,10 @@ function ShareRow({
   const toggle = async (key: (typeof PERMS)[number]['key']) => {
     setBusy(true);
     try {
-      await updateShare({ next: { ...current, [key]: !current[key] }, prev: current });
+      await updateShare({
+        next: { ...current, [key]: !current[key] },
+        prev: current,
+      });
     } catch (err) {
       toast.error('Couldn’t change access', {
         description: errorMessage(err, 'Please try again.'),
@@ -166,9 +181,9 @@ function ShareRow({
 
   return (
     <View
-      className={`gap-2 px-3 py-2.5 ${first ? '' : 'border-t border-border-main'} ${
-        busy ? 'opacity-60' : ''
-      }`}
+      className={`gap-2 px-3 py-2.5 ${
+        first ? '' : 'border-t border-border-main'
+      } ${busy ? 'opacity-60' : ''}`}
     >
       <View className="flex-row items-center gap-2.5">
         <InitialsAvatar
@@ -177,13 +192,18 @@ function ShareRow({
           size={28}
         />
         <View className="flex-1">
-          <Text numberOfLines={1} className="text-sm font-medium text-text-heading">
+          <Text
+            numberOfLines={1}
+            className="text-sm font-medium text-text-heading"
+          >
             {person?.name ?? '…'}
           </Text>
           <Text numberOfLines={1} className="text-xs text-text-subtle">
             {person?.email}
             {share.shared_at
-              ? ` · shared ${formatDistanceToNow(parseISO(share.shared_at), { addSuffix: true })}`
+              ? ` · shared ${formatDistanceToNow(parseISO(share.shared_at), {
+                  addSuffix: true,
+                })}`
               : ''}
           </Text>
         </View>
@@ -209,7 +229,9 @@ function ShareRow({
         <Text className="text-xs text-text-subtle">tasks</Text>
       </View>
       {share.share_notes ? (
-        <Text className="pl-[38px] text-xs italic text-text-main">“{share.share_notes}”</Text>
+        <Text className="pl-[38px] text-xs italic text-text-main">
+          “{share.share_notes}”
+        </Text>
       ) : null}
     </View>
   );
@@ -223,14 +245,24 @@ const EMAIL = /[^\s,;<>"']+@[^\s,;<>"']+\.[^\s,;<>"']+/g;
 // or paste a list of emails: each is looked up and added; any not in the
 // organization is listed. One POST /shared/create per person; anyone who fails
 // stays selected for another try.
-function AddPeople({ view, existing }: { view: ProjectView; existing: string[] }) {
+function AddPeople({
+  view,
+  existing,
+}: {
+  view: ProjectView;
+  existing: string[];
+}) {
   const c = useThemeColors();
   const currentUserId = useAtomValue(currentUserIdAtom);
   const { addShare } = useShareMutations(view.id);
   const findByEmail = useFindPeopleByEmail();
   const [query, setQuery] = useState('');
   const [picked, setPicked] = useState<Person[]>([]);
-  const [perms, setPerms] = useState({ canCreate: false, canEdit: false, canDelete: false });
+  const [perms, setPerms] = useState({
+    canCreate: false,
+    canEdit: false,
+    canDelete: false,
+  });
   const [notes, setNotes] = useState('');
   const [saving, setSaving] = useState(false);
   const [resolving, setResolving] = useState(false);
@@ -239,18 +271,28 @@ function AddPeople({ view, existing }: { view: ProjectView; existing: string[] }
   const [tried, setTried] = useState(false);
   const noteMissing = !notes.trim();
 
-  const { people, isSearching } = useUserSearch(query.includes(',') || query.includes('\n') ? '' : query);
+  const { people, isSearching } = useUserSearch(
+    query.includes(',') || query.includes('\n') ? '' : query,
+  );
   const taken = (id: string) =>
-    id === currentUserId || existing.includes(id) || picked.some(p => p.id === id);
+    id === currentUserId ||
+    existing.includes(id) ||
+    picked.some(p => p.id === id);
   const matches = people.filter(p => !taken(p.id));
 
   const add = (list: Person[]) =>
-    setPicked(prev => [...prev, ...list.filter(p => !taken(p.id) && !prev.some(q => q.id === p.id))]);
-  const unpick = (id: string) => setPicked(prev => prev.filter(p => p.id !== id));
+    setPicked(prev => [
+      ...prev,
+      ...list.filter(p => !taken(p.id) && !prev.some(q => q.id === p.id)),
+    ]);
+  const unpick = (id: string) =>
+    setPicked(prev => prev.filter(p => p.id !== id));
 
   // Several emails typed or pasted at once → look each up.
   const onQuery = async (text: string) => {
-    const emails = [...new Set((text.match(EMAIL) ?? []).map(e => e.toLowerCase()))];
+    const emails = [
+      ...new Set((text.match(EMAIL) ?? []).map(e => e.toLowerCase())),
+    ];
     if (emails.length < 2 && !/[,;\n]/.test(text)) {
       setQuery(text);
       return;
@@ -280,19 +322,29 @@ function AddPeople({ view, existing }: { view: ProjectView; existing: string[] }
     setSaving(true);
     const failed: Person[] = [];
     for (const p of picked) {
-      await addShare({ userId: p.id, ...perms, notes: notes.trim() }).catch(() => failed.push(p));
+      await addShare({ userId: p.id, ...perms, notes: notes.trim() }).catch(
+        () => failed.push(p),
+      );
     }
     setSaving(false);
     const done = picked.length - failed.length;
     if (failed.length === 0) {
       toast.success(
-        picked.length === 1 ? `Shared with ${picked[0].name}` : `Shared with ${picked.length} people`,
+        picked.length === 1
+          ? `Shared with ${picked[0].name}`
+          : `Shared with ${picked.length} people`,
       );
       reset();
     } else {
       toast.error(
-        done > 0 ? `Shared with ${done}, ${failed.length} failed` : 'Couldn’t share the view',
-        { description: `Not shared: ${failed.map(f => f.name).join(', ')}. They’re still selected — try again.` },
+        done > 0
+          ? `Shared with ${done}, ${failed.length} failed`
+          : 'Couldn’t share the view',
+        {
+          description: `Not shared: ${failed
+            .map(f => f.name)
+            .join(', ')}. They’re still selected — try again.`,
+        },
       );
       setPicked(failed);
     }
@@ -301,7 +353,9 @@ function AddPeople({ view, existing }: { view: ProjectView; existing: string[] }
   const count = picked.length;
   return (
     <View className="rounded-xl border border-border-main bg-muted/40 p-3">
-      <Text className="mb-2 text-xs font-medium text-text-heading">Add people</Text>
+      <Text className="mb-2 text-xs font-medium text-text-heading">
+        Add people
+      </Text>
 
       {count > 0 ? (
         <View className="mb-2 flex-row flex-wrap gap-1.5">
@@ -311,7 +365,10 @@ function AddPeople({ view, existing }: { view: ProjectView; existing: string[] }
               className="h-7 flex-row items-center gap-1.5 rounded-full border border-border-main bg-bg-card pl-1 pr-0.5"
             >
               <InitialsAvatar color={p.color} initials={p.initials} size={20} />
-              <Text numberOfLines={1} className="max-w-[160px] text-sm text-text-heading">
+              <Text
+                numberOfLines={1}
+                className="max-w-[160px] text-sm text-text-heading"
+              >
                 {p.name}
               </Text>
               <Press
@@ -332,12 +389,18 @@ function AddPeople({ view, existing }: { view: ProjectView; existing: string[] }
         icon={Search}
         value={query}
         onChangeText={onQuery}
-        placeholder={count ? 'Add more — search or paste emails' : 'Search by email, or paste several'}
+        placeholder={
+          count
+            ? 'Add more — search or paste emails'
+            : 'Search by email, or paste several'
+        }
         autoCapitalize="none"
         autoCorrect={false}
       />
       {resolving ? (
-        <Text className="mt-1.5 text-xs text-text-subtle">Looking up emails…</Text>
+        <Text className="mt-1.5 text-xs text-text-subtle">
+          Looking up emails…
+        </Text>
       ) : null}
       {notFound.length > 0 ? (
         <Text className="mt-1.5 text-xs text-warning">
@@ -366,10 +429,17 @@ function AddPeople({ view, existing }: { view: ProjectView; existing: string[] }
                   }}
                   className="flex-row items-center gap-2.5 px-3 py-2 hover:bg-hover"
                 >
-                  <InitialsAvatar color={u.color} initials={u.initials} size={24} />
+                  <InitialsAvatar
+                    color={u.color}
+                    initials={u.initials}
+                    size={24}
+                  />
                   <View className="flex-1">
                     <Text className="text-sm text-text-heading">{u.name}</Text>
-                    <Text numberOfLines={1} className="text-xs text-text-subtle">
+                    <Text
+                      numberOfLines={1}
+                      className="text-xs text-text-subtle"
+                    >
                       {u.email}
                     </Text>
                   </View>
@@ -402,8 +472,14 @@ function AddPeople({ view, existing }: { view: ProjectView; existing: string[] }
             label="Note"
             required
             className="mb-0"
-            hint={count === 1 ? `${picked[0].name} sees this at the top of the view.` : 'Everyone you add sees this at the top of the view.'}
-            error={tried && noteMissing ? 'Add a short note so they know why.' : null}
+            hint={
+              count === 1
+                ? `${picked[0].name} sees this at the top of the view.`
+                : 'Everyone you add sees this at the top of the view.'
+            }
+            error={
+              tried && noteMissing ? 'Add a short note so they know why.' : null
+            }
           >
             <Input
               value={notes}
@@ -419,7 +495,9 @@ function AddPeople({ view, existing }: { view: ProjectView; existing: string[] }
               Clear
             </Button>
             <Button variant="primary" onPress={share} loading={saving}>
-              {count === 1 ? `Share with ${picked[0].name}` : `Share with ${count} people`}
+              {count === 1
+                ? `Share with ${picked[0].name}`
+                : `Share with ${count} people`}
             </Button>
           </View>
         </View>

@@ -1,4 +1,5 @@
-import { CalendarCheck2, ShieldCheck } from 'lucide-react-native';
+import CalendarCheck2 from 'lucide-react-native/icons/calendar-check-2';
+import ShieldCheck from 'lucide-react-native/icons/shield-check';
 import { Text, View } from 'react-native';
 import { useThemeColors } from '../hooks/useThemeColors';
 import { Button, Callout } from './ui';
@@ -26,9 +27,15 @@ export function LoginScreen({
       <View className="w-full max-w-[380px]">
         <View className="mb-8 items-center">
           <View className="mb-5 h-12 w-12 items-center justify-center rounded-xl bg-accent">
-            <CalendarCheck2 size={24} color={c.accentForeground} strokeWidth={2.25} />
+            <CalendarCheck2
+              size={24}
+              color={c.accentForeground}
+              strokeWidth={2.25}
+            />
           </View>
-          <Text className="text-2xl font-semibold text-text-heading">Sign in to YTC</Text>
+          <Text className="text-2xl font-semibold text-text-heading">
+            Sign in to YTC
+          </Text>
           <Text className="mt-2 text-center text-base text-text-main">
             Plan, schedule and track your team’s work in one place.
           </Text>
@@ -45,8 +52,8 @@ export function LoginScreen({
             </Callout>
           ) : sessionEnded ? (
             <Callout kind="warning" title="Your session has ended">
-              You were signed out of Yukthi SSO, or your session expired. Sign in again to
-              continue.
+              You were signed out of Yukthi SSO, or your session expired. Sign
+              in again to continue.
             </Callout>
           ) : isLogoutParam ? (
             <Callout kind="info">You’ve been signed out.</Callout>
@@ -59,7 +66,9 @@ export function LoginScreen({
             loading={ssoPending}
             className="w-full"
           >
-            {ssoPending ? 'Waiting for verification…' : 'Continue with Yukthi SSO'}
+            {ssoPending
+              ? 'Waiting for verification…'
+              : 'Continue with Yukthi SSO'}
           </Button>
 
           <View className="flex-row items-center justify-center gap-1.5">

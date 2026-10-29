@@ -1,7 +1,11 @@
 import { Text, View } from 'react-native';
 import { useAtom, useSetAtom } from 'jotai';
 import { format, parseISO } from 'date-fns';
-import { Clock, Pencil, Plus, Repeat, Trash2 } from 'lucide-react-native';
+import Clock from 'lucide-react-native/icons/clock';
+import Pencil from 'lucide-react-native/icons/pencil';
+import Plus from 'lucide-react-native/icons/plus';
+import Repeat from 'lucide-react-native/icons/repeat';
+import Trash2 from 'lucide-react-native/icons/trash';
 import {
   itemFormAtom,
   recurringFormAtom,

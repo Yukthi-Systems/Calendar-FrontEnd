@@ -2,16 +2,14 @@ import { useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { useAtom, useSetAtom } from 'jotai';
 import { format, parseISO } from 'date-fns';
-import {
-  CloudOff,
-  Pencil,
-  Plus,
-  Repeat,
-  Search,
-  SearchX,
-  Trash2,
-  X,
-} from 'lucide-react-native';
+import CloudOff from 'lucide-react-native/icons/cloud-off';
+import Pencil from 'lucide-react-native/icons/pencil';
+import Plus from 'lucide-react-native/icons/plus';
+import Repeat from 'lucide-react-native/icons/repeat';
+import Search from 'lucide-react-native/icons/search';
+import SearchX from 'lucide-react-native/icons/search-x';
+import Trash2 from 'lucide-react-native/icons/trash';
+import X from 'lucide-react-native/icons/x';
 import {
   itemFormAtom,
   recurringFormAtom,

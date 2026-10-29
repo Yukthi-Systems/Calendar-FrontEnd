@@ -1,5 +1,8 @@
 import { Text, View } from 'react-native';
-import { Check, Monitor, Moon, Sun } from 'lucide-react-native';
+import Check from 'lucide-react-native/icons/check';
+import Monitor from 'lucide-react-native/icons/monitor';
+import Moon from 'lucide-react-native/icons/moon';
+import Sun from 'lucide-react-native/icons/sun';
 import type { ThemeMode } from '../../atoms/theme';
 import { useSetTheme, useTheme } from '../../hooks/useUsers';
 import { PALETTES, type Palette } from '../../data/palettes';
@@ -43,7 +46,9 @@ export function ThemeModal({
         onClose={onClose}
       />
       <SheetBody>
-        <Text className="mb-2 text-xs font-medium text-text-heading">Theme</Text>
+        <Text className="mb-2 text-xs font-medium text-text-heading">
+          Theme
+        </Text>
         <View className="mb-5 self-start">
           <SegmentedControl
             options={MODES}
@@ -52,7 +57,9 @@ export function ThemeModal({
           />
         </View>
 
-        <Text className="mb-2 text-xs font-medium text-text-heading">Palette</Text>
+        <Text className="mb-2 text-xs font-medium text-text-heading">
+          Palette
+        </Text>
         <View className="flex-row flex-wrap gap-2.5">
           {PALETTES.map(p => (
             <PaletteCard
@@ -97,7 +104,9 @@ function PaletteCard({
       onPress={onPress}
       style={{ flexBasis: 140, flexGrow: 1 }}
       className={`rounded-xl border-2 p-1 ${
-        active ? 'border-accent' : 'border-transparent hover:border-border-strong'
+        active
+          ? 'border-accent'
+          : 'border-transparent hover:border-border-strong'
       }`}
     >
       <View
@@ -108,13 +117,24 @@ function PaletteCard({
           style={{ backgroundColor: p.card, borderColor: p.border }}
           className="flex-1 rounded-md border p-1.5"
         >
-          <View style={{ backgroundColor: p.foreground, opacity: 0.85 }} className="mb-1 h-1.5 w-10 rounded-full" />
-          <View style={{ backgroundColor: p.mutedForeground, opacity: 0.5 }} className="mb-1.5 h-1.5 w-14 rounded-full" />
-          <View style={{ backgroundColor: p.primary }} className="h-2 w-8 rounded-full" />
+          <View
+            style={{ backgroundColor: p.foreground, opacity: 0.85 }}
+            className="mb-1 h-1.5 w-10 rounded-full"
+          />
+          <View
+            style={{ backgroundColor: p.mutedForeground, opacity: 0.5 }}
+            className="mb-1.5 h-1.5 w-14 rounded-full"
+          />
+          <View
+            style={{ backgroundColor: p.primary }}
+            className="h-2 w-8 rounded-full"
+          />
         </View>
       </View>
       <View className="flex-row items-center justify-between px-1 pb-0.5 pt-1.5">
-        <Text className="text-xs font-medium text-text-heading">{palette.label}</Text>
+        <Text className="text-xs font-medium text-text-heading">
+          {palette.label}
+        </Text>
         {active ? <Check size={13} color={c.accent} strokeWidth={2.5} /> : null}
       </View>
     </Press>

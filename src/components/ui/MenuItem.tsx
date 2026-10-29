@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Text, View } from 'react-native';
-import { ChevronRight, type LucideIcon } from 'lucide-react-native';
+import ChevronRight from 'lucide-react-native/icons/chevron-right';
+import type { LucideIcon } from 'lucide-react-native';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { Press } from './Press';
 
@@ -37,7 +38,11 @@ export function MenuItem({
       } ${disabled ? 'opacity-50' : ''}`}
     >
       {Icon ? (
-        <Icon size={16} color={destructive ? c.destructive : c.text} strokeWidth={2} />
+        <Icon
+          size={16}
+          color={destructive ? c.destructive : c.text}
+          strokeWidth={2}
+        />
       ) : null}
       <View className="flex-1">
         <Text

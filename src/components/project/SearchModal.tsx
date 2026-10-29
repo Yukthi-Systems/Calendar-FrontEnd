@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { useAtom, useSetAtom } from 'jotai';
 import { format, parseISO } from 'date-fns';
-import { Search, SearchX, X } from 'lucide-react-native';
+import Search from 'lucide-react-native/icons/search';
+import SearchX from 'lucide-react-native/icons/search-x';
+import X from 'lucide-react-native/icons/x';
 import {
   itemsAtom,
   searchOpenAtom,
@@ -79,18 +81,35 @@ export function SearchModal() {
     !!to.date ||
     statuses.length !== statusOptions.length ||
     tags.length !== tagOptions.length;
-  const { results, isSearching, isLoading, error, hasMore, loadMore, loadingMore } =
-    useTaskSearch(
-      view,
-      { title, statuses, tags, from: from.date, to: to.date, fromTime: from.time, toTime: to.time },
-      open && hasQuery,
-    );
+  const {
+    results,
+    isSearching,
+    isLoading,
+    error,
+    hasMore,
+    loadMore,
+    loadingMore,
+  } = useTaskSearch(
+    view,
+    {
+      title,
+      statuses,
+      tags,
+      from: from.date,
+      to: to.date,
+      fromTime: from.time,
+      toTime: to.time,
+    },
+    open && hasQuery,
+  );
 
   const close = () => setOpen(false);
   const openItem = (item: WorkItem) => {
     // Results are the view's root tasks, normally already listed; if this one
     // isn't (yet), add the server's copy so the detail sheet can show it.
-    setItems(prev => (prev.some(i => i.id === item.id) ? prev : [...prev, item]));
+    setItems(prev =>
+      prev.some(i => i.id === item.id) ? prev : [...prev, item],
+    );
     setOpen(false);
     setSelectedId(item.id);
   };
@@ -103,15 +122,17 @@ export function SearchModal() {
     : words.length === 0
     ? 'Only letters and numbers are matched — showing every title.'
     : words.length > 1 || searchableTitle(title) !== typed
-    ? `Titles containing ${words.map(w => `“${w}”`).join(' + ')} (punctuation is ignored).`
+    ? `Titles containing ${words
+        .map(w => `“${w}”`)
+        .join(' + ')} (punctuation is ignored).`
     : null;
 
   const blocker =
     statuses.length === 0
       ? 'Pick at least one status.'
       : tags.length === 0
-        ? 'Pick at least one tag.'
-        : rangeError;
+      ? 'Pick at least one tag.'
+      : rangeError;
 
   return (
     <Sheet visible={open} onClose={close} size="lg">
@@ -121,7 +142,9 @@ export function SearchModal() {
           accessibilityLabel="Title contains"
           value={title}
           onChangeText={setTitle}
-          placeholder={view ? `Search “${view.name}” by title…` : 'Search tasks by title…'}
+          placeholder={
+            view ? `Search “${view.name}” by title…` : 'Search tasks by title…'
+          }
           bare
           autoFocus
           returnKeyType="search"
@@ -137,10 +160,14 @@ export function SearchModal() {
         keyboardShouldPersistTaps="handled"
       >
         <View className="gap-3 border-b border-border-main bg-muted/40 px-5 py-4">
-          {titleNote ? <Text className="text-xs text-text-subtle">{titleNote}</Text> : null}
+          {titleNote ? (
+            <Text className="text-xs text-text-subtle">{titleNote}</Text>
+          ) : null}
 
           <View>
-            <Text className="mb-1.5 text-xs font-medium text-text-heading">Status</Text>
+            <Text className="mb-1.5 text-xs font-medium text-text-heading">
+              Status
+            </Text>
             <View className="flex-row flex-wrap gap-1.5">
               {statusOptions.map(st => (
                 <Chip
@@ -156,7 +183,9 @@ export function SearchModal() {
           </View>
 
           <View>
-            <Text className="mb-1.5 text-xs font-medium text-text-heading">Tag</Text>
+            <Text className="mb-1.5 text-xs font-medium text-text-heading">
+              Tag
+            </Text>
             <View className="flex-row flex-wrap gap-1.5">
               {tagOptions.map(t => (
                 <Chip
@@ -174,7 +203,9 @@ export function SearchModal() {
           <View>
             <View className="flex-row flex-wrap gap-3">
               <View style={{ flexBasis: 150, flexGrow: 1 }}>
-                <Text className="mb-1.5 text-xs font-medium text-text-heading">From</Text>
+                <Text className="mb-1.5 text-xs font-medium text-text-heading">
+                  From
+                </Text>
                 <DateTimeField
                   value={from}
                   onChange={setFrom}
@@ -185,7 +216,9 @@ export function SearchModal() {
                 />
               </View>
               <View style={{ flexBasis: 150, flexGrow: 1 }}>
-                <Text className="mb-1.5 text-xs font-medium text-text-heading">To</Text>
+                <Text className="mb-1.5 text-xs font-medium text-text-heading">
+                  To
+                </Text>
                 <DateTimeField
                   value={to}
                   onChange={setTo}
@@ -199,16 +232,27 @@ export function SearchModal() {
               </View>
             </View>
             <Text className="mt-1.5 text-xs text-text-subtle">
-              Tasks that start and end within this range. No time = the whole day.
+              Tasks that start and end within this range. No time = the whole
+              day.
             </Text>
           </View>
         </View>
 
         <View className="px-3 pt-3">
           {blocker ? (
-            <EmptyState compact icon={SearchX} title={blocker} description="Adjust the filters above to search." />
+            <EmptyState
+              compact
+              icon={SearchX}
+              title={blocker}
+              description="Adjust the filters above to search."
+            />
           ) : !view ? (
-            <EmptyState compact icon={Search} title="Open a view to search" description="Search looks through the current view’s tasks." />
+            <EmptyState
+              compact
+              icon={Search}
+              title="Open a view to search"
+              description="Search looks through the current view’s tasks."
+            />
           ) : !hasQuery ? (
             <EmptyState
               compact
@@ -234,21 +278,35 @@ export function SearchModal() {
               compact
               icon={SearchX}
               title={isSearching ? 'Searching…' : 'No matching tasks'}
-              description={isSearching ? undefined : 'Try another title or loosen the filters.'}
+              description={
+                isSearching
+                  ? undefined
+                  : 'Try another title or loosen the filters.'
+              }
             />
           ) : (
             <>
               <Text className="mb-1 px-2 text-2xs font-semibold uppercase tracking-wider text-text-subtle">
                 {results.length}
-                {hasMore ? '+' : ''} {results.length === 1 ? 'result' : 'results'} in {view.name}
+                {hasMore ? '+' : ''}{' '}
+                {results.length === 1 ? 'result' : 'results'} in {view.name}
                 {isSearching ? ' · updating…' : ''}
               </Text>
               {results.map(item => (
-                <ResultRow key={item.id} item={item} onPress={() => openItem(item)} />
+                <ResultRow
+                  key={item.id}
+                  item={item}
+                  onPress={() => openItem(item)}
+                />
               ))}
               {hasMore ? (
                 <View className="items-center pt-2">
-                  <Button size="sm" variant="secondary" loading={loadingMore} onPress={loadMore}>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    loading={loadingMore}
+                    onPress={loadMore}
+                  >
                     Load more
                   </Button>
                 </View>
@@ -270,7 +328,9 @@ const when = (item: WorkItem) => {
     return sameDay ? d(item.start) : `${d(item.start)} – ${d(item.end)}`;
   }
   if (sameDay) {
-    return `${d(item.start)} · ${item.startTime ?? 'All day'} – ${item.endTime ?? 'end of day'}`;
+    return `${d(item.start)} · ${item.startTime ?? 'All day'} – ${
+      item.endTime ?? 'end of day'
+    }`;
   }
   const at = (x: string, t: string | null) => (t ? `${d(x)} ${t}` : d(x));
   return `${at(item.start, item.startTime)} → ${at(item.end, item.endTime)}`;
@@ -290,7 +350,10 @@ function ResultRow({ item, onPress }: { item: WorkItem; onPress: () => void }) {
     >
       <StatusIcon status={item.status} />
       <View className="flex-1">
-        <Text numberOfLines={1} className="text-sm font-medium text-text-heading">
+        <Text
+          numberOfLines={1}
+          className="text-sm font-medium text-text-heading"
+        >
           {item.title}
         </Text>
         <Text numberOfLines={1} className="mt-0.5 text-xs text-text-subtle">
@@ -298,7 +361,9 @@ function ResultRow({ item, onPress }: { item: WorkItem; onPress: () => void }) {
         </Text>
       </View>
       <View className="w-24 items-start">
-        {tag ? <Badge label={tag.label} color={tag.color} size="sm" dot /> : null}
+        {tag ? (
+          <Badge label={tag.label} color={tag.color} size="sm" dot />
+        ) : null}
       </View>
       <View className="w-20 items-end">
         <AssigneeAvatars ids={item.assigneeIds} size={20} />

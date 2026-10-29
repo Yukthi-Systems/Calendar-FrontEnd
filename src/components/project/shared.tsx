@@ -1,17 +1,15 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { ScrollView, Text, View } from 'react-native';
-import {
-  ChevronDown,
-  CircleCheck,
-  CircleDashed,
-  CircleDot,
-  CirclePause,
-  CircleX,
-  ListTree,
-  Repeat,
-  Search,
-  type LucideIcon,
-} from 'lucide-react-native';
+import ChevronDown from 'lucide-react-native/icons/chevron-down';
+import CircleCheck from 'lucide-react-native/icons/circle-check';
+import CircleDashed from 'lucide-react-native/icons/circle-dashed';
+import CircleDot from 'lucide-react-native/icons/circle-dot';
+import CirclePause from 'lucide-react-native/icons/circle-pause';
+import CircleX from 'lucide-react-native/icons/circle-x';
+import ListTree from 'lucide-react-native/icons/list-tree';
+import Repeat from 'lucide-react-native/icons/repeat';
+import Search from 'lucide-react-native/icons/search';
+import type { LucideIcon } from 'lucide-react-native';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { differenceInCalendarDays, endOfDay, format, parseISO } from 'date-fns';
 import { itemsAtom, selectedItemIdAtom } from '../../atoms/project';

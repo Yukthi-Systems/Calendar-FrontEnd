@@ -2,16 +2,14 @@ import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { format, parseISO } from 'date-fns';
-import {
-  ArrowRight,
-  Bell,
-  ChevronRight,
-  ListTree,
-  Pencil,
-  Plus,
-  Repeat,
-  Trash2,
-} from 'lucide-react-native';
+import ArrowRight from 'lucide-react-native/icons/arrow-right';
+import Bell from 'lucide-react-native/icons/bell';
+import ChevronRight from 'lucide-react-native/icons/chevron-right';
+import ListTree from 'lucide-react-native/icons/list-tree';
+import Pencil from 'lucide-react-native/icons/pencil';
+import Plus from 'lucide-react-native/icons/plus';
+import Repeat from 'lucide-react-native/icons/repeat';
+import Trash2 from 'lucide-react-native/icons/trash';
 import {
   itemFormAtom,
   itemsAtom,
@@ -107,9 +105,11 @@ export function ItemModal() {
   const open = (id: string) => setSelectedId(id);
   // The view's canEdit/canDelete are a coarse, view-wide grant (what a shared
   // view's owner handed out) — the server separately requires you to actually
-  // be this specific task's owner or creator (see Tasks-Main-API's
-  // update_task/delete_task), an assignee is never enough. Mirror that here so
-  // the buttons don't offer an action the API will 403 on.
+  // be this specific task's owner or creator for a full edit or a delete (see
+  // Tasks-Main-API's update_task/delete_task), an assignee is never enough.
+  // Mirror that here so the buttons don't offer an action the API will 403
+  // on. Changing just the status is the one exception — update_task allows
+  // that for anyone canEdit already lets in, no ownership required.
   const isTaskOwnerOrCreator =
     !!item &&
     (item.ownerId === CURRENT_USER_ID || item.createdById === CURRENT_USER_ID);
@@ -296,7 +296,7 @@ export function ItemModal() {
               </View>
             ) : null}
 
-            {canEditTask ? (
+            {canEdit ? (
               <View className="mb-5 flex-row flex-wrap gap-1.5">
                 {allowedStatuses(activeView?.statusFilter).map(s => (
                   <Chip
@@ -313,9 +313,7 @@ export function ItemModal() {
                 <StatusBadge status={item.status} />
                 {activeView?.shared ? (
                   <Text className="text-xs text-text-subtle">
-                    {canEdit
-                      ? 'Only this task’s owner or creator can edit it'
-                      : canDelete
+                    {canDelete
                       ? 'You can’t edit tasks in this view'
                       : 'View only'}
                   </Text>

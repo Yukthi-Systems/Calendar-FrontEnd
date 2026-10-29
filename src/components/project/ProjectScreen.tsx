@@ -7,24 +7,22 @@ import {
   type ViewInstance,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  Bell,
-  CalendarCheck2,
-  CalendarDays,
-  Check,
-  ChevronDown,
-  ChevronLeft,
-  CloudOff,
-  Ellipsis,
-  LayoutGrid,
-  ListTodo,
-  MessageSquareText,
-  Plus,
-  RefreshCw,
-  Repeat,
-  Search,
-  Table2,
-} from 'lucide-react-native';
+import Bell from 'lucide-react-native/icons/bell';
+import CalendarCheck2 from 'lucide-react-native/icons/calendar-check-2';
+import CalendarDays from 'lucide-react-native/icons/calendar-days';
+import Check from 'lucide-react-native/icons/check';
+import ChevronDown from 'lucide-react-native/icons/chevron-down';
+import ChevronLeft from 'lucide-react-native/icons/chevron-left';
+import CloudOff from 'lucide-react-native/icons/cloud-off';
+import Ellipsis from 'lucide-react-native/icons/ellipsis';
+import LayoutGrid from 'lucide-react-native/icons/layout-grid';
+import ListTodo from 'lucide-react-native/icons/list-todo';
+import MessageSquareText from 'lucide-react-native/icons/message-square-text';
+import Plus from 'lucide-react-native/icons/plus';
+import RefreshCw from 'lucide-react-native/icons/refresh-cw';
+import Repeat from 'lucide-react-native/icons/repeat';
+import Search from 'lucide-react-native/icons/search';
+import Table2 from 'lucide-react-native/icons/table-2';
 import { useAtom, useSetAtom } from 'jotai';
 import {
   activeViewIdAtom,

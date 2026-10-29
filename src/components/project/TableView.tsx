@@ -1,18 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
-import {
-  ArrowDown,
-  ArrowUp,
-  ChevronRight,
-  ChevronsDownUp,
-  ChevronsUpDown,
-  Filter,
-  ListTodo,
-  Plus,
-  Repeat,
-  X,
-} from 'lucide-react-native';
+import ArrowDown from 'lucide-react-native/icons/arrow-down';
+import ArrowUp from 'lucide-react-native/icons/arrow-up';
+import ChevronRight from 'lucide-react-native/icons/chevron-right';
+import ChevronsDownUp from 'lucide-react-native/icons/chevrons-down-up';
+import ChevronsUpDown from 'lucide-react-native/icons/chevrons-up-down';
+import Filter from 'lucide-react-native/icons/funnel';
+import ListTodo from 'lucide-react-native/icons/list-todo';
+import Plus from 'lucide-react-native/icons/plus';
+import Repeat from 'lucide-react-native/icons/repeat';
+import X from 'lucide-react-native/icons/x';
 import {
   EMPTY_TASK_FILTERS,
   itemFormAtom,
@@ -272,23 +270,19 @@ export function TableView({ view }: { view: ProjectView }) {
       i.assigneeIds.some(id => filters.assigneeIds.includes(id))) &&
     (!filters.dueFrom || i.end >= filters.dueFrom) &&
     (!filters.dueTo || i.end <= filters.dueTo);
-  // A loaded task's root ancestor decides whether it's shown — keeps a whole
-  // subtree together instead of promoting a filtered-out parent's children to
-  // orphan top-level rows (buildRows treats a missing parent as "top level").
-  const rootOf = (i: WorkItem): WorkItem => {
-    let cur = i;
-    while (cur.parentId) {
-      const parent = allItems.find(x => x.id === cur.parentId);
-      if (!parent) {
-        break;
-      }
-      cur = parent;
-    }
-    return cur;
-  };
-  const items = filterActive
-    ? allItems.filter(i => passesFilter(rootOf(i)))
-    : allItems;
+  // Each task — root or subtask — is judged on its own fields, not just
+  // whether its root happens to match: a subtask now shows only when it (or
+  // one of its own loaded descendants) actually passes the filter. A
+  // non-matching ancestor still shows alongside a matching descendant,
+  // though, so that descendant keeps its place in the tree instead of being
+  // promoted to a top-level "orphan" row (buildRows treats a missing parent
+  // as top level). Subtasks that haven't been fetched yet (a row never
+  // expanded) can only be judged by their root, same as before — there's
+  // nothing else loaded to check.
+  const matchesFilter = (i: WorkItem): boolean =>
+    passesFilter(i) ||
+    allItems.some(x => x.parentId === i.id && matchesFilter(x));
+  const items = filterActive ? allItems.filter(matchesFilter) : allItems;
 
   // Each recurring template's own next occurrence, shown as one extra row
   // sorted into the table by that date like a real task — see

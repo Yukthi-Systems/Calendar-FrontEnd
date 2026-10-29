@@ -1,10 +1,8 @@
-import {
-  CalendarDays,
-  Columns3,
-  Map as MapIcon,
-  Table2,
-  type LucideIcon,
-} from 'lucide-react-native';
+import CalendarDays from 'lucide-react-native/icons/calendar-days';
+import Columns3 from 'lucide-react-native/icons/columns-3';
+import MapIcon from 'lucide-react-native/icons/map';
+import Table2 from 'lucide-react-native/icons/table-2';
+import type { LucideIcon } from 'lucide-react-native';
 import type { Status, TaskTag, ViewType } from './types';
 import type { BackendTaskStatus, BackendTaskTag } from '../services/types';
 

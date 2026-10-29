@@ -1,15 +1,13 @@
 import { useState } from 'react';
 import { useAtom } from 'jotai';
 import { Linking, Text, View } from 'react-native';
-import {
-  Building2,
-  LogOut,
-  Mail,
-  Palette,
-  Pencil,
-  Phone,
-  type LucideIcon,
-} from 'lucide-react-native';
+import Building2 from 'lucide-react-native/icons/building-complex';
+import LogOut from 'lucide-react-native/icons/log-out';
+import Mail from 'lucide-react-native/icons/mail';
+import Palette from 'lucide-react-native/icons/palette';
+import Pencil from 'lucide-react-native/icons/pencil';
+import Phone from 'lucide-react-native/icons/phone';
+import type { LucideIcon } from 'lucide-react-native';
 import { profileOpenAtom } from '../../atoms/profile';
 import { toast } from '../../atoms/feedback';
 import { getSsoUrl } from '../../services/ssoProfile';

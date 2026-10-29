@@ -2,14 +2,12 @@ import { useMemo } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { useAtomValue } from 'jotai';
 import { endOfDay, format, parseISO, startOfDay } from 'date-fns';
-import {
-  AlertCircle,
-  Bell,
-  CalendarClock,
-  ChevronRight,
-  Plus,
-  Search,
-} from 'lucide-react-native';
+import AlertCircle from 'lucide-react-native/icons/circle-alert';
+import Bell from 'lucide-react-native/icons/bell';
+import CalendarClock from 'lucide-react-native/icons/calendar-clock';
+import ChevronRight from 'lucide-react-native/icons/chevron-right';
+import Plus from 'lucide-react-native/icons/plus';
+import Search from 'lucide-react-native/icons/search';
 import { itemsAtom } from '../../atoms/project';
 import { useMyProfile } from '../../hooks/useUsers';
 import { VIEW_TYPES } from '../../data/constants';

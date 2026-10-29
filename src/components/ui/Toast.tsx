@@ -9,7 +9,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAtomValue } from 'jotai';
-import { CircleAlert, CircleCheck, Info, X } from 'lucide-react-native';
+import CircleAlert from 'lucide-react-native/icons/circle-alert';
+import CircleCheck from 'lucide-react-native/icons/circle-check';
+import Info from 'lucide-react-native/icons/info';
+import X from 'lucide-react-native/icons/x';
 import {
   openSheetsAtom,
   toast,
@@ -80,9 +83,18 @@ function ToastItem({ toast: t }: { toast: ToastData }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- runs once per toast
   }, []);
 
-  const Icon = t.kind === 'success' ? CircleCheck : t.kind === 'error' ? CircleAlert : Info;
+  const Icon =
+    t.kind === 'success'
+      ? CircleCheck
+      : t.kind === 'error'
+      ? CircleAlert
+      : Info;
   const iconColor =
-    t.kind === 'success' ? c.success : t.kind === 'error' ? c.destructive : c.info;
+    t.kind === 'success'
+      ? c.success
+      : t.kind === 'error'
+      ? c.destructive
+      : c.info;
 
   return (
     <Animated.View
@@ -90,8 +102,18 @@ function ToastItem({ toast: t }: { toast: ToastData }) {
       style={{
         opacity: anim,
         transform: [
-          { translateY: anim.interpolate({ inputRange: [0, 1], outputRange: [16, 0] }) },
-          { scale: anim.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) },
+          {
+            translateY: anim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [16, 0],
+            }),
+          },
+          {
+            scale: anim.interpolate({
+              inputRange: [0, 1],
+              outputRange: [0.96, 1],
+            }),
+          },
         ],
       }}
     >
@@ -111,9 +133,13 @@ function ToastItem({ toast: t }: { toast: ToastData }) {
           <Icon size={16} color={iconColor} strokeWidth={2} />
         </View>
         <View className="flex-1 py-px">
-          <Text className="text-sm font-medium text-text-heading">{t.message}</Text>
+          <Text className="text-sm font-medium text-text-heading">
+            {t.message}
+          </Text>
           {t.description ? (
-            <Text className="mt-0.5 text-xs text-text-main">{t.description}</Text>
+            <Text className="mt-0.5 text-xs text-text-main">
+              {t.description}
+            </Text>
           ) : null}
         </View>
         {t.action ? (
@@ -125,7 +151,9 @@ function ToastItem({ toast: t }: { toast: ToastData }) {
             }}
             className="h-6 justify-center rounded-md px-2 hover:bg-hover"
           >
-            <Text className="text-xs font-semibold text-accent">{t.action.label}</Text>
+            <Text className="text-xs font-semibold text-accent">
+              {t.action.label}
+            </Text>
           </Press>
         ) : null}
         <Press

@@ -1,14 +1,12 @@
 import { Text, View } from 'react-native';
 import { useSetAtom } from 'jotai';
 import { format, parseISO } from 'date-fns';
-import {
-  Bell,
-  Mail,
-  Pencil,
-  Plus,
-  Smartphone,
-  Trash2,
-} from 'lucide-react-native';
+import Bell from 'lucide-react-native/icons/bell';
+import Mail from 'lucide-react-native/icons/mail';
+import Pencil from 'lucide-react-native/icons/pencil';
+import Plus from 'lucide-react-native/icons/plus';
+import Smartphone from 'lucide-react-native/icons/smartphone';
+import Trash2 from 'lucide-react-native/icons/trash';
 import { alertFormAtom } from '../../atoms/alerts';
 import { confirm, errorMessage, toast } from '../../atoms/feedback';
 import { isAlertEditable, isAlertPast } from '../../data/taskAlerts';

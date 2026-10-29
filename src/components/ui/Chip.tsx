@@ -1,5 +1,6 @@
 import { Text, View } from 'react-native';
-import { Check, type LucideIcon } from 'lucide-react-native';
+import Check from 'lucide-react-native/icons/check';
+import type { LucideIcon } from 'lucide-react-native';
 import { useThemeColors, useTone } from '../../hooks/useThemeColors';
 import { Press } from './Press';
 
@@ -35,7 +36,9 @@ export function Chip({
       onPress={onPress}
       style={t ? { backgroundColor: t.bg, borderColor: t.border } : undefined}
       className={`h-7 flex-row items-center gap-1.5 rounded-full border px-2.5 ${
-        active ? '' : 'border-border-main bg-bg-card hover:border-border-strong hover:bg-hover'
+        active
+          ? ''
+          : 'border-border-main bg-bg-card hover:border-border-strong hover:bg-hover'
       }`}
     >
       {role === 'checkbox' && active ? (
@@ -43,7 +46,10 @@ export function Chip({
       ) : Icon ? (
         <Icon size={13} color={t?.fg ?? c.text} />
       ) : dot && color ? (
-        <View style={{ backgroundColor: color }} className="h-2 w-2 rounded-full" />
+        <View
+          style={{ backgroundColor: color }}
+          className="h-2 w-2 rounded-full"
+        />
       ) : null}
       <Text
         style={t ? { color: t.fg } : undefined}
@@ -80,7 +86,10 @@ export function Badge({
       } ${t ? '' : 'bg-muted'}`}
     >
       {dot && color ? (
-        <View style={{ backgroundColor: color }} className="h-1.5 w-1.5 rounded-full" />
+        <View
+          style={{ backgroundColor: color }}
+          className="h-1.5 w-1.5 rounded-full"
+        />
       ) : null}
       <Text
         numberOfLines={1}

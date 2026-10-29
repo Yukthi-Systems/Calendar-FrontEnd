@@ -7,7 +7,8 @@ import {
   View,
   type ViewInstance,
 } from 'react-native';
-import { CornerDownRight, Plus } from 'lucide-react-native';
+import CornerDownRight from 'lucide-react-native/icons/corner-down-right';
+import Plus from 'lucide-react-native/icons/plus';
 import { useAtomValue, useSetAtom } from 'jotai';
 import {
   itemFormAtom,
@@ -15,7 +16,6 @@ import {
   selectedItemIdAtom,
   tasksLoadingAtom,
 } from '../../atoms/project';
-import { currentUserIdAtom } from '../../atoms/members';
 import { allowedStatuses, statusInfo, tagInfo } from '../../data/constants';
 import { errorMessage, toast } from '../../atoms/feedback';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
@@ -64,13 +64,11 @@ export function KanbanView({ view }: { view: ProjectView }) {
   const { editItem } = useTaskMutations();
   // Shared view: add / move only if the owner allowed it.
   const { canCreate, canEdit } = useViewAccess(view);
-  const CURRENT_USER_ID = useAtomValue(currentUserIdAtom);
-  // canEdit is the view's own coarse grant — the server also requires you to
-  // actually be the card's own task owner or creator (an assignee dragging a
-  // card they're only assigned to would be refused), so check both.
-  const canMove = (item: WorkItem) =>
-    canEdit &&
-    (item.ownerId === CURRENT_USER_ID || item.createdById === CURRENT_USER_ID);
+  // Dragging a card only ever changes its status, which the server allows
+  // for anyone this view's own can_edit grant already covers — no extra
+  // owner/creator check needed (unlike a full edit; see ItemModal's
+  // canEditTask).
+  const canMove = canEdit;
   // Top-level tasks only — subtasks load lazily (useTasksSync's header comment),
   // so showing them as their own cards would make the board depend on whatever
   // happened to get fetched elsewhere.
@@ -261,7 +259,7 @@ export function KanbanView({ view }: { view: ProjectView }) {
                       key={item.id}
                       item={item}
                       items={items}
-                      enabled={canMove(item)}
+                      enabled={canMove}
                       lifted={dragging?.item.id === item.id}
                       onOpen={() => open(item.id)}
                       onDragStart={onDragStart}

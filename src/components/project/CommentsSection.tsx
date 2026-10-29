@@ -1,6 +1,9 @@
 import { useState } from 'react';
 import { Text, View } from 'react-native';
-import { MessageSquare, Pencil, SmilePlus, Trash2 } from 'lucide-react-native';
+import MessageSquare from 'lucide-react-native/icons/message-square';
+import Pencil from 'lucide-react-native/icons/pencil';
+import SmilePlus from 'lucide-react-native/icons/face-slightly-smiling-plus';
+import Trash2 from 'lucide-react-native/icons/trash';
 import { useAtomValue } from 'jotai';
 import { format } from 'date-fns';
 import { currentUserIdAtom } from '../../atoms/members';

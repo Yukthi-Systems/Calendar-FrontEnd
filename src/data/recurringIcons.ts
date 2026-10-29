@@ -1,18 +1,16 @@
-import {
-  Bell,
-  BookOpen,
-  Briefcase,
-  CheckCircle2,
-  Coffee,
-  Dumbbell,
-  Flag,
-  Heart,
-  Home,
-  Repeat,
-  Star,
-  Users,
-  type LucideIcon,
-} from 'lucide-react-native';
+import Bell from 'lucide-react-native/icons/bell';
+import BookOpen from 'lucide-react-native/icons/book-open';
+import Briefcase from 'lucide-react-native/icons/briefcase';
+import CheckCircle2 from 'lucide-react-native/icons/circle-check';
+import Coffee from 'lucide-react-native/icons/coffee';
+import Dumbbell from 'lucide-react-native/icons/dumbbell';
+import Flag from 'lucide-react-native/icons/flag';
+import Heart from 'lucide-react-native/icons/heart';
+import Home from 'lucide-react-native/icons/house';
+import Repeat from 'lucide-react-native/icons/repeat';
+import Star from 'lucide-react-native/icons/star';
+import Users from 'lucide-react-native/icons/users';
+import type { LucideIcon } from 'lucide-react-native';
 
 // A curated set a recurring template's icon can be — stored as `details.icon`
 // (see recurringTemplate.ts), the same free-form JSON slot `time` lives in.

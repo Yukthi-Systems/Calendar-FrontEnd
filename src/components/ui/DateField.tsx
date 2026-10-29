@@ -17,13 +17,11 @@ import {
   nextMonday,
   parse,
 } from 'date-fns';
-import {
-  CalendarDays,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  X,
-} from 'lucide-react-native';
+import CalendarDays from 'lucide-react-native/icons/calendar-days';
+import ChevronLeft from 'lucide-react-native/icons/chevron-left';
+import ChevronRight from 'lucide-react-native/icons/chevron-right';
+import Clock from 'lucide-react-native/icons/clock';
+import X from 'lucide-react-native/icons/x';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import type { ThemeTokens } from '../../theme/tokens';
 import { Popover } from './Popover';
@@ -43,7 +41,11 @@ const parseDate = (s: string) => {
 // react-native-ui-datepicker (pure JS: identical on web, iOS and Android),
 // themed from the app's tokens. Values stay 'yyyy-MM-dd' / 'HH:mm' strings.
 export function DateField(props: DateFieldProps) {
-  return props.mode === 'time' ? <TimeField {...props} /> : <DatePickerField {...props} />;
+  return props.mode === 'time' ? (
+    <TimeField {...props} />
+  ) : (
+    <DatePickerField {...props} />
+  );
 }
 
 function Trigger({
@@ -81,7 +83,11 @@ function Trigger({
         accessibilityLabel={accessibilityLabel}
         accessibilityState={{ expanded: open }}
         onPress={onPress}
-        style={open ? ({ boxShadow: `0 0 0 3px ${c.accent}26` } as object) : undefined}
+        style={
+          open
+            ? ({ boxShadow: `0 0 0 3px ${c.accent}26` } as object)
+            : undefined
+        }
         className={`min-h-[36px] flex-row items-center gap-2 rounded-lg border bg-bg-card pl-3 ${
           onClear ? 'pr-1' : 'pr-3'
         } ${border}`}
@@ -89,7 +95,9 @@ function Trigger({
         <Icon size={15} color={open ? c.accent : c.subtle} />
         <Text
           numberOfLines={1}
-          className={`flex-1 py-2 text-base ${label ? 'text-text-heading' : 'text-text-subtle'}`}
+          className={`flex-1 py-2 text-base ${
+            label ? 'text-text-heading' : 'text-text-subtle'
+          }`}
         >
           {label ?? placeholder}
         </Text>
@@ -214,7 +222,9 @@ function DatePickerField({
         {quick.length > 0 ? (
           <View className="mt-2 flex-row gap-1.5 border-t border-border-main pt-2.5">
             {quick.map(q => {
-              const active = !!selected && format(selected, DATE_FMT) === format(q.date, DATE_FMT);
+              const active =
+                !!selected &&
+                format(selected, DATE_FMT) === format(q.date, DATE_FMT);
               return (
                 <Press
                   key={q.label}
@@ -227,7 +237,9 @@ function DatePickerField({
                   }`}
                 >
                   <Text
-                    className={`text-xs font-medium ${active ? 'text-accent' : 'text-text-heading'}`}
+                    className={`text-xs font-medium ${
+                      active ? 'text-accent' : 'text-text-heading'
+                    }`}
                   >
                     {q.label}
                   </Text>
@@ -245,7 +257,11 @@ function DatePickerField({
 // mode) gets a matching calendar.
 function calendarStyles(c: ThemeTokens) {
   const label = { fontSize: 13, color: c.heading };
-  const caption = { fontSize: 14, fontWeight: '600' as const, color: c.heading };
+  const caption = {
+    fontSize: 14,
+    fontWeight: '600' as const,
+    color: c.heading,
+  };
   return {
     header: { marginBottom: 2, paddingLeft: 4 },
     month_selector_label: caption,
@@ -270,13 +286,19 @@ function calendarStyles(c: ThemeTokens) {
     month: { borderRadius: 8, borderWidth: 0 },
     month_label: label,
     selected_month: { backgroundColor: c.accent, borderColor: c.accent },
-    selected_month_label: { color: c.accentForeground, fontWeight: '600' as const },
+    selected_month_label: {
+      color: c.accentForeground,
+      fontWeight: '600' as const,
+    },
     year: { borderRadius: 8, borderWidth: 0 },
     year_label: label,
     active_year: { backgroundColor: c.accentSoft, borderColor: c.accentSoft },
     active_year_label: { color: c.accent, fontWeight: '600' as const },
     selected_year: { backgroundColor: c.accent, borderColor: c.accent },
-    selected_year_label: { color: c.accentForeground, fontWeight: '600' as const },
+    selected_year_label: {
+      color: c.accentForeground,
+      fontWeight: '600' as const,
+    },
   };
 }
 
@@ -305,7 +327,10 @@ function TimeField({
   // A saved time that isn't on the 15-minute grid still shows (and stays
   // selected) in the list.
   const slots = useMemo(
-    () => (value && !TIME_SLOTS.includes(value) ? [...TIME_SLOTS, value].sort() : TIME_SLOTS),
+    () =>
+      value && !TIME_SLOTS.includes(value)
+        ? [...TIME_SLOTS, value].sort()
+        : TIME_SLOTS,
     [value],
   );
 
@@ -314,10 +339,17 @@ function TimeField({
       return;
     }
     const target = value || '09:00';
-    const i = Math.max(0, slots.findIndex(s => s >= target));
+    const i = Math.max(
+      0,
+      slots.findIndex(s => s >= target),
+    );
     // Wait a frame for the list to lay out, then centre the current time.
     const t = setTimeout(
-      () => scroller.current?.scrollTo({ y: Math.max(0, (i - 3) * SLOT_H), animated: false }),
+      () =>
+        scroller.current?.scrollTo({
+          y: Math.max(0, (i - 3) * SLOT_H),
+          animated: false,
+        }),
       16,
     );
     return () => clearTimeout(t);
@@ -362,7 +394,9 @@ function TimeField({
             >
               <Text
                 className={`text-sm ${
-                  active ? 'font-semibold text-accent-foreground' : 'text-text-heading'
+                  active
+                    ? 'font-semibold text-accent-foreground'
+                    : 'text-text-heading'
                 }`}
               >
                 {s}
@@ -393,9 +427,13 @@ const dateTimeLabel = ({ date, time }: DateTimeValue) => {
     return null;
   }
   const n = differenceInCalendarDays(d, new Date());
-  const rel = n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : n === -1 ? 'Yesterday' : null;
+  const rel =
+    n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : n === -1 ? 'Yesterday' : null;
   const sameYear = d.getFullYear() === new Date().getFullYear();
-  const day = `${rel ?? format(d, 'EEE')}, ${format(d, sameYear ? 'MMM d' : 'MMM d, yyyy')}`;
+  const day = `${rel ?? format(d, 'EEE')}, ${format(
+    d,
+    sameYear ? 'MMM d' : 'MMM d, yyyy',
+  )}`;
   return time ? `${day} · ${time}` : day;
 };
 
@@ -449,10 +487,17 @@ export function DateTimeField({
     }
     setDraftDate(value.date);
     const target = value.time || '09:00';
-    const i = Math.max(0, slots.findIndex(s => s >= target));
+    const i = Math.max(
+      0,
+      slots.findIndex(s => s >= target),
+    );
     const t = setTimeout(() => {
       const offset = Math.max(0, (i - 3) * SLOT_H);
-      scroller.current?.scrollTo(stacked ? { x: i * 64, animated: false } : { y: offset, animated: false });
+      scroller.current?.scrollTo(
+        stacked
+          ? { x: i * 64, animated: false }
+          : { y: offset, animated: false },
+      );
     }, 16);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only on open
@@ -465,7 +510,10 @@ export function DateTimeField({
   };
   const pickTime = (time: string) => {
     // A time with no day yet means today.
-    onChange({ date: draftDate || value.date || format(new Date(), DATE_FMT), time });
+    onChange({
+      date: draftDate || value.date || format(new Date(), DATE_FMT),
+      time,
+    });
     setOpen(false);
   };
 
@@ -524,7 +572,11 @@ export function DateTimeField({
           triggerRef={ref}
           icon={CalendarDays}
           label={dateTimeLabel(value)}
-          onClear={clearable && value.date ? () => onChange({ date: '', time: '' }) : undefined}
+          onClear={
+            clearable && value.date
+              ? () => onChange({ date: '', time: '' })
+              : undefined
+          }
           placeholder={placeholder}
           open={open}
           invalid={invalid}
@@ -535,7 +587,10 @@ export function DateTimeField({
     >
       {/* Stacked: pinned to the calendar's width — the horizontal time strip would
           otherwise size to all its slots and push the calendar off-centre. */}
-      <View className={stacked ? 'gap-2' : 'flex-row gap-3'} style={stacked ? { width: 272 } : undefined}>
+      <View
+        className={stacked ? 'gap-2' : 'flex-row gap-3'}
+        style={stacked ? { width: 272 } : undefined}
+      >
         <View style={{ width: 272 }}>
           <DateTimePicker
             mode="single"
@@ -582,7 +637,11 @@ export function DateTimeField({
                       : 'border-border-main hover:border-border-strong hover:bg-hover'
                   }`}
                 >
-                  <Text className={`text-xs font-medium ${active ? 'text-accent' : 'text-text-heading'}`}>
+                  <Text
+                    className={`text-xs font-medium ${
+                      active ? 'text-accent' : 'text-text-heading'
+                    }`}
+                  >
                     {q.label}
                   </Text>
                 </Press>
@@ -592,7 +651,11 @@ export function DateTimeField({
         </View>
 
         <View
-          className={stacked ? 'border-t border-border-main pt-2' : 'border-l border-border-main pl-3'}
+          className={
+            stacked
+              ? 'border-t border-border-main pt-2'
+              : 'border-l border-border-main pl-3'
+          }
           style={stacked ? undefined : { width: 96 }}
         >
           <View className="mb-1.5 flex-row items-center gap-1.5 px-1">

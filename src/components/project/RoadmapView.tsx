@@ -8,7 +8,8 @@ import {
   View,
 } from 'react-native';
 import { useAtomValue, useSetAtom } from 'jotai';
-import { GanttChart, Plus } from 'lucide-react-native';
+import GanttChart from 'lucide-react-native/icons/chart-no-axes-gantt';
+import Plus from 'lucide-react-native/icons/plus';
 import type { ProjectView, Status, WorkItem } from '../../data/types';
 import { useViewAccess } from '../../hooks/useViews';
 import {
@@ -23,7 +24,11 @@ import {
   startOfMonth,
   startOfWeek,
 } from 'date-fns';
-import { itemFormAtom, itemsAtom, selectedItemIdAtom } from '../../atoms/project';
+import {
+  itemFormAtom,
+  itemsAtom,
+  selectedItemIdAtom,
+} from '../../atoms/project';
 import { allowedStatuses, statusInfo } from '../../data/constants';
 import { flattenTree } from '../../data/tree';
 import { useThemeColors, useTone } from '../../hooks/useThemeColors';
@@ -140,7 +145,11 @@ function RoadmapEmpty({ view }: { view: ProjectView }) {
       description="Tasks appear here as bars across their start and due dates, so you can see what overlaps."
       action={
         canCreate ? (
-          <Button variant="primary" icon={Plus} onPress={() => setForm({ mode: 'new' })}>
+          <Button
+            variant="primary"
+            icon={Plus}
+            onPress={() => setForm({ mode: 'new' })}
+          >
             New task
           </Button>
         ) : undefined
@@ -334,7 +343,11 @@ function RoadmapTimeline({
                           width: Math.max(width - 2, 6),
                           // Opaque (tint mixed into the card colour) so the
                           // grid and today line don't show through.
-                          backgroundColor: mix(theme.card, color, theme.dark ? 0.22 : 0.13),
+                          backgroundColor: mix(
+                            theme.card,
+                            color,
+                            theme.dark ? 0.22 : 0.13,
+                          ),
                           borderColor: t.border,
                           borderLeftColor: color,
                           height: depth === 1 ? 26 : 20,
