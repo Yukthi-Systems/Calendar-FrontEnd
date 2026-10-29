@@ -1,4 +1,4 @@
-import { useRef, useState, type RefObject } from 'react';
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import {
   ScrollView,
   Text,
@@ -165,6 +165,45 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   const active = useActiveView();
   const ActiveView = active ? VIEW_COMPONENTS[active.type] : null;
   useTasksSync(active);
+
+  // The Recurring tab only makes sense when the active view's own "Recurring
+  // tasks" toggle (ViewModal's "Also show" section) is on — hide it rather
+  // than offer a tab into content the view itself says not to show.
+  const modeOptions = active?.showRecurring
+    ? MODE_OPTIONS
+    : MODE_OPTIONS.filter(opt => opt.key !== 'recurring');
+  // Switching to a view with it off while already on that tab would otherwise
+  // strand the content area showing recurring events with no tab left to get
+  // back to it from.
+  useEffect(() => {
+    if (contentMode === 'recurring' && !active?.showRecurring) {
+      setContentMode('tasks');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to the active view (and its flag) changing, not every contentMode change
+  }, [active?.id, active?.showRecurring]);
+
+  // First-time sign-in (or every view somehow gone) — useActiveView only
+  // ever comes back empty when there's nothing to fall back to, so this is
+  // exactly "no views exist yet" (not, say, a bad activeViewIdAtom with
+  // other views still around). Rather than making them click through the
+  // "Create your first view" empty state's own button, open the New view
+  // form straight away, prefilled the same as its "Task table" quick pick.
+  // Once per mount: if they cancel, the empty state is still there underneath
+  // as a manual fallback, not reopened on them again right away.
+  const autoOpenedFirstView = useRef(false);
+  useEffect(() => {
+    if (
+      ready &&
+      !error &&
+      !active &&
+      modalView === undefined &&
+      !autoOpenedFirstView.current
+    ) {
+      autoOpenedFirstView.current = true;
+      openNewView({ name: 'All tasks', type: 'table' });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fire once when the empty state first appears, not on every modalView change
+  }, [ready, error, active]);
 
   const wide = width >= WIDE_BREAKPOINT;
   // New task only where I may create (always in my own views; per share otherwise).
@@ -404,7 +443,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
       </View>
 
       <View className="gap-0.5 px-3 pb-3">
-        {MODE_OPTIONS.map(opt => {
+        {modeOptions.map(opt => {
           const isActive = !alertsOpen && contentMode === opt.key;
           return (
             <Press
@@ -685,7 +724,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
     <View className="border-b border-border-main bg-bg-card px-3 pb-2">
       <SegmentedControl
         size="sm"
-        options={MODE_OPTIONS}
+        options={modeOptions}
         value={contentMode}
         onChange={setContentMode}
       />

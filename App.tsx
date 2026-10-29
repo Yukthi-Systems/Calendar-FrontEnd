@@ -12,7 +12,7 @@
  */
 
 import './global.css';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { ActivityIndicator, StatusBar, Text, View } from 'react-native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -26,6 +26,11 @@ import { useAuth } from './src/hooks/useAuth';
 import { useSsoAutoLogin } from './src/hooks/useSsoAutoLogin';
 import { useAccentColor } from './src/hooks/useAccentColor';
 import { useResolvedTheme } from './src/hooks/useResolvedTheme';
+import {
+  getInviteRouteParams,
+  type InviteRouteParams,
+} from './src/hooks/useInviteRoute';
+import { InviteResponseScreen } from './src/components/InviteResponseScreen';
 import { LoginScreen } from './src/components/LoginScreen';
 import { SsoLoginModal } from './src/components/SsoLoginModal';
 import { ThemeRoot } from './src/components/ThemeRoot';
@@ -35,6 +40,12 @@ import { seedDemoIfRequested } from './src/dev/demoData';
 import { SSO_ENABLED } from './src/config/features';
 
 function App() {
+  // Read once at load — an invite link is a fixed landing page, not
+  // something that changes mid-session.
+  const [inviteRoute] = useState<InviteRouteParams | null>(() =>
+    getInviteRouteParams(),
+  );
+
   useEffect(() => {
     const signal = { cancelled: false };
     bootAuth(signal);
@@ -55,8 +66,14 @@ function App() {
         <SafeAreaProvider>
           <ThemeRoot>
             <StatusBarForTheme />
-            <AppContent />
-            {SSO_ENABLED ? <SsoLoginModal /> : null}
+            {inviteRoute ? (
+              <InviteResponseScreen route={inviteRoute} />
+            ) : (
+              <>
+                <AppContent />
+                {SSO_ENABLED ? <SsoLoginModal /> : null}
+              </>
+            )}
             <ConfirmHost />
             <ToastHost />
           </ThemeRoot>

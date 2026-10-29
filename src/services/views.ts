@@ -139,3 +139,21 @@ export const getSharedTaskView = async (
   );
   return data;
 };
+
+// PATCH /shared/update-shared/{view_id} — the caller's OWN ui_info on a view
+// shared with them (shared_views.ui_info, not the owner's task_views row).
+// Scoped server-side to (view_id, caller's own user_id) — anyone the view is
+// shared with may call this for themselves, no can_create/can_edit/can_delete
+// grant needed (unlike PATCH /shared/update, which only the owner may call).
+export const updateMySharedViewInfo = async (
+  accessToken: string,
+  viewId: number,
+  uiInfo: Record<string, unknown>,
+): Promise<void> => {
+  await apiRequest(`/shared/update-shared/${viewId}`, {
+    method: 'PATCH',
+    accessToken,
+    body: JSON.stringify({ ui_info: uiInfo }),
+    parseJson: false,
+  });
+};

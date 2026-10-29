@@ -105,6 +105,14 @@ export function CommentsSection({ taskId }: { taskId: string }) {
   }
 
   if (!view.showComments) {
+    // Nothing anyone can do about it from a shared view (only the owner can
+    // turn comments on, from ViewModal's edit form) — showing the section
+    // just to explain it's off is clutter for them, so it's left out
+    // entirely rather than shown as a dead end. The owner still sees it, as
+    // a reminder of their own view's setting.
+    if (view.shared) {
+      return null;
+    }
     return (
       <View>
         {header}

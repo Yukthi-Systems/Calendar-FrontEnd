@@ -274,13 +274,7 @@ export function DueDate({
     ? parseISO(`${item.end}T${item.endTime}`)
     : endOfDay(parseISO(item.end));
   const overdue = dueAt < now;
-  const tint = done
-    ? 'text-text-main'
-    : overdue
-    ? 'text-destructive'
-    : days <= 3
-    ? 'text-warning'
-    : 'text-text-main';
+  const tint = !done && overdue ? 'text-destructive' : 'text-text-main';
   return (
     <Tooltip
       label={

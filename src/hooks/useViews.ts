@@ -11,11 +11,13 @@ import {
   getSharedTaskView,
   listSharedUsersForView,
   listTaskViews,
+  updateMySharedViewInfo,
   updateTaskView,
 } from '../services/views';
 import { queryClient as appQueryClient } from '../services/queryClient';
 import { withAuthRetry } from '../services/authRetry';
 import {
+  applySharedUiInfo,
   viewFromServer,
   viewToCreatePayload,
   viewToUpdatePayload,
@@ -68,18 +70,26 @@ export function useViewList() {
 
 // The view the workspace is showing: the selected id if it still exists, else the
 // first one. The selection itself is UI state (activeViewIdAtom, mirrored in the
-// URL on web) — never stored on the device.
+// URL on web) — never stored on the device. For a shared view, overlays the
+// viewer's own saved ui_info (their quick filter — see applySharedUiInfo) on
+// top of the owner's, so it's there again next time they open it, same as it
+// would be for a view they own.
 export function useActiveView(): ProjectView | undefined {
   const { views } = useViewList();
   const activeId = useAtomValue(activeViewIdAtom);
-  return views.find(v => v.id === activeId) ?? views[0];
+  const base = views.find(v => v.id === activeId) ?? views[0];
+  const myShare = useMyShare(base);
+  if (base?.shared && myShare.data) {
+    return applySharedUiInfo(base, myShare.data.ui_info);
+  }
+  return base;
 }
 
 // Same, for code outside React (the native widget bridge).
 export function activeViewFromCache(): ProjectView | undefined {
   const rows = (kind: 'mine' | 'shared') =>
-    (appQueryClient.getQueryData<TaskViewDbDto[]>(viewsKey(kind)) ?? []).map(r =>
-      viewFromServer(r, kind === 'shared'),
+    (appQueryClient.getQueryData<TaskViewDbDto[]>(viewsKey(kind)) ?? []).map(
+      r => viewFromServer(r, kind === 'shared'),
     );
   const views = [...rows('mine'), ...rows('shared')];
   const activeId = getDefaultStore().get(activeViewIdAtom);
@@ -103,7 +113,9 @@ export function useViewMutations() {
 
   const create = useMutation({
     mutationFn: async (draft: ViewDraftFields): Promise<string> => {
-      await withAuthRetry(token, t => createTaskView(t, viewToCreatePayload(draft)));
+      await withAuthRetry(token, t =>
+        createTaskView(t, viewToCreatePayload(draft)),
+      );
       // POST /views/create returns no id; (owner, view_name) is unique, so the
       // refetched list identifies the new row by name.
       const rows = await refetchMine();
@@ -113,12 +125,14 @@ export function useViewMutations() {
   const update = useMutation({
     mutationFn: (view: ProjectView) =>
       withAuthRetry(token, t => updateTaskView(t, viewToUpdatePayload(view))),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: viewsKey('mine') }),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: viewsKey('mine') }),
   });
   const remove = useMutation({
     mutationFn: (view: ProjectView) =>
       withAuthRetry(token, t => deleteTaskView(t, Number(view.id))),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: viewsKey('mine') }),
+    onSettled: () =>
+      queryClient.invalidateQueries({ queryKey: viewsKey('mine') }),
   });
 
   return {
@@ -134,7 +148,8 @@ export function useViewShares(view: ProjectView | null) {
   const enabled = !!token && !!view && !view.shared;
   return useQuery({
     queryKey: sharesKey(view?.id ?? ''),
-    queryFn: () => withAuthRetry(token, t => listSharedUsersForView(t, Number(view!.id))),
+    queryFn: () =>
+      withAuthRetry(token, t => listSharedUsersForView(t, Number(view!.id))),
     enabled,
   });
 }
@@ -144,16 +159,47 @@ export const myShareKey = (viewId: string) => ['myShare', viewId] as const;
 // My own access to a view someone shared with me — GET /shared/info/{view_id}/{me}.
 // Cached briefly (many components ask); `fresh` refetches on mount, e.g. the ⋯
 // menu, so a change by the owner shows up there. The refresh button invalidates it.
-export function useMyShare(view: ProjectView | null | undefined, fresh = false) {
+export function useMyShare(
+  view: ProjectView | null | undefined,
+  fresh = false,
+) {
   const token = useAtomValue(tokenAtom);
   const me = useAtomValue(currentUserIdAtom);
   return useQuery({
     queryKey: [...myShareKey(view?.id ?? ''), me],
-    queryFn: () => withAuthRetry(token, t => getSharedTaskView(t, Number(view!.id), me)),
+    queryFn: () =>
+      withAuthRetry(token, t => getSharedTaskView(t, Number(view!.id), me)),
     enabled: !!token && !!me && !!view?.shared,
     staleTime: 60_000,
     refetchOnMount: fresh ? 'always' : true,
   });
+}
+
+// Saves my own ui_info on a view shared with me (PATCH
+// /shared/update-shared/{view_id}) — distinct from useViewMutations().updateView,
+// which only the owner may call. Used by TableView.tsx for a shared view's
+// quick filter (useActiveView overlays it back via applySharedUiInfo on read).
+export function useUpdateMySharedViewInfo() {
+  const token = useAtomValue(tokenAtom);
+  const me = useAtomValue(currentUserIdAtom);
+  const queryClient = useQueryClient();
+  const mutation = useMutation({
+    mutationFn: ({
+      viewId,
+      uiInfo,
+    }: {
+      viewId: string;
+      uiInfo: Record<string, unknown>;
+    }) =>
+      withAuthRetry(token, t =>
+        updateMySharedViewInfo(t, Number(viewId), uiInfo),
+      ),
+    onSuccess: (_data, { viewId }) => {
+      queryClient.invalidateQueries({ queryKey: [...myShareKey(viewId), me] });
+    },
+  });
+  return (viewId: string, uiInfo: Record<string, unknown>) =>
+    mutation.mutateAsync({ viewId, uiInfo });
 }
 
 export interface ViewAccess {
@@ -170,7 +216,9 @@ const NONE: ViewAccess = { canCreate: false, canEdit: false, canDelete: false };
 // server checks). Until that record has loaded, nothing — actions appear once known
 // rather than flash in and vanish. If it can't be read, everything is offered and
 // the server's answer (a toast on refusal) decides, rather than a dead-end screen.
-export function useViewAccess(view: ProjectView | null | undefined): ViewAccess {
+export function useViewAccess(
+  view: ProjectView | null | undefined,
+): ViewAccess {
   const { data, isError } = useMyShare(view);
   if (!view) {
     return NONE;
@@ -179,7 +227,11 @@ export function useViewAccess(view: ProjectView | null | undefined): ViewAccess 
     return FULL;
   }
   return data
-    ? { canCreate: data.can_create, canEdit: data.can_edit, canDelete: data.can_delete }
+    ? {
+        canCreate: data.can_create,
+        canEdit: data.can_edit,
+        canDelete: data.can_delete,
+      }
     : NONE;
 }
 
@@ -214,11 +266,14 @@ export const shareFromServer = (s: SharedTaskViewDto): ShareDraft => ({
 export function useShareMutations(viewId: string) {
   const token = useAtomValue(tokenAtom);
   const queryClient = useQueryClient();
-  const refresh = () => queryClient.invalidateQueries({ queryKey: sharesKey(viewId) });
+  const refresh = () =>
+    queryClient.invalidateQueries({ queryKey: sharesKey(viewId) });
 
   const add = useMutation({
     mutationFn: (d: ShareDraft) =>
-      withAuthRetry(token, t => createSharedTaskView(t, sharePayload(viewId, d))),
+      withAuthRetry(token, t =>
+        createSharedTaskView(t, sharePayload(viewId, d)),
+      ),
     onSettled: refresh,
   });
   // TEMPORARY (2026-10-15) — backend bug #0c: PATCH /shared/update has no
@@ -228,10 +283,20 @@ export function useShareMutations(viewId: string) {
   // one else is touched. If the re-add fails, their old access is put back.
   // Restore `updateSharedTaskView` here once the backend filters by user.
   const change = useMutation({
-    mutationFn: async ({ next, prev }: { next: ShareDraft; prev: ShareDraft }) => {
-      await withAuthRetry(token, t => deleteSharedTaskView(t, Number(viewId), next.userId));
+    mutationFn: async ({
+      next,
+      prev,
+    }: {
+      next: ShareDraft;
+      prev: ShareDraft;
+    }) => {
+      await withAuthRetry(token, t =>
+        deleteSharedTaskView(t, Number(viewId), next.userId),
+      );
       try {
-        await withAuthRetry(token, t => createSharedTaskView(t, sharePayload(viewId, next)));
+        await withAuthRetry(token, t =>
+          createSharedTaskView(t, sharePayload(viewId, next)),
+        );
       } catch (err) {
         await withAuthRetry(token, t =>
           createSharedTaskView(t, sharePayload(viewId, prev)),
@@ -243,7 +308,9 @@ export function useShareMutations(viewId: string) {
   });
   const revoke = useMutation({
     mutationFn: (userId: string) =>
-      withAuthRetry(token, t => deleteSharedTaskView(t, Number(viewId), userId)),
+      withAuthRetry(token, t =>
+        deleteSharedTaskView(t, Number(viewId), userId),
+      ),
     onSettled: refresh,
   });
   return {

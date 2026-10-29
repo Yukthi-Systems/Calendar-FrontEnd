@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import Plus from 'lucide-react-native/icons/plus';
 import Search from 'lucide-react-native/icons/search';
+import Trash2 from 'lucide-react-native/icons/trash';
 import Users from 'lucide-react-native/icons/users';
 import X from 'lucide-react-native/icons/x';
 import { useAtomValue } from 'jotai';
@@ -208,7 +209,7 @@ function ShareRow({
           </Text>
         </View>
         <IconButton
-          icon={X}
+          icon={Trash2}
           size="sm"
           label={`Remove ${person?.name ?? 'access'}`}
           disabled={busy}

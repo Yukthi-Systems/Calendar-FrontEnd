@@ -43,27 +43,42 @@ function isQuickFilterShape(v: unknown): v is TaskQuickFilter {
   );
 }
 
-export function viewFromServer(
-  dto: TaskViewDbDto,
-  shared = false,
-): ProjectView {
-  const ui = (dto.ui_info ?? {}) as {
+// The {type, fields, filter} trio either ui_info shape can carry — a view's
+// own (task_views.ui_info) or a shared viewer's own override
+// (shared_views.ui_info, see applySharedUiInfo below). Each field is read
+// independently and only present when it parses, so a partial/empty ui_info
+// (every shared viewer's, until they've customized something) contributes
+// nothing rather than clobbering whatever it's layered onto.
+function uiInfoOverrides(uiInfo: Record<string, unknown> | null | undefined) {
+  const ui = (uiInfo ?? {}) as {
     type?: unknown;
     fields?: unknown;
     filter?: unknown;
   };
   return {
-    id: String(dto.view_id),
-    ownerId: dto.owner_id,
-    shared,
-    name: dto.view_name,
-    type: isViewType(ui.type) ? ui.type : 'table',
-    description: dto.description || undefined,
+    type: isViewType(ui.type) ? ui.type : undefined,
     fields: Array.isArray(ui.fields)
       ? (ui.fields as string[]).filter((f): f is ViewField =>
           FIELD_KEYS.includes(f),
         )
       : undefined,
+    quickFilter: isQuickFilterShape(ui.filter) ? ui.filter : undefined,
+  };
+}
+
+export function viewFromServer(
+  dto: TaskViewDbDto,
+  shared = false,
+): ProjectView {
+  const overrides = uiInfoOverrides(dto.ui_info);
+  return {
+    id: String(dto.view_id),
+    ownerId: dto.owner_id,
+    shared,
+    name: dto.view_name,
+    type: overrides.type ?? 'table',
+    description: dto.description || undefined,
+    fields: overrides.fields,
     statusFilter: dto.status_filter
       .map(s => STATUS_FROM_BACKEND[s])
       .filter(Boolean),
@@ -74,7 +89,28 @@ export function viewFromServer(
     showComments: dto.show_comments,
     showSubtasks: dto.show_subtasks,
     showAssigned: dto.show_assigned,
-    quickFilter: isQuickFilterShape(ui.filter) ? ui.filter : undefined,
+    quickFilter: overrides.quickFilter,
+  };
+}
+
+// Overlays a shared viewer's own saved ui_info (Tasks-Main-API's
+// shared_views.ui_info, written through PATCH /shared/update-shared/{view_id}
+// — see useViews.ts's useUpdateMySharedViewInfo) on top of the view the owner
+// defined. Only the quick filter is ever written here today (TableView.tsx's
+// filter popover) — type/fields stay the owner's, since editing a shared
+// view's own definition isn't offered to anyone but the owner (see
+// ViewMenuModal.tsx) — but every field is parsed the same way `viewFromServer`
+// parses the owner's, so nothing has to change here if that ever does.
+export function applySharedUiInfo(
+  view: ProjectView,
+  myUiInfo: Record<string, unknown> | null | undefined,
+): ProjectView {
+  const overrides = uiInfoOverrides(myUiInfo);
+  return {
+    ...view,
+    type: overrides.type ?? view.type,
+    fields: overrides.fields ?? view.fields,
+    quickFilter: overrides.quickFilter ?? view.quickFilter,
   };
 }
 

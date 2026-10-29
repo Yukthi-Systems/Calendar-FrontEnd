@@ -157,7 +157,7 @@ export function ViewModal({
     },
     {
       key: 'assigned',
-      label: 'Tasks assigned to me',
+      label: 'Task assigned to owner',
       on: showAssigned,
       set: setShowAssigned,
     },

@@ -277,3 +277,34 @@ export interface UpdateRecurringTaskPayload {
   rrule: string;
   task_tag: BackendTaskTag;
 }
+
+// Tasks-Main-API's `invite_response_status` enum (event_invites.response_status).
+export type InviteResponseStatus =
+  | 'PENDING'
+  | 'MAYBE'
+  | 'ACCEPTED'
+  | 'DECLINED';
+
+// GET /invites/list/{view_id}/{task_id} row shape — one invitee doesn't need
+// an app account; they respond from an e-mailed link instead (see the /public
+// routes below), so there's no user id here, only the e-mail address.
+export interface EventInviteeDto {
+  invitee_email: string;
+  response_status: InviteResponseStatus;
+  response_info: Record<string, unknown>;
+  invited_at: string;
+}
+
+// GET /public/event/invite/info/{validation_code} row shape — same as
+// EventInviteeDto, plus the fields that double as the invitee's credential
+// (no session; the validation code in the link is all they have).
+export interface PublicEventInviteeDto extends EventInviteeDto {
+  task_id: number;
+  validation_code: string;
+}
+
+// GET /public/event/invite/info/{validation_code} response.
+export interface PublicInviteInfoResponse {
+  event_info: PublicEventInviteeDto;
+  task_info: TaskInfoDto;
+}

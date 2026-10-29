@@ -49,6 +49,7 @@ import {
   SheetHeader,
 } from '../ui';
 import { CommentsSection } from './CommentsSection';
+import { EventInviteesSection } from './EventInviteesSection';
 import { TaskAlertsSection } from './TaskAlertsSection';
 import {
   AssigneeAvatars,
@@ -115,6 +116,12 @@ export function ItemModal() {
     (item.ownerId === CURRENT_USER_ID || item.createdById === CURRENT_USER_ID);
   const canEditTask = canEdit && isTaskOwnerOrCreator;
   const canDeleteTask = canDelete && isTaskOwnerOrCreator;
+  // The server's own invite permission (event_invitees::can_invite/
+  // can_delete_invite) checks task ownership only, not the view's grant — an
+  // assignee on someone else's shared view can still invite/see invitees,
+  // same as they could directly against the API.
+  const isTaskAssignee = !!item && item.assigneeIds.includes(CURRENT_USER_ID);
+  const canSeeInvitees = isTaskOwnerOrCreator || isTaskAssignee;
 
   // Subtasks stay collapsed until asked for — and that's per level, not just
   // the task itself: expanding this task only fetches its direct children
@@ -401,209 +408,232 @@ export function ItemModal() {
               ) : null}
             </View>
 
-            <View className="mb-6">
-              <View className="mb-2 flex-row items-center gap-2">
-                <ListTree size={15} color={c.text} />
-                <Text className="text-sm font-semibold text-text-heading">
-                  Subtasks
-                </Text>
-                {progress && progress.total > 0 ? (
-                  <Text className="text-sm text-text-subtle">
-                    {progress.loaded
-                      ? `${progress.done}/${progress.total}`
-                      : progress.total}
+            {/* Nothing a shared viewer can do about subtasks being off (only
+                the owner's "Turn on for this view" button, below, can) —
+                showing the section just to say so is clutter for them, so
+                it's left out entirely for a shared view; the owner still
+                sees it, as the way to turn subtasks on. */}
+            {subtasksEnabled || !activeView?.shared ? (
+              <View className="mb-6">
+                <View className="mb-2 flex-row items-center gap-2">
+                  <ListTree size={15} color={c.text} />
+                  <Text className="text-sm font-semibold text-text-heading">
+                    Subtasks
                   </Text>
-                ) : null}
-                <View className="flex-1" />
-                {!subtasksEnabled || !canCreate ? null : canAdd ? (
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    icon={Plus}
-                    onPress={() => {
-                      setForm({ mode: 'new', parentId: item.id });
-                      close();
-                    }}
-                  >
-                    Add subtask
-                  </Button>
-                ) : (
-                  <Text className="text-xs text-text-subtle">
-                    Max depth ({MAX_DEPTH}) reached
-                  </Text>
-                )}
-              </View>
-              {!subtasksEnabled ? (
-                <Callout
-                  kind="info"
-                  title="Subtasks are turned off in this view"
-                >
-                  <View className="gap-2">
-                    <Text className="text-sm text-text-main">
-                      {activeView && !activeView.shared
-                        ? 'Turn them on to see and add subtasks here.'
-                        : 'Only the view’s owner can turn them on.'}
+                  {progress && progress.total > 0 ? (
+                    <Text className="text-sm text-text-subtle">
+                      {progress.loaded
+                        ? `${progress.done}/${progress.total}`
+                        : progress.total}
                     </Text>
-                    {activeView && !activeView.shared ? (
-                      <View className="self-start">
-                        <Button
-                          size="sm"
-                          loading={enablingSubtasks}
-                          onPress={turnOnSubtasks}
-                        >
-                          Turn on for this view
-                        </Button>
-                      </View>
-                    ) : null}
-                  </View>
-                </Callout>
-              ) : null}
-              {subtasksEnabled &&
-              progress &&
-              progress.total > 0 &&
-              progress.loaded ? (
-                <View className="mb-2 h-1 overflow-hidden rounded-full bg-muted">
-                  <View
-                    style={{
-                      width: `${(progress.done / progress.total) * 100}%`,
-                    }}
-                    className="h-1 rounded-full bg-success"
-                  />
+                  ) : null}
+                  <View className="flex-1" />
+                  {!subtasksEnabled || !canCreate ? null : canAdd ? (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      icon={Plus}
+                      onPress={() => {
+                        setForm({ mode: 'new', parentId: item.id });
+                        close();
+                      }}
+                    >
+                      Add subtask
+                    </Button>
+                  ) : (
+                    <Text className="text-xs text-text-subtle">
+                      Max depth ({MAX_DEPTH}) reached
+                    </Text>
+                  )}
                 </View>
-              ) : null}
-              {!subtasksEnabled || !progress || progress.total === 0 ? (
-                subtasksEnabled ? (
-                  <Text className="py-1 text-sm text-text-subtle">
-                    No subtasks yet
-                  </Text>
-                ) : null
-              ) : !subtasksOpen ? (
-                <Press
-                  accessibilityRole="button"
-                  accessibilityState={{ expanded: false }}
-                  accessibilityLabel={`Show ${progress.total} subtasks`}
-                  onPress={() => toggleSubtask(item.id)}
-                  className="flex-row items-center gap-1.5 self-start rounded-lg border border-border-main px-3 py-1.5 hover:bg-hover"
-                >
-                  <ChevronRight size={14} color={c.text} strokeWidth={2.25} />
-                  <Text className="text-sm text-text-heading">
-                    Show {progress.total} subtask
-                    {progress.total === 1 ? '' : 's'}
-                  </Text>
-                </Press>
-              ) : (
-                <>
+                {!subtasksEnabled ? (
+                  <Callout
+                    kind="info"
+                    title="Subtasks are turned off in this view"
+                  >
+                    <View className="gap-2">
+                      <Text className="text-sm text-text-main">
+                        {activeView && !activeView.shared
+                          ? 'Turn them on to see and add subtasks here.'
+                          : 'Only the view’s owner can turn them on.'}
+                      </Text>
+                      {activeView && !activeView.shared ? (
+                        <View className="self-start">
+                          <Button
+                            size="sm"
+                            loading={enablingSubtasks}
+                            onPress={turnOnSubtasks}
+                          >
+                            Turn on for this view
+                          </Button>
+                        </View>
+                      ) : null}
+                    </View>
+                  </Callout>
+                ) : null}
+                {subtasksEnabled &&
+                progress &&
+                progress.total > 0 &&
+                progress.loaded ? (
+                  <View className="mb-2 h-1 overflow-hidden rounded-full bg-muted">
+                    <View
+                      style={{
+                        width: `${(progress.done / progress.total) * 100}%`,
+                      }}
+                      className="h-1 rounded-full bg-success"
+                    />
+                  </View>
+                ) : null}
+                {!subtasksEnabled || !progress || progress.total === 0 ? (
+                  subtasksEnabled ? (
+                    <Text className="py-1 text-sm text-text-subtle">
+                      No subtasks yet
+                    </Text>
+                  ) : null
+                ) : !subtasksOpen ? (
                   <Press
                     accessibilityRole="button"
-                    accessibilityState={{ expanded: true }}
-                    accessibilityLabel="Hide subtasks"
+                    accessibilityState={{ expanded: false }}
+                    accessibilityLabel={`Show ${progress.total} subtasks`}
                     onPress={() => toggleSubtask(item.id)}
-                    className="mb-1.5 flex-row items-center gap-1.5 self-start rounded-lg px-1 py-0.5 hover:bg-hover"
+                    className="flex-row items-center gap-1.5 self-start rounded-lg border border-border-main px-3 py-1.5 hover:bg-hover"
                   >
-                    <View style={{ transform: [{ rotate: '90deg' }] }}>
-                      <ChevronRight
-                        size={14}
-                        color={c.text}
-                        strokeWidth={2.25}
-                      />
-                    </View>
+                    <ChevronRight size={14} color={c.text} strokeWidth={2.25} />
                     <Text className="text-sm text-text-heading">
-                      Hide subtasks
+                      Show {progress.total} subtask
+                      {progress.total === 1 ? '' : 's'}
                     </Text>
                   </Press>
-                  {loadingTopSubtasks && subtasks.length === 0 ? (
-                    <Text className="py-1 text-sm text-text-subtle">
-                      Loading subtasks…
-                    </Text>
-                  ) : (
-                    <View className="overflow-hidden rounded-xl border border-border-main">
-                      {subtasks.map(({ item: s, depth: d }, idx) => {
-                        // Same per-level lazy load as the task itself: a subtask
-                        // with its own children gets its own chevron, and only
-                        // fetches them (loadChildren) the first time it's opened.
-                        const kids = hasSubtasks(s);
-                        const rowExpanded = expandedSubtasks.has(s.id);
-                        const rowLoading = loadingSubtaskRows.has(s.id);
-                        const rowChildrenShown = subtasks.some(
-                          r => r.item.parentId === s.id,
-                        );
-                        return (
-                          <View key={s.id}>
-                            <Press
-                              feedback="none"
-                              accessibilityRole="button"
-                              accessibilityLabel={`Open ${s.title}`}
-                              onPress={() => open(s.id)}
-                              style={{ paddingLeft: 4 + (d - 1) * 16 }}
-                              className={`flex-row items-center gap-2 py-2 pr-3 hover:bg-hover ${
-                                idx > 0 ? 'border-t border-border-main' : ''
-                              }`}
-                            >
-                              <View className="h-5 w-5 items-center justify-center">
-                                {kids ? (
-                                  <Press
-                                    accessibilityRole="button"
-                                    accessibilityLabel={
-                                      rowExpanded
-                                        ? `Collapse ${s.title}`
-                                        : `Expand ${s.title}`
-                                    }
-                                    accessibilityState={{
-                                      expanded: rowExpanded,
-                                    }}
-                                    onPress={() => toggleSubtask(s.id)}
-                                    hitSlop={6}
-                                    className="h-5 w-5 items-center justify-center rounded-md hover:bg-border-main"
-                                  >
-                                    <View
-                                      style={{
-                                        transform: [
-                                          {
-                                            rotate: rowExpanded
-                                              ? '90deg'
-                                              : '0deg',
-                                          },
-                                        ],
+                ) : (
+                  <>
+                    <Press
+                      accessibilityRole="button"
+                      accessibilityState={{ expanded: true }}
+                      accessibilityLabel="Hide subtasks"
+                      onPress={() => toggleSubtask(item.id)}
+                      className="mb-1.5 flex-row items-center gap-1.5 self-start rounded-lg px-1 py-0.5 hover:bg-hover"
+                    >
+                      <View style={{ transform: [{ rotate: '90deg' }] }}>
+                        <ChevronRight
+                          size={14}
+                          color={c.text}
+                          strokeWidth={2.25}
+                        />
+                      </View>
+                      <Text className="text-sm text-text-heading">
+                        Hide subtasks
+                      </Text>
+                    </Press>
+                    {loadingTopSubtasks && subtasks.length === 0 ? (
+                      <Text className="py-1 text-sm text-text-subtle">
+                        Loading subtasks…
+                      </Text>
+                    ) : (
+                      <View className="overflow-hidden rounded-xl border border-border-main">
+                        {subtasks.map(({ item: s, depth: d }, idx) => {
+                          // Same per-level lazy load as the task itself: a subtask
+                          // with its own children gets its own chevron, and only
+                          // fetches them (loadChildren) the first time it's opened.
+                          const kids = hasSubtasks(s);
+                          const rowExpanded = expandedSubtasks.has(s.id);
+                          const rowLoading = loadingSubtaskRows.has(s.id);
+                          const rowChildrenShown = subtasks.some(
+                            r => r.item.parentId === s.id,
+                          );
+                          return (
+                            <View key={s.id}>
+                              <Press
+                                feedback="none"
+                                accessibilityRole="button"
+                                accessibilityLabel={`Open ${s.title}`}
+                                onPress={() => open(s.id)}
+                                style={{ paddingLeft: 4 + (d - 1) * 16 }}
+                                className={`flex-row items-center gap-2 py-2 pr-3 hover:bg-hover ${
+                                  idx > 0 ? 'border-t border-border-main' : ''
+                                }`}
+                              >
+                                <View className="h-5 w-5 items-center justify-center">
+                                  {kids ? (
+                                    <Press
+                                      accessibilityRole="button"
+                                      accessibilityLabel={
+                                        rowExpanded
+                                          ? `Collapse ${s.title}`
+                                          : `Expand ${s.title}`
+                                      }
+                                      accessibilityState={{
+                                        expanded: rowExpanded,
                                       }}
+                                      onPress={() => toggleSubtask(s.id)}
+                                      hitSlop={6}
+                                      className="h-5 w-5 items-center justify-center rounded-md hover:bg-border-main"
                                     >
-                                      <ChevronRight
-                                        size={13}
-                                        color={c.text}
-                                        strokeWidth={2.25}
-                                      />
-                                    </View>
-                                  </Press>
-                                ) : null}
-                              </View>
-                              <StatusIcon status={s.status} size={14} />
-                              <Text
-                                numberOfLines={1}
-                                className="flex-1 text-sm text-text-heading"
-                              >
-                                {s.title}
-                              </Text>
-                              <AssigneeAvatars ids={s.assigneeIds} size={18} />
-                            </Press>
-                            {rowExpanded && rowLoading && !rowChildrenShown ? (
-                              <Text
-                                style={{ paddingLeft: 4 + d * 16 }}
-                                className="border-t border-border-main py-1.5 text-xs text-text-subtle"
-                              >
-                                Loading…
-                              </Text>
-                            ) : null}
-                          </View>
-                        );
-                      })}
-                    </View>
-                  )}
-                </>
-              )}
-            </View>
+                                      <View
+                                        style={{
+                                          transform: [
+                                            {
+                                              rotate: rowExpanded
+                                                ? '90deg'
+                                                : '0deg',
+                                            },
+                                          ],
+                                        }}
+                                      >
+                                        <ChevronRight
+                                          size={13}
+                                          color={c.text}
+                                          strokeWidth={2.25}
+                                        />
+                                      </View>
+                                    </Press>
+                                  ) : null}
+                                </View>
+                                <StatusIcon status={s.status} size={14} />
+                                <Text
+                                  numberOfLines={1}
+                                  className="flex-1 text-sm text-text-heading"
+                                >
+                                  {s.title}
+                                </Text>
+                                <AssigneeAvatars
+                                  ids={s.assigneeIds}
+                                  size={18}
+                                />
+                              </Press>
+                              {rowExpanded &&
+                              rowLoading &&
+                              !rowChildrenShown ? (
+                                <Text
+                                  style={{ paddingLeft: 4 + d * 16 }}
+                                  className="border-t border-border-main py-1.5 text-xs text-text-subtle"
+                                >
+                                  Loading…
+                                </Text>
+                              ) : null}
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
+                  </>
+                )}
+              </View>
+            ) : null}
 
             <View className="mb-6">
               <TaskAlertsSection taskId={item.id} taskTitle={item.title} />
             </View>
+
+            {canSeeInvitees && activeView ? (
+              <View className="mb-6">
+                <EventInviteesSection
+                  viewId={Number(activeView.id)}
+                  taskId={item.id}
+                  canInvite={canSeeInvitees}
+                  canRemove={isTaskOwnerOrCreator}
+                />
+              </View>
+            ) : null}
 
             <CommentsSection taskId={item.id} />
           </SheetBody>

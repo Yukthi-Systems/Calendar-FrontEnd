@@ -141,6 +141,13 @@ export function AlertFormModal({
                 mode="time"
                 value={time}
                 onChange={setTime}
+                // Today: no point offering a time already in the past.
+                // Any other (later) date: every time is still ahead of it.
+                min={
+                  date === format(new Date(), DATE_FMT)
+                    ? format(new Date(), TIME_FMT)
+                    : undefined
+                }
                 invalid={attempted && !!timeError}
                 placeholder="Time"
                 accessibilityLabel="Alert time"

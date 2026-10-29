@@ -318,21 +318,21 @@ function TimeField({
   value,
   onChange,
   invalid = false,
+  min,
   clearable = false,
   placeholder = 'Pick a time',
   accessibilityLabel,
 }: DateFieldProps) {
   const [open, setOpen] = useState(false);
   const scroller = useRef<ScrollViewInstance>(null);
-  // A saved time that isn't on the 15-minute grid still shows (and stays
-  // selected) in the list.
-  const slots = useMemo(
-    () =>
-      value && !TIME_SLOTS.includes(value)
-        ? [...TIME_SLOTS, value].sort()
-        : TIME_SLOTS,
-    [value],
-  );
+  // `min` hides slots earlier than it (e.g. the current time, when the
+  // picked date is today — no point offering a time that's already past). A
+  // saved time that isn't on the 15-minute grid, or is now below `min`
+  // itself, still shows (and stays selected) rather than silently vanishing.
+  const slots = useMemo(() => {
+    const base = min ? TIME_SLOTS.filter(s => s >= min) : TIME_SLOTS;
+    return value && !base.includes(value) ? [...base, value].sort() : base;
+  }, [value, min]);
 
   useEffect(() => {
     if (!open) {

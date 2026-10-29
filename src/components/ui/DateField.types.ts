@@ -4,7 +4,9 @@ export interface DateFieldProps {
   onChange: (value: string) => void;
   mode?: 'date' | 'time';
   invalid?: boolean;
-  // Same format as `value` (date mode only): days outside are disabled.
+  // Same format as `value`: in date mode, days outside are disabled; in time
+  // mode, `min` ('HH:mm') hides slots earlier than it (the value itself still
+  // shows even if now below `min` — see DateField.tsx's TimeField).
   min?: string;
   max?: string;
   // Show a clear (×) button when there's a value — for optional fields.

@@ -33,7 +33,11 @@ import {
 } from '../../data/recurringOccurrences';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
 import { useRecurringTasks } from '../../hooks/useRecurringTasks';
-import { useViewAccess, useViewMutations } from '../../hooks/useViews';
+import {
+  useUpdateMySharedViewInfo,
+  useViewAccess,
+  useViewMutations,
+} from '../../hooks/useViews';
 import { errorMessage, toast } from '../../atoms/feedback';
 import type { ProjectView, Status, TaskTag, WorkItem } from '../../data/types';
 import { useThemeColors } from '../../hooks/useThemeColors';
@@ -311,8 +315,9 @@ export function TableView({ view }: { view: ProjectView }) {
   const select = useSetAtom(selectedItemIdAtom);
   const selectTemplate = useSetAtom(selectedTemplateIdAtom);
   const { loadChildren, subtasksEnabled } = useTaskMutations();
-  const { canCreate, canEdit: canEditView } = useViewAccess(view);
+  const { canCreate } = useViewAccess(view);
   const { updateView } = useViewMutations();
+  const updateMySharedViewInfo = useUpdateMySharedViewInfo();
   const c = useThemeColors();
   const columns = COLUMNS.filter(
     col => col.key === 'title' || showsField(view.fields, col.key),
@@ -390,13 +395,18 @@ export function TableView({ view }: { view: ProjectView }) {
     a.dueTo === b.dueTo;
   const wasFilterOpen = useRef(filterOpen);
   useEffect(() => {
-    if (wasFilterOpen.current && !filterOpen && canEditView) {
+    if (wasFilterOpen.current && !filterOpen) {
       const saved = view.quickFilter ?? EMPTY_TASK_FILTERS;
       if (!quickFilterEqual(filters, saved)) {
-        updateView({
-          ...view,
-          quickFilter: filterCount > 0 ? filters : undefined,
-        }).catch(err => {
+        const nextFilter = filterCount > 0 ? filters : undefined;
+        // My own (shared view) or the view's own (mine) — a shared view's
+        // definition is the owner's alone to edit (see ViewMenuModal.tsx),
+        // but saving just my own filter preference on it needs no edit grant
+        // at all (see useUpdateMySharedViewInfo).
+        const save = view.shared
+          ? updateMySharedViewInfo(view.id, { filter: nextFilter ?? null })
+          : updateView({ ...view, quickFilter: nextFilter });
+        save.catch(err => {
           toast.error('Couldn’t save the filter', {
             description: errorMessage(err, 'Please try again.'),
           });

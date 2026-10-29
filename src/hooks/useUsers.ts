@@ -1,4 +1,10 @@
-import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
+import {
+  useMutation,
+  useQueries,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import { useAtomValue } from 'jotai';
 import { tokenAtom, userAtom } from '../atoms/auth';
 import { currentUserIdAtom } from '../atoms/members';
@@ -68,10 +74,14 @@ const str = (v: unknown) => (typeof v === 'string' ? v : '');
 
 // `fallbackName`: the SSO name for the signed-in user, used until they set one.
 export const personFrom = (
-  u: Pick<UserInfoResponse | UserSearchResult, 'user_id' | 'email' | 'public_info'>,
+  u: Pick<
+    UserInfoResponse | UserSearchResult,
+    'user_id' | 'email' | 'public_info'
+  >,
   fallbackName?: string,
 ): Person => {
-  const name = str(u.public_info?.name) || fallbackName || u.email.split('@')[0];
+  const name =
+    str(u.public_info?.name) || fallbackName || u.email.split('@')[0];
   return {
     id: u.user_id,
     name,
@@ -145,7 +155,9 @@ export function usePerson(id: string | null | undefined): Person | null {
   if (!id) {
     return null;
   }
-  return data ? personFrom(data, id === me ? session?.username : undefined) : placeholder(id);
+  return data
+    ? personFrom(data, id === me ? session?.username : undefined)
+    : placeholder(id);
 }
 
 // Many people at once (avatar stacks, name lists, sorting by assignee).
@@ -167,7 +179,9 @@ export function usePeople(ids: string[]): Map<string, Person> {
     const data = results[i]?.data;
     map.set(
       id,
-      data ? personFrom(data, id === me ? session?.username : undefined) : placeholder(id),
+      data
+        ? personFrom(data, id === me ? session?.username : undefined)
+        : placeholder(id),
     );
   });
   return map;
@@ -186,7 +200,8 @@ export function useFindPeopleByEmail() {
       const hits = await queryClient
         .fetchQuery({
           queryKey: ['userSearch', email],
-          queryFn: () => withAuthRetry(token, t => searchUsersByEmail(t, email)),
+          queryFn: () =>
+            withAuthRetry(token, t => searchUsersByEmail(t, email)),
           staleTime: 60_000,
         })
         .catch(() => []);
@@ -240,7 +255,8 @@ export function useUpdateMyInfo() {
       patch: Record<string, unknown>;
     }) => {
       const current = queryClient.getQueryData<UserInfoResponse>(userKey(me));
-      const base = (isPublic ? current?.public_info : current?.private_info) ?? {};
+      const base =
+        (isPublic ? current?.public_info : current?.private_info) ?? {};
       await withAuthRetry(token, t =>
         updateUserInfo(t, isPublic, { ...base, ...patch }),
       );
@@ -255,12 +271,30 @@ export const DEFAULT_THEME: ThemeSettings = {
 };
 
 // Theme lives in private_info.settings.theme — read straight from the user record
-// (the default until signed in / loaded).
+// (the default until signed in / loaded). The user's record can briefly go missing
+// from the query cache without them actually signing out — e.g. the hourly SSO
+// check or a proactive token refresh clearing and re-fetching the session — and
+// falling back to DEFAULT_THEME (mode: 'system') during that gap made the app
+// flash to the OS's light/dark preference before snapping back once the refetch
+// landed. Remembering the last real value read and only falling back to the
+// default when nothing has ever loaded avoids that flash.
 export function useTheme(): ThemeSettings {
   const { data } = useMe();
-  const saved = (data?.private_info?.settings as { theme?: Partial<ThemeSettings> } | undefined)
-    ?.theme;
-  return { ...DEFAULT_THEME, ...saved };
+  const saved = (
+    data?.private_info?.settings as
+      | { theme?: Partial<ThemeSettings> }
+      | undefined
+  )?.theme;
+  const lastKnown = useRef<ThemeSettings | null>(null);
+  useEffect(() => {
+    if (saved) {
+      lastKnown.current = { ...DEFAULT_THEME, ...saved };
+    }
+  });
+  if (saved) {
+    return { ...DEFAULT_THEME, ...saved };
+  }
+  return lastKnown.current ?? DEFAULT_THEME;
 }
 
 // Saves the theme with POST /user/info/false. The cached record is updated first
@@ -276,17 +310,26 @@ export function useSetTheme() {
       const priv = current?.private_info ?? {};
       const settings = (priv.settings ?? {}) as Record<string, unknown>;
       await withAuthRetry(token, t =>
-        updateUserInfo(t, false, { ...priv, settings: { ...settings, theme: next } }),
+        updateUserInfo(t, false, {
+          ...priv,
+          settings: { ...settings, theme: next },
+        }),
       );
     },
     onMutate: async next => {
       await queryClient.cancelQueries({ queryKey: userKey(me) });
       const prev = queryClient.getQueryData<UserInfoResponse>(userKey(me));
       if (prev) {
-        const settings = (prev.private_info?.settings ?? {}) as Record<string, unknown>;
+        const settings = (prev.private_info?.settings ?? {}) as Record<
+          string,
+          unknown
+        >;
         queryClient.setQueryData<UserInfoResponse>(userKey(me), {
           ...prev,
-          private_info: { ...prev.private_info, settings: { ...settings, theme: next } },
+          private_info: {
+            ...prev.private_info,
+            settings: { ...settings, theme: next },
+          },
         });
       }
       return { prev };
