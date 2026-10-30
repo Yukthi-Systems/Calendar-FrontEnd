@@ -2,7 +2,11 @@ import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { format, parseISO } from 'date-fns';
 import { errorMessage, toast } from '../../atoms/feedback';
-import { isAlertTimeValid, MIN_LEAD_MINUTES } from '../../data/taskAlerts';
+import {
+  isAlertTimeValid,
+  minAlertAt,
+  MIN_LEAD_MINUTES,
+} from '../../data/taskAlerts';
 import type { AlertFormState } from '../../atoms/alerts';
 import {
   Button,
@@ -130,7 +134,7 @@ export function AlertFormModal({
                 mode="date"
                 value={date}
                 onChange={setDate}
-                min={format(new Date(), DATE_FMT)}
+                min={format(minAlertAt(), DATE_FMT)}
                 invalid={attempted && !!timeError}
                 placeholder="Date"
                 accessibilityLabel="Alert date"
@@ -141,11 +145,12 @@ export function AlertFormModal({
                 mode="time"
                 value={time}
                 onChange={setTime}
-                // Today: no point offering a time already in the past.
-                // Any other (later) date: every time is still ahead of it.
+                // Earliest allowed date: no point offering a time earlier
+                // than the lead-time floor. Any later date: every time is
+                // still ahead of it.
                 min={
-                  date === format(new Date(), DATE_FMT)
-                    ? format(new Date(), TIME_FMT)
+                  date === format(minAlertAt(), DATE_FMT)
+                    ? format(minAlertAt(), TIME_FMT)
                     : undefined
                 }
                 invalid={attempted && !!timeError}

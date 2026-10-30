@@ -4,6 +4,7 @@ import {
   STATUS_FROM_BACKEND,
   TAG_FROM_BACKEND,
 } from './constants';
+import { CALENDAR_FIELDS, TABLE_FIELDS } from './viewFields';
 import type {
   ProjectView,
   TaskQuickFilter,
@@ -22,7 +23,12 @@ import type {
 // `ui_info` JSON column instead.
 
 const VIEW_TYPES: ViewType[] = ['table', 'kanban', 'roadmap', 'calendar'];
-const FIELD_KEYS: string[] = ['status', 'assignee', 'creator', 'owner', 'end'];
+// Every field key any layout's "Fields shown" form can offer (see
+// viewFields.ts) — read from there rather than hand-kept here, so a field
+// added to that form doesn't silently get stripped back out on load.
+const FIELD_KEYS: string[] = [...TABLE_FIELDS, ...CALENDAR_FIELDS].map(
+  f => f.key,
+);
 const isViewType = (v: unknown): v is ViewType =>
   typeof v === 'string' && (VIEW_TYPES as string[]).includes(v);
 

@@ -78,6 +78,8 @@ export function taskFromServer(dto: TaskInfoDto): WorkItem {
       offsetDays: r.offsetDays,
       time: r.time,
     })),
+    createdAt: dto.created_at,
+    updatedAt: dto.updated_at,
   };
 }
 
@@ -90,12 +92,20 @@ type DetailFields = Pick<WorkItem, 'recurrence' | 'reminders'>;
 const detailsPayload = (item: DetailFields): Record<string, unknown> => ({
   ...(item.recurrence ? { recurrence: item.recurrence } : null),
   ...(item.reminders.length
-    ? { reminders: item.reminders.map(r => ({ offsetDays: r.offsetDays, time: r.time })) }
+    ? {
+        reminders: item.reminders.map(r => ({
+          offsetDays: r.offsetDays,
+          time: r.time,
+        })),
+      }
     : null),
 });
 
 export function taskToCreatePayload(
-  item: Omit<WorkItem, 'id' | 'createdById' | 'ownerId' | 'assigneeIds' | 'totalSubtasks'>,
+  item: Omit<
+    WorkItem,
+    'id' | 'createdById' | 'ownerId' | 'assigneeIds' | 'totalSubtasks'
+  >,
 ): CreateTaskPayload {
   return {
     parent_task_id: item.parentId ? Number(item.parentId) : null,
@@ -228,9 +238,18 @@ export interface TaskSearch {
 // The whole of a local day as an API bound, also covering its all-day form
 // (midnight UTC), whichever side of UTC this device is on.
 const dayBound = (date: string, side: 'start' | 'end') => {
-  const local = (side === 'start' ? startOfDay : endOfDay)(parseISO(date)).toISOString();
-  const utc = side === 'start' ? `${date}T00:00:00.000Z` : `${date}T23:59:59.999Z`;
-  return side === 'start' ? (local < utc ? local : utc) : local > utc ? local : utc;
+  const local = (side === 'start' ? startOfDay : endOfDay)(
+    parseISO(date),
+  ).toISOString();
+  const utc =
+    side === 'start' ? `${date}T00:00:00.000Z` : `${date}T23:59:59.999Z`;
+  return side === 'start'
+    ? local < utc
+      ? local
+      : utc
+    : local > utc
+    ? local
+    : utc;
 };
 
 // POST /tasks/list filter for a search: top-level tasks of the view, one page.

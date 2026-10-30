@@ -23,9 +23,9 @@ import type { TaskAlertDto } from '../../services/types';
 // deliberately not scoped to the active view (alerts have nothing to do
 // with views; see taskAlerts.ts). The server doesn't join in a task's
 // title/tag (list-all-alerts' own row shape is just the raw task_alerts
-// columns), so a title only shows up here when that task happens to already
-// be loaded from whatever view was last open — otherwise it's "Task #<id>",
-// honestly, rather than pretending to know more than the API gives us.
+// columns), so the task name only shows up here when that task happens to
+// already be loaded from whatever view was last open — "Task #<id>" alone
+// otherwise, rather than pretending to know more than the API gives us.
 export function AlertsScreen() {
   const items = useAtomValue(itemsAtom);
   const select = useSetAtom(selectedItemIdAtom);
@@ -148,7 +148,9 @@ function AlertGroup({
       </Text>
       <View className="gap-2">
         {alerts.map(a => {
+          const idLabel = `Task #${a.task_id}`;
           const title = titleFor(a.task_id);
+          const cardLabel = title ? `${idLabel} · ${title}` : idLabel;
           const editable = isAlertEditable(a.alert_at, a.notification_sent);
           return (
             <View
@@ -158,18 +160,12 @@ function AlertGroup({
               <View className="flex-1">
                 <Press
                   feedback="none"
-                  disabled={!title}
-                  accessibilityRole={title ? 'button' : undefined}
-                  accessibilityLabel={title ? `Open ${title}` : undefined}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${cardLabel}`}
                   onPress={() => onOpenTask(String(a.task_id))}
                 >
-                  <Text
-                    numberOfLines={1}
-                    className={`text-sm font-medium ${
-                      title ? 'text-accent' : 'text-text-heading'
-                    }`}
-                  >
-                    {title ?? `Task #${a.task_id}`}
+                  <Text numberOfLines={1} className="text-sm font-medium text-accent">
+                    {cardLabel}
                   </Text>
                 </Press>
                 <Text className="mt-0.5 text-sm text-text-heading">
@@ -198,7 +194,7 @@ function AlertGroup({
                   icon={Pencil}
                   label="Edit alert"
                   size="sm"
-                  onPress={() => onEdit(a, title ?? `Task #${a.task_id}`)}
+                  onPress={() => onEdit(a, title ?? idLabel)}
                 />
               ) : null}
               <IconButton

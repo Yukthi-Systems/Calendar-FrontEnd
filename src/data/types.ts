@@ -69,11 +69,26 @@ export interface WorkItem {
   // null/[] are the common case — most tasks don't repeat or have reminders.
   recurrence: string | null;
   reminders: Reminder[];
+  // Server-set timestamps (TaskInfoDto's created_at/updated_at) — read-only,
+  // display-only. Undefined for a virtual recurring occurrence, which isn't a
+  // real task yet (src/data/recurringOccurrences.ts).
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // Optional per-field toggles for the Table and Calendar layouts (the task title
 // is always shown). Undefined means every field for that layout is shown.
-export type ViewField = 'status' | 'assignee' | 'creator' | 'owner' | 'end';
+export type ViewField =
+  | 'status'
+  | 'assignee'
+  | 'creator'
+  | 'owner'
+  | 'end'
+  | 'taskId'
+  | 'tag'
+  | 'start'
+  | 'created'
+  | 'updated';
 
 // TableView's own quick filter (status/tag/assignee/due-range chips) — a
 // client-side narrowing of whatever the view's statusFilter/tagFilter already

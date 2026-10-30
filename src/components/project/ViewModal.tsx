@@ -3,6 +3,7 @@ import { Text, View } from 'react-native';
 import Share2 from 'lucide-react-native/icons/share-2';
 import Trash2 from 'lucide-react-native/icons/trash';
 import { useThemeColors } from '../../hooks/useThemeColors';
+import { useMyProfile } from '../../hooks/useUsers';
 import {
   Button,
   Chip,
@@ -74,6 +75,7 @@ export function ViewModal({
   onShare: (view: ProjectView) => void;
 }) {
   const c = useThemeColors();
+  const { name: myName } = useMyProfile();
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [type, setType] = useState<ViewType>('table');
@@ -91,9 +93,14 @@ export function ViewModal({
       setName(view?.name ?? initial?.name ?? '');
       setDescription(view?.description ?? '');
       setType(nextType);
-      setFields(view?.fields ?? allFieldKeys(nextType));
-      // The server stores "everything" as an empty filter; the form shows it as
-      // every chip checked, which is what it means.
+      // A new view starts with the sensible defaults; an existing view with
+      // no saved fields means the server's "everything" — every chip checked,
+      // matching what the table actually shows.
+      setFields(
+        view
+          ? view.fields ?? allFieldKeys(nextType)
+          : defaultFieldKeys(nextType),
+      );
       setStatusFilter(
         view?.statusFilter?.length ? view.statusFilter : ALL_STATUSES,
       );
@@ -113,7 +120,7 @@ export function ViewModal({
 
   const pickType = (next: ViewType) => {
     setType(next);
-    setFields(allFieldKeys(next));
+    setFields(defaultFieldKeys(next));
   };
 
   const toggleField = (key: ViewField) =>
@@ -157,7 +164,7 @@ export function ViewModal({
     },
     {
       key: 'assigned',
-      label: 'Task assigned to owner',
+      label: `Task assigned to ${myName || 'you'}`,
       on: showAssigned,
       set: setShowAssigned,
     },
@@ -369,5 +376,16 @@ export function ViewModal({
   );
 }
 
+// Every field key this layout offers — what "fields: undefined" means on an
+// *existing* view (the server's "everything" — see the save()/allSelected
+// comment below), so the form shows every chip checked, matching what the
+// table actually renders.
 const allFieldKeys = (type: ViewType): ViewField[] =>
   (fieldOptionsFor(type) ?? []).map(o => o.key);
+
+// The sensible starting point for a *brand-new* view (or switching layout):
+// only the fields that were already on by default before Task ID/Tag/Start/
+// Created/Last updated existed as options — picking a new layout shouldn't
+// silently opt a view into every field that's ever been added.
+const defaultFieldKeys = (type: ViewType): ViewField[] =>
+  (fieldOptionsFor(type) ?? []).filter(o => o.defaultOn).map(o => o.key);

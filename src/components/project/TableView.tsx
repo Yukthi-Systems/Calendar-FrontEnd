@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { format, parseISO } from 'date-fns';
 import ArrowDown from 'lucide-react-native/icons/arrow-down';
 import ArrowUp from 'lucide-react-native/icons/arrow-up';
 import ChevronRight from 'lucide-react-native/icons/chevron-right';
@@ -22,7 +23,7 @@ import {
   type TaskFilters,
 } from '../../atoms/project';
 import { currentUserIdAtom } from '../../atoms/members';
-import { allowedStatuses, allowedTags } from '../../data/constants';
+import { allowedStatuses, allowedTags, tagInfo } from '../../data/constants';
 import { MAX_DEPTH, hasSubtasks } from '../../data/tree';
 import { showsField } from '../../data/viewFields';
 import {
@@ -44,6 +45,7 @@ import type { ProjectView, Status, TaskTag, WorkItem } from '../../data/types';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { useUserSearch, usePeople, type Person } from '../../hooks/useUsers';
 import {
+  Badge,
   Button,
   Chip,
   DateField,
@@ -64,7 +66,18 @@ import {
   namesOf,
 } from './shared';
 
-type SortKey = 'title' | 'status' | 'assignee' | 'creator' | 'owner' | 'end';
+type SortKey =
+  | 'title'
+  | 'status'
+  | 'assignee'
+  | 'creator'
+  | 'owner'
+  | 'end'
+  | 'taskId'
+  | 'tag'
+  | 'start'
+  | 'created'
+  | 'updated';
 
 const STATUS_RANK = {
   not_started: 0,
@@ -74,15 +87,32 @@ const STATUS_RANK = {
   completed: 4,
 };
 
-// `width` undefined = the flexible column that absorbs spare width.
+// Task ID leads (position 0), then Title (always shown, not a toggle), then
+// the rest in the same order as the "Fields shown" form (viewFields.ts's
+// TABLE_FIELDS): Status/Tag/Assignees, then Creator/Owner, then Start/Due,
+// then Created/Last updated. groupRow() below accounts for any column ahead
+// of 'title' so the tree guides/Add subtask row still line up under Title.
 const COLUMNS: { key: SortKey; label: string; width?: number }[] = [
+  { key: 'taskId', label: 'Task ID', width: 90 },
   { key: 'title', label: 'Title' },
   { key: 'status', label: 'Status', width: 136 },
+  { key: 'tag', label: 'Tag', width: 120 },
   { key: 'assignee', label: 'Assignees', width: 120 },
   { key: 'creator', label: 'Creator', width: 140 },
   { key: 'owner', label: 'Owner', width: 140 },
+  { key: 'start', label: 'Start', width: 116 },
   { key: 'end', label: 'Due', width: 116 },
+  { key: 'created', label: 'Created', width: 136 },
+  { key: 'updated', label: 'Updated', width: 136 },
 ];
+
+// A virtual recurring occurrence's id is a synthetic "recurring:<template
+// id>:<date>" string (see recurringOccurrences.ts) — it was never a real
+// task_id, so the Task ID column shows the template's own recurring_task_id
+// instead (the id that row's "Create task" action/the owner's recurring list
+// both already key off of).
+const taskIdFor = (i: WorkItem): string =>
+  parseVirtualRecurringId(i.id)?.templateId ?? i.id;
 
 const sortValue = (
   i: WorkItem,
@@ -98,16 +128,32 @@ const sortValue = (
       return people.get(i.createdById)?.name ?? '';
     case 'owner':
       return people.get(i.ownerId)?.name ?? '';
-    // Date, then time; an all-day due date sorts last in its day.
+    // Date, then time; an all-day due/start date sorts last in its day.
     case 'end':
       return `${i.end} ${i.endTime ?? '24:00'}`;
+    case 'start':
+      return `${i.start} ${i.startTime ?? '24:00'}`;
+    case 'taskId':
+      return Number(taskIdFor(i)) || 0;
+    case 'created':
+      return i.createdAt ?? '';
+    case 'updated':
+      return i.updatedAt ?? '';
     default:
       return i[key];
   }
 };
 
-const cellStyle = (width?: number) =>
-  width ? { width } : { flexGrow: 1, flexBasis: 0, minWidth: 320 };
+const MIN_TABLE_WIDTH = 940;
+const TITLE_MIN_WIDTH = 320;
+
+// `overflow: hidden` pins each cell to exactly the width it's given — without
+// it, a cell's size defaults to its content's natural size (e.g. a
+// deeply-nested subtask's indentation + chevron + title text), which could
+// force a column, and with it the whole horizontally-scrolled table (every
+// row shares that one scroll width — see the comment above the header),
+// wider than intended.
+const cellStyle = (width: number) => ({ width, overflow: 'hidden' as const });
 
 // One person (Creator / Owner column) — avatar + name, reusing the ids this
 // table already fetched for the Assignees column rather than querying again.
@@ -332,6 +378,24 @@ export function TableView({ view }: { view: ProjectView }) {
   const columns = COLUMNS.filter(
     col => col.key === 'title' || showsField(view.fields, col.key),
   );
+  // The Title column is the only one without a fixed width — it fills
+  // whatever's left of the viewport. That width has to be computed here
+  // (from a measured viewport width) rather than via flexGrow directly on
+  // the cell: a flexGrow cell's width is otherwise influenced by its own
+  // content (e.g. a deep subtask's indentation or a long title), so
+  // expanding/collapsing subtasks — which changes what content exists in
+  // that column across rows — was shifting the Title column's width, and
+  // with it every column after it.
+  const [viewportWidth, setViewportWidth] = useState(0);
+  const tableWidth = Math.max(MIN_TABLE_WIDTH, viewportWidth);
+  const fixedColumnsWidth = columns.reduce(
+    (sum, col) => sum + (col.key === 'title' ? 0 : col.width ?? 0),
+    0,
+  );
+  const titleWidth = Math.max(TITLE_MIN_WIDTH, tableWidth - fixedColumnsWidth);
+  // Every column but Title carries its own fixed `width` (see COLUMNS).
+  const widthOf = (col: (typeof COLUMNS)[number]) =>
+    col.key === 'title' ? titleWidth : (col.width as number);
   const [sort, setSort] = useState<{ key: SortKey; dir: 1 | -1 }>({
     key: 'end',
     dir: 1,
@@ -589,8 +653,8 @@ export function TableView({ view }: { view: ProjectView }) {
           ) : null}
         </View>
         <Text
-          numberOfLines={1}
-          className={`ml-1 shrink text-sm ${
+          numberOfLines={2}
+          className={`ml-1 min-w-0 shrink break-words text-sm ${
             virtual ? 'text-text-subtle' : 'text-text-heading'
           } ${depth === 1 ? 'font-medium' : ''}`}
         >
@@ -662,6 +726,30 @@ export function TableView({ view }: { view: ProjectView }) {
         return <PersonCell id={i.ownerId} people={people} />;
       case 'end':
         return <DueDate item={i} />;
+      case 'taskId':
+        return <Text className="text-sm text-text-main">#{taskIdFor(i)}</Text>;
+      case 'tag': {
+        const t = tagInfo(i.tag);
+        return <Badge label={t.label} color={t.color} dot />;
+      }
+      case 'start':
+        return (
+          <Text className="text-sm text-text-main">
+            {format(parseISO(i.start), 'MMM d, yyyy')}
+          </Text>
+        );
+      case 'created':
+        return (
+          <Text className="text-sm text-text-main">
+            {i.createdAt ? format(parseISO(i.createdAt), 'MMM d, yyyy') : '—'}
+          </Text>
+        );
+      case 'updated':
+        return (
+          <Text className="text-sm text-text-main">
+            {i.updatedAt ? format(parseISO(i.updatedAt), 'MMM d, yyyy') : '—'}
+          </Text>
+        );
       default:
         return null;
     }
@@ -669,14 +757,25 @@ export function TableView({ view }: { view: ProjectView }) {
 
   // A row under a group (loading / add subtask): guides in the title column so the
   // tree lines stay unbroken, nothing in the other columns.
+  // Columns shown ahead of Title (e.g. Task ID at position 0) — kept empty
+  // here so this row's tree guides/content still start under the Title
+  // header rather than the table's true left edge.
+  const columnsBeforeTitle = columns.slice(
+    0,
+    columns.findIndex(col => col.key === 'title'),
+  );
+
   const groupRow = (row: Exclude<Row, TaskRow>, content: React.ReactNode) => (
     <View
       key={row.key}
       style={{ height: GROUP_ROW_H }}
       className="flex-row border-b border-border-main bg-muted/40"
     >
+      {columnsBeforeTitle.map(col => (
+        <View key={col.key} style={cellStyle(widthOf(col))} />
+      ))}
       <View
-        style={cellStyle(undefined)}
+        style={cellStyle(titleWidth)}
         className="flex-row items-center self-stretch pl-3"
       >
         <TreeGuides depth={row.depth} guides={row.guides} last />
@@ -724,7 +823,7 @@ export function TableView({ view }: { view: ProjectView }) {
         onPress={() =>
           virtual ? openTemplateDetail(row.item.id) : select(row.item.id)
         }
-        style={{ height: child ? CHILD_ROW_H : ROW_H }}
+        style={{ minHeight: child ? CHILD_ROW_H : ROW_H }}
         className={`group flex-row border-b border-border-main hover:bg-hover ${
           child ? 'bg-muted/40' : ''
         } ${virtual ? 'border-dashed bg-muted/20' : ''}`}
@@ -732,7 +831,7 @@ export function TableView({ view }: { view: ProjectView }) {
         {columns.map(col => (
           <View
             key={col.key}
-            style={cellStyle(col.width)}
+            style={cellStyle(widthOf(col))}
             className={
               col.key === 'title'
                 ? 'flex-row items-center self-stretch pl-3'
@@ -899,12 +998,15 @@ export function TableView({ view }: { view: ProjectView }) {
           }
         />
       ) : (
-        <View className="flex-1 overflow-hidden rounded-xl border border-border-main bg-bg-card">
+        <View
+          className="flex-1 overflow-hidden rounded-xl border border-border-main bg-bg-card"
+          onLayout={e => setViewportWidth(e.nativeEvent.layout.width)}
+        >
           <ScrollView
             horizontal
             contentContainerStyle={{ minWidth: '100%', height: '100%' }}
           >
-            <View style={{ flexGrow: 1, minWidth: 940 }}>
+            <View style={{ width: tableWidth }}>
               <View className="h-9 flex-row border-b border-border-main bg-muted">
                 {columns.map(col => {
                   const isSorted = sort.key === col.key;
@@ -915,7 +1017,7 @@ export function TableView({ view }: { view: ProjectView }) {
                       accessibilityRole="button"
                       accessibilityLabel={`Sort by ${col.label}`}
                       onPress={() => toggleSort(col.key)}
-                      style={cellStyle(col.width)}
+                      style={cellStyle(widthOf(col))}
                       className={`group flex-row items-center gap-1 ${
                         col.key === 'title' ? 'pl-[40px] pr-3' : 'px-3'
                       }`}

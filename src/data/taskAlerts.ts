@@ -1,14 +1,15 @@
 // Pure helpers for Task Alerts — the server's own create/edit rule
 // (Tasks-Main-API's CreateTaskAlertDto::validate / EditTaskAlertDto::validate:
-// "alert time must be at least 5 minutes from now"), mirrored here so the UI
-// can refuse instantly instead of round-tripping to find out, plus the
+// "alert time must be at least 5 minutes from now") sets the floor the server
+// will actually accept, but the UI enforces its own (tighter) minimum below so
+// someone doesn't pick a time that's already stale by the time they hit save.
 // "editing a past alert is pointless" rule for a sent/past one.
 
-export const MIN_LEAD_MINUTES = 5;
+export const MIN_LEAD_MINUTES = 10;
 
 // A fresh Date each call (not a module-level constant) — this is checked
 // live as someone picks a date/time, not once at form-open.
-const minAlertAt = (): Date =>
+export const minAlertAt = (): Date =>
   new Date(Date.now() + MIN_LEAD_MINUTES * 60 * 1000);
 
 // For validating a date+time someone just picked, before it's ever sent.
