@@ -9,11 +9,15 @@ import Trash2 from 'lucide-react-native/icons/trash';
 import { confirm, errorMessage, toast } from '../../atoms/feedback';
 import { isServerTaskId } from '../../data/taskSync';
 import {
+  INVITE_STATUS_INFO as STATUS_INFO,
+  parsePreviousStatus,
+  parseResponseHistory as parseHistory,
+} from '../../data/inviteResponse';
+import {
   useEventInviteeMutations,
   useEventInvitees,
 } from '../../hooks/useEventInvitees';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import type { InviteResponseStatus } from '../../services/types';
 import { Badge, Button, IconButton, Input, Press } from '../ui';
 
 // How long "Resend" is locked after a click — session-local only (nothing on
@@ -28,38 +32,7 @@ const formatRemaining = (ms: number) => {
   return `${m}:${s.toString().padStart(2, '0')}`;
 };
 
-const STATUS_INFO: Record<
-  InviteResponseStatus,
-  { label: string; color: string }
-> = {
-  PENDING: { label: 'Pending', color: '#9ca3af' },
-  MAYBE: { label: 'Maybe', color: '#d97706' },
-  ACCEPTED: { label: 'Accepted', color: '#059669' },
-  DECLINED: { label: 'Declined', color: '#dc2626' },
-};
-
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-interface ResponseHistoryEntry {
-  status: InviteResponseStatus;
-  at: string;
-}
-
-// response_info.responses — written by the invitee's own browser on every
-// click (see InviteResponseScreen.tsx), so it's untrusted shape-wise; only
-// well-formed entries are kept.
-const parseHistory = (raw: unknown): ResponseHistoryEntry[] =>
-  Array.isArray(raw)
-    ? raw.filter((e): e is ResponseHistoryEntry => {
-        const entry = e as { status?: unknown; at?: unknown } | null;
-        return (
-          !!entry &&
-          typeof entry.status === 'string' &&
-          entry.status in STATUS_INFO &&
-          typeof entry.at === 'string'
-        );
-      })
-    : [];
 
 // A task's invitees — people invited by e-mail to this task's event, who
 // aren't necessarily app members: they respond from their own link, with no
@@ -232,12 +205,9 @@ export function EventInviteesSection({
             // chevron/expand can't rely on `responses.length` alone.
             const respondedAt = inv.response_info.responded_at;
             const history = parseHistory(inv.response_info.responses);
-            const previousStatusRaw = inv.response_info.previous_status;
-            const previousStatus =
-              typeof previousStatusRaw === 'string' &&
-              previousStatusRaw in STATUS_INFO
-                ? (previousStatusRaw as InviteResponseStatus)
-                : null;
+            const previousStatus = parsePreviousStatus(
+              inv.response_info.previous_status,
+            );
             const showUndatedPrevious =
               previousStatus !== null && history.length <= 1;
             const hasHistory = history.length > 1 || previousStatus !== null;
@@ -333,18 +303,27 @@ export function EventInviteesSection({
                     {history.map((h, idx) => {
                       const entryStatus = STATUS_INFO[h.status];
                       return (
-                        <View
-                          key={`${h.at}:${idx}`}
-                          className="flex-row items-center gap-2"
-                        >
-                          <Badge
-                            label={entryStatus.label}
-                            color={entryStatus.color}
-                            dot
-                          />
-                          <Text className="text-2xs text-text-subtle">
-                            {format(parseISO(h.at), 'MMM d, yyyy · h:mm a')}
-                          </Text>
+                        <View key={`${h.at}:${idx}`} className="gap-0.5">
+                          <View className="flex-row items-center gap-2">
+                            <Badge
+                              label={entryStatus.label}
+                              color={entryStatus.color}
+                              dot
+                            />
+                            <Text className="text-2xs text-text-subtle">
+                              {format(parseISO(h.at), 'MMM d, yyyy · h:mm a')}
+                            </Text>
+                            {h.percentage !== undefined ? (
+                              <Text className="text-2xs text-text-subtle">
+                                · {h.percentage}% likely
+                              </Text>
+                            ) : null}
+                          </View>
+                          {h.reason ? (
+                            <Text className="text-2xs italic text-text-subtle">
+                              “{h.reason}”
+                            </Text>
+                          ) : null}
                         </View>
                       );
                     })}
