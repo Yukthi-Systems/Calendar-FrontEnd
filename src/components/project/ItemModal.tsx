@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { useQueryClient } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
 import ArrowRight from 'lucide-react-native/icons/arrow-right';
 import Bell from 'lucide-react-native/icons/bell';
@@ -9,6 +10,7 @@ import ListTree from 'lucide-react-native/icons/list-tree';
 import Pencil from 'lucide-react-native/icons/pencil';
 import Plus from 'lucide-react-native/icons/plus';
 import Repeat from 'lucide-react-native/icons/repeat';
+import RefreshCw from 'lucide-react-native/icons/refresh-cw';
 import Trash2 from 'lucide-react-native/icons/trash';
 import {
   itemFormAtom,
@@ -19,6 +21,7 @@ import { currentUserIdAtom } from '../../atoms/members';
 import { STATUSES, tagInfo, allowedStatuses } from '../../data/constants';
 import { confirm, errorMessage, toast } from '../../atoms/feedback';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
+import { inviteesKey } from '../../hooks/useEventInvitees';
 import { usePeople, useUserSearch, type Person } from '../../hooks/useUsers';
 import type { WorkItem } from '../../data/types';
 import { describeRecurrence } from '../../data/rrule';
@@ -71,11 +74,14 @@ export function ItemModal() {
     editItem,
     removeItem,
     loadChildren,
+    refreshLevelOf,
     isServerBacked,
     unavailableReason,
     subtasksEnabled,
   } = useTaskMutations();
   const activeView = useActiveView();
+  const queryClient = useQueryClient();
+  const [refreshing, setRefreshing] = useState(false);
   const { updateView } = useViewMutations();
   // In a shared view, only what the owner granted is offered (the server's share
   // record); my own views allow everything.
@@ -232,6 +238,31 @@ export function ItemModal() {
     }
   };
 
+  // Re-reads this task's own fields and its invitee list straight from the
+  // server — the level this task lives on already flows back into itemsAtom
+  // (see useTaskMutations' refreshLevelOf), so nothing here copies data by
+  // hand; the invitees query just needs its own explicit invalidation.
+  const refresh = async () => {
+    if (!item) {
+      return;
+    }
+    setRefreshing(true);
+    try {
+      await refreshLevelOf(item.parentId);
+      if (activeView) {
+        await queryClient.invalidateQueries({
+          queryKey: inviteesKey(Number(activeView.id), item.id),
+        });
+      }
+    } catch (err) {
+      toast.error('Couldn’t refresh this task', {
+        description: errorMessage(err, 'Please try again.'),
+      });
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   const tag = item ? tagInfo(item.tag) : null;
 
   return (
@@ -270,6 +301,12 @@ export function ItemModal() {
             }
             actions={
               <>
+                <IconButton
+                  icon={RefreshCw}
+                  label="Refresh this task"
+                  disabled={refreshing}
+                  onPress={refresh}
+                />
                 {canEditTask ? (
                   <IconButton
                     icon={Pencil}

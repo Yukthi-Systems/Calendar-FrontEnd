@@ -79,17 +79,42 @@ export function InviteResponseScreen({ route }: { route: InviteRouteParams }) {
   const respond = async (status: InviteResponseStatus) => {
     setResponding(status);
     try {
+      // response_info is the schema's own open slot for "additional
+      // information about the response (e.g. reason for decline, time of
+      // response)" (see Tasks-Main-API's event_invites table). The whole
+      // column is replaced on every write (no server-side merge — see
+      // update_invite_response), so the full history is carried forward
+      // from what was already there each time, not just this one click.
+      const respondedAt = new Date().toISOString();
+      const prevResponseInfo = info?.event_info.response_info ?? {};
+      const prevHistory = Array.isArray(prevResponseInfo.responses)
+        ? prevResponseInfo.responses
+        : [];
+      const prevStatus = info?.event_info.response_status;
+      const responseInfo: Record<string, unknown> = {
+        responded_at: respondedAt,
+        responses: [...prevHistory, { status, at: respondedAt }],
+        // Only meaningful once they've actually responded before — the
+        // initial PENDING default isn't a response to have changed from.
+        ...(prevStatus && prevStatus !== 'PENDING'
+          ? { previous_status: prevStatus }
+          : {}),
+      };
       await respondToInvite(
         route.validationCode,
         route.taskId,
         route.inviteeEmail,
-        { status, info: {} },
+        { status, info: responseInfo },
       );
       setInfo(prev =>
         prev
           ? {
               ...prev,
-              event_info: { ...prev.event_info, response_status: status },
+              event_info: {
+                ...prev.event_info,
+                response_status: status,
+                response_info: responseInfo,
+              },
             }
           : prev,
       );

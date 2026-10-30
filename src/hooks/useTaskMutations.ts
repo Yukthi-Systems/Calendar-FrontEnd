@@ -241,6 +241,9 @@ export function useTaskMutations() {
     removeItem,
     loadChildren,
     loadSubtree,
+    // Re-reads the level a task lives on (its root list, or its parent's
+    // children) straight from the server — e.g. ItemModal's refresh button.
+    refreshLevelOf,
     isServerBacked: viewId !== undefined,
     subtasksEnabled,
     // Why writes are unavailable right now — null when they aren't.
