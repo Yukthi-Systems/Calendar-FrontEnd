@@ -157,24 +157,29 @@ export function ItemFormModal() {
     const presetStart =
       form.mode === 'new' && form.start ? parseDate(form.start) : null;
     const todayStr = format(today, DATE_FMT);
+    // A brand-new task/subtask never defaults into the past — whatever would
+    // otherwise be guessed (a clicked calendar day, a template's next
+    // occurrence, a parent's own dates) only applies as-is when it's today
+    // or later; anything earlier falls back to today instead. Editing an
+    // existing task keeps its own real dates untouched either way.
+    const clampToToday = (dateStr: string) =>
+      dateStr < todayStr ? todayStr : dateStr;
     // A new subtask's Start: if the parent hasn't started yet (a future
-    // date), start the subtask on that same date. Otherwise, if the parent
-    // is overdue (its own Due date has already passed), there's no good
-    // date to guess at all — leave it empty and make the person choose.
-    // Otherwise the parent's currently active (started, not yet due), so
-    // today is the useful default.
+    // date), start the subtask on that same date — otherwise (the parent's
+    // either currently active or already overdue), today is the useful
+    // default.
     const subtaskStart = parent
       ? parent.start > todayStr
         ? parent.start
-        : parent.end < todayStr
-        ? ''
         : todayStr
       : null;
     setStart(
-      editing?.start ?? subtaskStart ?? format(presetStart ?? today, DATE_FMT),
+      editing?.start ??
+        clampToToday(subtaskStart ?? format(presetStart ?? today, DATE_FMT)),
     );
     setEnd(
-      editing?.end ?? parent?.end ?? format(presetStart ?? today, DATE_FMT),
+      editing?.end ??
+        clampToToday(parent?.end ?? format(presetStart ?? today, DATE_FMT)),
     );
     // Editing keeps the task's own times (none = all day); a subtask starts with
     // its parent's; a template's time of day (if it set one) carries over to

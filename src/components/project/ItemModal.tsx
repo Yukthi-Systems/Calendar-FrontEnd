@@ -104,23 +104,24 @@ export function ItemModal() {
   const item = items.find(i => i.id === selectedId);
   const close = () => setSelectedId(null);
   const open = (id: string) => setSelectedId(id);
-  // The view's canEdit/canDelete are a coarse, view-wide grant (what a shared
-  // view's owner handed out) — the server separately requires you to actually
-  // be this specific task's owner or creator for a full edit or a delete (see
-  // Tasks-Main-API's update_task/delete_task), an assignee is never enough.
-  // Mirror that here so the buttons don't offer an action the API will 403
-  // on. Changing just the status is the one exception — update_task allows
-  // that for anyone canEdit already lets in, no ownership required.
+  // Two independent ways in: the view's canEdit/canDelete/canCreate (the
+  // coarse, view-wide grant a shared view's owner handed out) OR your own
+  // relationship to this specific task — its owner or creator can always
+  // edit or delete it, and an assignee can always add a sub-task under it,
+  // even without the matching blanket grant (mirrors Tasks-Main-API's
+  // TaskOwnershipInfo.can_edit/can_delete/can_create — owner||creator for
+  // edit/delete, owner||assignee||creator for create). Whichever one applies.
   const isTaskOwnerOrCreator =
     !!item &&
     (item.ownerId === CURRENT_USER_ID || item.createdById === CURRENT_USER_ID);
-  const canEditTask = canEdit && isTaskOwnerOrCreator;
-  const canDeleteTask = canDelete && isTaskOwnerOrCreator;
+  const isTaskAssignee = !!item && item.assigneeIds.includes(CURRENT_USER_ID);
+  const canEditTask = canEdit || isTaskOwnerOrCreator;
+  const canDeleteTask = canDelete || isTaskOwnerOrCreator;
+  const canCreateSubtask = canCreate || isTaskOwnerOrCreator || isTaskAssignee;
   // The server's own invite permission (event_invitees::can_invite/
   // can_delete_invite) checks task ownership only, not the view's grant — an
   // assignee on someone else's shared view can still invite/see invitees,
   // same as they could directly against the API.
-  const isTaskAssignee = !!item && item.assigneeIds.includes(CURRENT_USER_ID);
   const canSeeInvitees = isTaskOwnerOrCreator || isTaskAssignee;
 
   // Subtasks stay collapsed until asked for — and that's per level, not just
@@ -337,7 +338,10 @@ export function ItemModal() {
               </Property>
               <Property label="Assignees">
                 {canEdit ? (
-                  <AssigneeQuickAdd item={item} />
+                  <AssigneeQuickAdd
+                    item={item}
+                    canRemove={isTaskOwnerOrCreator}
+                  />
                 ) : (
                   <View className="flex-1 flex-row items-center gap-2">
                     <AssigneeAvatars ids={item.assigneeIds} size={22} max={5} />
@@ -428,7 +432,7 @@ export function ItemModal() {
                     </Text>
                   ) : null}
                   <View className="flex-1" />
-                  {!subtasksEnabled || !canCreate ? null : canAdd ? (
+                  {!subtasksEnabled || !canCreateSubtask ? null : canAdd ? (
                     <Button
                       size="sm"
                       variant="ghost"
@@ -645,11 +649,17 @@ export function ItemModal() {
 
 // Anyone with edit access on the view can assign new people to a task or
 // sub-task — the server's own rule is looser than editing the task's other
-// fields (owner/creator only there; see ItemModal's canEditTask). Add-only:
-// already-assigned people show locked (can't be un-toggled here) so this
-// can't double as a removal control — removing someone stays in the full
-// edit form, which only the task's owner or creator can open.
-function AssigneeQuickAdd({ item }: { item: WorkItem }) {
+// fields (owner/creator only there; see ItemModal's canEditTask). Removing
+// one, though, is the task's own owner or creator only (canRemove) — same
+// bar as canEditTask/canDeleteTask — so everyone else still sees an
+// already-assigned person locked, add-only.
+function AssigneeQuickAdd({
+  item,
+  canRemove,
+}: {
+  item: WorkItem;
+  canRemove: boolean;
+}) {
   const CURRENT_USER_ID = useAtomValue(currentUserIdAtom);
   const { assignItem } = useTaskMutations();
   const [query, setQuery] = useState('');
@@ -663,23 +673,32 @@ function AssigneeQuickAdd({ item }: { item: WorkItem }) {
     ).values(),
   ];
 
-  const add = async (id: string) => {
+  const toggle = async (id: string) => {
+    const assigned = item.assigneeIds.includes(id);
     setPendingIds(prev => new Set(prev).add(id));
     try {
-      const { failedAssignees } = await assignItem(item, {
-        add: [id],
-        remove: [],
-      });
+      const { failedAssignees } = await assignItem(
+        item,
+        assigned ? { add: [], remove: [id] } : { add: [id], remove: [] },
+      );
       if (failedAssignees.length > 0) {
-        toast.error('Couldn’t assign that person', {
-          description:
-            'You may not have permission to assign people on this task.',
-        });
+        toast.error(
+          assigned
+            ? 'Couldn’t remove that person'
+            : 'Couldn’t assign that person',
+          {
+            description:
+              'You may not have permission to assign people on this task.',
+          },
+        );
       }
     } catch (err) {
-      toast.error('Couldn’t assign that person', {
-        description: errorMessage(err, 'Please try again.'),
-      });
+      toast.error(
+        assigned
+          ? 'Couldn’t remove that person'
+          : 'Couldn’t assign that person',
+        { description: errorMessage(err, 'Please try again.') },
+      );
     } finally {
       setPendingIds(prev => {
         const next = new Set(prev);
@@ -695,7 +714,7 @@ function AssigneeQuickAdd({ item }: { item: WorkItem }) {
       placeholder="Select people"
       selectedIds={item.assigneeIds}
       onQueryChange={setQuery}
-      onToggle={add}
+      onToggle={toggle}
       // Not a component definition the rule needs to guard — MultiSelectDropdown
       // calls trigger(open) directly and splices the result in, it's never
       // rendered as <Trigger/>, so there's no new "component type" each render.
@@ -724,18 +743,24 @@ function AssigneeQuickAdd({ item }: { item: WorkItem }) {
             p.id !== item.ownerId &&
             p.id !== item.createdById,
         )
-        .map(p => ({
-          id: p.id,
-          label: p.name,
-          hint: p.email,
-          color: p.color,
-          locked: item.assigneeIds.includes(p.id) || pendingIds.has(p.id),
-          lockedLabel: item.assigneeIds.includes(p.id)
-            ? 'Assigned'
-            : pendingIds.has(p.id)
-            ? 'Adding…'
-            : undefined,
-        }))}
+        .map(p => {
+          const assigned = item.assigneeIds.includes(p.id);
+          const pending = pendingIds.has(p.id);
+          return {
+            id: p.id,
+            label: p.name,
+            hint: p.email,
+            color: p.color,
+            locked: pending || (assigned && !canRemove),
+            lockedLabel: pending
+              ? assigned
+                ? 'Removing…'
+                : 'Adding…'
+              : assigned && !canRemove
+              ? 'Assigned'
+              : undefined,
+          };
+        })}
     />
   );
 }

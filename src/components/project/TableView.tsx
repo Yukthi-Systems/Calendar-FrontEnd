@@ -21,6 +21,7 @@ import {
   tasksLoadingAtom,
   type TaskFilters,
 } from '../../atoms/project';
+import { currentUserIdAtom } from '../../atoms/members';
 import { allowedStatuses, allowedTags } from '../../data/constants';
 import { MAX_DEPTH, hasSubtasks } from '../../data/tree';
 import { showsField } from '../../data/viewFields';
@@ -167,8 +168,9 @@ function buildRows(
   sorted: WorkItem[],
   expanded: ReadonlySet<string>,
   loading: ReadonlySet<string>,
-  // False in a shared view without create access — no "Add subtask" rows.
-  allowAdd: boolean,
+  // Per parent — a shared view's blanket create grant, OR being that
+  // specific parent's owner/creator/assignee (see canAddSubtaskTo).
+  allowAdd: (parent: WorkItem) => boolean,
 ): Row[] {
   const ids = new Set(sorted.map(i => i.id));
   const childrenOf = (id: string) => sorted.filter(i => i.parentId === id);
@@ -197,7 +199,7 @@ function buildRows(
         });
         return;
       }
-      const canAdd = allowAdd && depth < MAX_DEPTH;
+      const canAdd = allowAdd(item) && depth < MAX_DEPTH;
       walk(kids, depth + 1, childGuides, canAdd);
       if (canAdd) {
         out.push({
@@ -317,6 +319,14 @@ export function TableView({ view }: { view: ProjectView }) {
   const { loadChildren, subtasksEnabled } = useTaskMutations();
   const { canCreate } = useViewAccess(view);
   const { updateView } = useViewMutations();
+  const CURRENT_USER_ID = useAtomValue(currentUserIdAtom);
+  // The view's blanket create grant, OR this specific parent's own
+  // owner/creator/assignee (mirrors ItemModal.tsx's canCreateSubtask).
+  const canAddSubtaskTo = (parent: WorkItem) =>
+    canCreate ||
+    parent.ownerId === CURRENT_USER_ID ||
+    parent.createdById === CURRENT_USER_ID ||
+    parent.assigneeIds.includes(CURRENT_USER_ID);
   const updateMySharedViewInfo = useUpdateMySharedViewInfo();
   const c = useThemeColors();
   const columns = COLUMNS.filter(
@@ -442,7 +452,7 @@ export function TableView({ view }: { view: ProjectView }) {
     sorted,
     subtasksEnabled ? expanded : new Set(),
     loadingRows,
-    canCreate,
+    canAddSubtaskTo,
   );
   const roots = items.filter(i => !i.parentId);
   // Every loaded task that has subtasks (for Expand all) — the header counts only
@@ -623,7 +633,7 @@ export function TableView({ view }: { view: ProjectView }) {
               onPress={() => openVirtual(item.id)}
             />
           </View>
-        ) : subtasksEnabled && canCreate && depth < MAX_DEPTH ? (
+        ) : subtasksEnabled && canAddSubtaskTo(item) && depth < MAX_DEPTH ? (
           <View className="reveal-on-hover pr-1">
             <IconButton
               icon={Plus}

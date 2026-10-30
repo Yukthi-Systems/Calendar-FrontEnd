@@ -182,29 +182,6 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to the active view (and its flag) changing, not every contentMode change
   }, [active?.id, active?.showRecurring]);
 
-  // First-time sign-in (or every view somehow gone) — useActiveView only
-  // ever comes back empty when there's nothing to fall back to, so this is
-  // exactly "no views exist yet" (not, say, a bad activeViewIdAtom with
-  // other views still around). Rather than making them click through the
-  // "Create your first view" empty state's own button, open the New view
-  // form straight away, prefilled the same as its "Task table" quick pick.
-  // Once per mount: if they cancel, the empty state is still there underneath
-  // as a manual fallback, not reopened on them again right away.
-  const autoOpenedFirstView = useRef(false);
-  useEffect(() => {
-    if (
-      ready &&
-      !error &&
-      !active &&
-      modalView === undefined &&
-      !autoOpenedFirstView.current
-    ) {
-      autoOpenedFirstView.current = true;
-      openNewView({ name: 'All tasks', type: 'table' });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- fire once when the empty state first appears, not on every modalView change
-  }, [ready, error, active]);
-
   const wide = width >= WIDE_BREAKPOINT;
   // New task only where I may create (always in my own views; per share otherwise).
   const { canCreate } = useViewAccess(active);
