@@ -451,7 +451,23 @@ export function TableView({ view }: { view: ProjectView }) {
     }));
   const setDueFrom = (dueFrom: string) => setFilters(f => ({ ...f, dueFrom }));
   const setDueTo = (dueTo: string) => setFilters(f => ({ ...f, dueTo }));
-  const clearFilters = () => setFilters(EMPTY_TASK_FILTERS);
+  // Saves right away rather than waiting on the filter popover's open→close
+  // (see the effect below) — "Clear filters" also appears outside the
+  // popover, in the no-matches EmptyState, where that close transition never
+  // fires at all, so without this the cleared filter only ever updated what
+  // was on screen, never what's saved for next time, in either a normal or a
+  // shared view.
+  const clearFilters = () => {
+    setFilters(EMPTY_TASK_FILTERS);
+    const save = view.shared
+      ? updateMySharedViewInfo(view.id, { filter: null })
+      : updateView({ ...view, quickFilter: undefined });
+    save.catch(err => {
+      toast.error('Couldn’t save the filter', {
+        description: errorMessage(err, 'Please try again.'),
+      });
+    });
+  };
   const filterCount =
     filters.statuses.length +
     filters.tags.length +

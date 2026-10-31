@@ -233,9 +233,15 @@ export function EventInviteesSection({
               onFocus={() =>
                 setSuggestOpen(trimmedEmail.length >= SEARCH_MIN_CHARS)
               }
+              onSubmitEditing={() => {
+                if (trimmedEmail) {
+                  invite();
+                }
+              }}
               placeholder="person@example.com"
               keyboardType="email-address"
               autoCapitalize="none"
+              returnKeyType="done"
             />
             {showSuggestions ? (
               <SuggestPortal>

@@ -68,7 +68,18 @@ function uiInfoOverrides(uiInfo: Record<string, unknown> | null | undefined) {
           FIELD_KEYS.includes(f),
         )
       : undefined,
-    quickFilter: isQuickFilterShape(ui.filter) ? ui.filter : undefined,
+    // Three states, not two: a real filter object; `null`, meaning
+    // explicitly cleared (a shared viewer's own ui_info stores `filter: null`
+    // when they clear their quick filter — see TableView's persist effect);
+    // or `undefined`, meaning no opinion at all (key absent/invalid). A
+    // shared viewer's explicit clear has to stay distinguishable from never
+    // having customized anything, or applySharedUiInfo below can't tell "stay
+    // empty" from "fall back to the owner's filter."
+    quickFilter: isQuickFilterShape(ui.filter)
+      ? ui.filter
+      : ui.filter === null
+      ? null
+      : undefined,
   };
 }
 
@@ -95,7 +106,10 @@ export function viewFromServer(
     showComments: dto.show_comments,
     showSubtasks: dto.show_subtasks,
     showAssigned: dto.show_assigned,
-    quickFilter: overrides.quickFilter,
+    // A view's own ui_info has no "fall back to something else" layer above
+    // it, so an explicit `null` and an absent/invalid filter mean the same
+    // thing here: no filter.
+    quickFilter: overrides.quickFilter ?? undefined,
   };
 }
 
@@ -116,7 +130,14 @@ export function applySharedUiInfo(
     ...view,
     type: overrides.type ?? view.type,
     fields: overrides.fields ?? view.fields,
-    quickFilter: overrides.quickFilter ?? view.quickFilter,
+    // `null` here means "I explicitly cleared my filter" — that has to win
+    // outright, not fall back to the owner's filter the way "I never set an
+    // override" (`undefined`) does, or clearing a shared view's filter would
+    // silently restore the owner's the next time this view loads.
+    quickFilter:
+      overrides.quickFilter === null
+        ? undefined
+        : overrides.quickFilter ?? view.quickFilter,
   };
 }
 
