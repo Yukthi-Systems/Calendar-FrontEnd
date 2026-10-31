@@ -387,10 +387,23 @@ export function TableView({ view }: { view: ProjectView }) {
   // that column across rows — was shifting the Title column's width, and
   // with it every column after it.
   const [viewportWidth, setViewportWidth] = useState(0);
-  const tableWidth = Math.max(MIN_TABLE_WIDTH, viewportWidth);
   const fixedColumnsWidth = columns.reduce(
     (sum, col) => sum + (col.key === 'title' ? 0 : col.width ?? 0),
     0,
+  );
+  // The container's own width has to be at least enough to fit every fixed
+  // column plus Title's own floor — capping it at just `viewportWidth` (as
+  // this used to) could make it narrower than that sum once enough columns
+  // are shown, and the nested vertical ScrollView around the body rows
+  // clips horizontal overflow on its own, silently hiding whichever
+  // rightmost columns' *cells* didn't fit (while the header row, not inside
+  // that ScrollView, kept painting past the edge regardless — hence the
+  // headers showing with blank cells under them instead of just a shorter
+  // table).
+  const tableWidth = Math.max(
+    MIN_TABLE_WIDTH,
+    fixedColumnsWidth + TITLE_MIN_WIDTH,
+    viewportWidth,
   );
   const titleWidth = Math.max(TITLE_MIN_WIDTH, tableWidth - fixedColumnsWidth);
   // Every column but Title carries its own fixed `width` (see COLUMNS).

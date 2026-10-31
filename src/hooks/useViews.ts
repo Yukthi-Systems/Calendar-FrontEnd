@@ -59,9 +59,13 @@ export function useViewList() {
     myViews,
     sharedViews,
     views: [...myViews, ...sharedViews],
-    // `ready`: the owned list has answered (shared is a bonus — a failure there
-    // shouldn't block the workspace).
-    ready: mine.isSuccess || mine.isError,
+    // `ready`: both lists have answered (success or error) — a `?view=` URL
+    // pointing at a *shared* view has to be checked against the full
+    // mine+shared list, not just `mine`; waiting on `mine` alone raced the
+    // slower `shared` query on reload, landing on `views[0]` (see
+    // useActiveView's fallback) instead of the shared view in the URL
+    // whenever `mine` happened to resolve first.
+    ready: (mine.isSuccess || mine.isError) && (shared.isSuccess || shared.isError),
     isLoading: mine.isLoading,
     error: mine.error,
     refetch: () => Promise.all([mine.refetch(), shared.refetch()]),

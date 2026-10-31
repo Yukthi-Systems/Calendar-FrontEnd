@@ -21,7 +21,12 @@ import { currentUserIdAtom } from '../../atoms/members';
 import { STATUSES, tagInfo, allowedStatuses } from '../../data/constants';
 import { confirm, errorMessage, toast } from '../../atoms/feedback';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
-import { inviteesKey } from '../../hooks/useEventInvitees';
+import {
+  inviteesKey,
+  useEventInvitees,
+  useEventInviteeMutations,
+} from '../../hooks/useEventInvitees';
+import { useTaskAlerts, useTaskAlertMutations } from '../../hooks/useTaskAlerts';
 import { usePeople, useUserSearch, type Person } from '../../hooks/useUsers';
 import type { WorkItem } from '../../data/types';
 import { describeRecurrence } from '../../data/rrule';
@@ -49,6 +54,7 @@ import {
   Press,
   Sheet,
   SheetBody,
+  SheetFooter,
   SheetHeader,
 } from '../ui';
 import { CommentsSection } from './CommentsSection';
@@ -129,6 +135,22 @@ export function ItemModal() {
   // assignee on someone else's shared view can still invite/see invitees,
   // same as they could directly against the API.
   const canSeeInvitees = isTaskOwnerOrCreator || isTaskAssignee;
+
+  // Loaded here (not just inside TaskAlertsSection/EventInviteesSection) so
+  // `remove()` below can tell, before showing its confirm dialog, whether
+  // this task has alerts/invitees that deleting it would also wipe out —
+  // same query keys those sections use, so this doesn't fetch twice.
+  const { alerts: taskAlerts } = useTaskAlerts(item?.id);
+  const { deleteAlert } = useTaskAlertMutations();
+  const { invitees: taskInvitees } = useEventInvitees(
+    activeView ? Number(activeView.id) : undefined,
+    canSeeInvitees ? item?.id : undefined,
+  );
+  const { removeInvite } = useEventInviteeMutations(
+    activeView ? Number(activeView.id) : undefined,
+    item?.id,
+  );
+  const [deletePrompt, setDeletePrompt] = useState(false);
 
   // Subtasks stay collapsed until asked for — and that's per level, not just
   // the task itself: expanding this task only fetches its direct children
@@ -213,6 +235,14 @@ export function ItemModal() {
     if (!item) {
       return;
     }
+    // Deleting the task doesn't itself clean up its alerts/invitees server-side
+    // (only subtasks cascade — see services/tasks.ts), so when either exists,
+    // ask which way to handle the invitees first rather than silently leaving
+    // the choice to whatever the cascade happens to do.
+    if (taskAlerts.length > 0 || taskInvitees.length > 0) {
+      setDeletePrompt(true);
+      return;
+    }
     const kids = progress?.total ?? 0;
     const ok = await confirm({
       title: 'Delete this task?',
@@ -228,6 +258,34 @@ export function ItemModal() {
       return;
     }
     try {
+      await removeItem(item);
+      close();
+      toast.success('Task deleted');
+    } catch (err) {
+      toast.error('Couldn’t delete the task', {
+        description: errorMessage(err, 'Please try again.'),
+      });
+    }
+  };
+
+  // notifyInvitees: remove each invitee one by one first (so the delete
+  // notifies them, same as EventInviteesSection's own "Remove" does), vs
+  // leaving them to the server's cascade when the task itself is deleted.
+  // Alerts have no such choice — they're always deleted outright.
+  const performDelete = async (notifyInvitees: boolean) => {
+    if (!item) {
+      return;
+    }
+    setDeletePrompt(false);
+    try {
+      for (const a of taskAlerts) {
+        await deleteAlert({ taskId: Number(item.id), alertAt: a.alert_at });
+      }
+      if (notifyInvitees) {
+        for (const inv of taskInvitees) {
+          await removeInvite(inv.invitee_email);
+        }
+      }
       await removeItem(item);
       close();
       toast.success('Task deleted');
@@ -266,6 +324,7 @@ export function ItemModal() {
   const tag = item ? tagInfo(item.tag) : null;
 
   return (
+    <>
     <Sheet visible={!!item} onClose={close} size="lg">
       {item ? (
         <>
@@ -681,6 +740,67 @@ export function ItemModal() {
         </>
       ) : null}
     </Sheet>
+    {item ? (
+      <Sheet
+        visible={deletePrompt}
+        onClose={() => setDeletePrompt(false)}
+        size="sm"
+      >
+        <SheetHeader
+          title="Delete this task?"
+          onClose={() => setDeletePrompt(false)}
+        />
+        <SheetBody scroll={false}>
+          <Text className="text-sm text-text-main">
+            “{item.title}” and its{' '}
+            {[
+              taskAlerts.length > 0
+                ? `${taskAlerts.length} alert${
+                    taskAlerts.length === 1 ? '' : 's'
+                  }`
+                : null,
+              taskInvitees.length > 0
+                ? `${taskInvitees.length} invitee${
+                    taskInvitees.length === 1 ? '' : 's'
+                  }`
+                : null,
+            ]
+              .filter(Boolean)
+              .join(' and ')}{' '}
+            will be deleted. This can’t be undone.
+            {taskInvitees.length > 0
+              ? ' “Delete and Notify” also removes each invitee first, so they’re notified; “Delete” leaves that to the task’s own removal.'
+              : ''}
+          </Text>
+        </SheetBody>
+        <SheetFooter>
+          <Button variant="secondary" onPress={() => setDeletePrompt(false)}>
+            Cancel
+          </Button>
+          {taskInvitees.length > 0 ? (
+            <>
+              <Button
+                variant="destructive-ghost"
+                onPress={() => performDelete(false)}
+              >
+                Delete
+              </Button>
+              <Button
+                variant="destructive"
+                onPress={() => performDelete(true)}
+              >
+                Delete and Notify
+              </Button>
+            </>
+          ) : (
+            <Button variant="destructive" onPress={() => performDelete(false)}>
+              Delete
+            </Button>
+          )}
+        </SheetFooter>
+      </Sheet>
+    ) : null}
+    </>
   );
 }
 
