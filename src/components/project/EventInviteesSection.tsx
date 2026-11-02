@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Platform, Text, View, type ViewInstance } from 'react-native';
 import { format, parseISO } from 'date-fns';
-import { validate as isValidEmail } from 'email-validator';
 import ChevronRight from 'lucide-react-native/icons/chevron-right';
 import Clock from 'lucide-react-native/icons/clock';
 import Mail from 'lucide-react-native/icons/mail';
@@ -23,6 +22,15 @@ import { useThemeColors } from '../../hooks/useThemeColors';
 import { Badge, Button, IconButton, Input, Press } from '../ui';
 import { Avatar } from './shared';
 import { SuggestPortal } from './SuggestPortal';
+
+// Deliberately stricter than bare RFC 5322 (which technically allows local
+// parts like "user#name" and TLDs like "com2" — the `email-validator`
+// package this used to use let both through): local part limited to the
+// characters real mail addresses actually use, and the final domain label
+// must be letters-only (a real TLD never contains a digit).
+const EMAIL_RE =
+  /^[a-zA-Z0-9](?:[a-zA-Z0-9._%+-]*[a-zA-Z0-9])?@(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
+const isValidEmail = (value: string) => EMAIL_RE.test(value);
 
 // Below this many characters, a search is too unspecific to be worth a
 // round-trip (and would just flash a noisy "no matches" dropdown).
