@@ -1,10 +1,18 @@
 import { useEffect, useRef } from 'react';
-import { useAtom } from 'jotai';
-import { activeViewIdAtom, contentModeAtom, type ContentMode } from '../atoms/project';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import {
+  activeViewIdAtom,
+  contentModeAtom,
+  itemsAtom,
+  selectedItemIdAtom,
+  tasksLoadingAtom,
+  type ContentMode,
+} from '../atoms/project';
 import { useViewList } from './useViews';
 
 const VIEW_PARAM = 'view';
 const MODE_PARAM = 'mode';
+const TASK_PARAM = 'task';
 const isMode = (v: string | null): v is ContentMode => v === 'tasks' || v === 'recurring';
 
 // Keeps the URL's `?view=<id>&mode=<tasks|recurring>` in step with the active tab
@@ -16,6 +24,10 @@ export function useViewUrlSync() {
   const [activeId, setActiveId] = useAtom(activeViewIdAtom);
   const [mode, setMode] = useAtom(contentModeAtom);
   const appliedFromUrl = useRef(false);
+  const appliedTaskFromUrl = useRef(false);
+  const items = useAtomValue(itemsAtom);
+  const tasksLoading = useAtomValue(tasksLoadingAtom);
+  const setSelectedId = useSetAtom(selectedItemIdAtom);
 
   // Once (per load): a `?view=` in the URL selects that view — after the server's
   // view list has loaded, so it's checked against real views. `?mode=` is already
@@ -33,6 +45,33 @@ export function useViewUrlSync() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
+
+  // Once (per load): a `?task=` in the URL opens that task — e.g. clicking a
+  // push notification (see web/firebase-messaging-sw.js's notificationclick).
+  // Waits for `?view=` above to actually land (if there was one) so itemsAtom
+  // holds the right view's tasks before checking, rather than whatever was
+  // loaded a moment earlier; a task not found among them (a sub-task never
+  // expanded, or from a view not shared with this viewer) just doesn't open —
+  // no error, since there's nothing wrong, just nothing more to go on here.
+  useEffect(() => {
+    if (appliedTaskFromUrl.current || !ready || tasksLoading) {
+      return;
+    }
+    const params = new URLSearchParams(window.location.search);
+    const taskFromUrl = params.get(TASK_PARAM);
+    if (!taskFromUrl) {
+      return;
+    }
+    const viewFromUrl = params.get(VIEW_PARAM);
+    if (viewFromUrl && activeId !== viewFromUrl) {
+      return;
+    }
+    appliedTaskFromUrl.current = true;
+    if (items.some(i => i.id === taskFromUrl)) {
+      setSelectedId(taskFromUrl);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, tasksLoading, items, activeId]);
 
   // Keep the URL in step with the active tab (pushState, so Back/Forward work).
   useEffect(() => {

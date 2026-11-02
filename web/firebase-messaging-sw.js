@@ -36,9 +36,51 @@ const messaging = firebase.messaging();
 // log a "no handler" warning, and so the title/body are explicitly ours
 // rather than left to the browser's default formatting.
 messaging.onBackgroundMessage(payload => {
+  console.log('[push] background message received:', payload);
   const title = payload.notification?.title ?? 'Task alert';
   self.registration.showNotification(title, {
     body: payload.notification?.body,
     data: payload.data,
   });
+});
+
+// Clicking the OS notification otherwise just dismisses it (the browser's own
+// default) — bring the app to front instead, reusing an already-open tab
+// when there is one. task_id/view_id are a best-effort read of the data
+// payload: whatever service actually sends the push lives outside this repo
+// (not Calendar-FrontEnd or Tasks-Main-API), so these field names are a
+// guess at its shape, not a confirmed contract. When they're absent or don't
+// match, this still brings the app to front — it just isn't pinned to one
+// task (see useViewUrlSync.web.ts's `task` param for the other half of this).
+self.addEventListener('notificationclick', event => {
+  event.notification.close();
+  const data = event.notification.data || {};
+  const taskId = data.task_id || data.taskId;
+  const viewId = data.view_id || data.viewId;
+  const params = new URLSearchParams();
+  if (viewId) {
+    params.set('mode', 'tasks');
+    params.set('view', String(viewId));
+  }
+  if (taskId) {
+    params.set('task', String(taskId));
+  }
+  const query = params.toString();
+  const targetPath = query ? `/?${query}` : '/';
+  const targetUrl = new URL(targetPath, self.location.origin).href;
+  event.waitUntil(
+    self.clients
+      .matchAll({ type: 'window', includeUncontrolled: true })
+      .then(clientList => {
+        for (const client of clientList) {
+          if ('focus' in client) {
+            if (query && 'navigate' in client) {
+              client.navigate(targetUrl).catch(() => {});
+            }
+            return client.focus();
+          }
+        }
+        return self.clients.openWindow(targetUrl);
+      }),
+  );
 });

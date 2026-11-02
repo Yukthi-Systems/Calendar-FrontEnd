@@ -478,11 +478,17 @@ export function TableView({ view }: { view: ProjectView }) {
   // status/tag picked while looking at one view could silently keep filtering
   // another one that doesn't even offer it — load this view's own saved
   // filter (view.quickFilter, round-tripped through ui_info by viewSync.ts)
-  // on every view change, instead of carrying over whatever was showing.
+  // on every view change, instead of carrying over whatever was showing. For
+  // a shared view, `view` itself starts out without the viewer's own
+  // quickFilter and gets it a moment later once useMyShare resolves (see
+  // useActiveView) — same view.id both times — so this also has to react to
+  // the filter content arriving, not just to switching views, or a shared
+  // view's saved filter never gets applied after a fresh page load.
+  const quickFilterSignature = JSON.stringify(view.quickFilter ?? null);
   useEffect(() => {
     setFilters(view.quickFilter ?? EMPTY_TASK_FILTERS);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run only when the active view changes
-  }, [view.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run when switching views or when this view's saved filter content changes
+  }, [view.id, quickFilterSignature]);
 
   // Save the filter back onto the view (so it's there again next time anyone
   // opens it) once someone's done adjusting it, not on every single chip
