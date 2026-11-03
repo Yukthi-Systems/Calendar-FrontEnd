@@ -625,7 +625,7 @@ function WeekRow({
                   <IconButton
                     icon={Plus}
                     size="sm"
-                    label={`New task on ${format(day, 'MMM d')}`}
+                    label={`New event on ${format(day, 'MMM d')}`}
                     onPress={() => onNewTask(day)}
                   />
                 </View>
@@ -1125,7 +1125,7 @@ function AgendaPanel({
           <IconButton
             icon={Plus}
             variant="outline"
-            label={`New task on ${format(day, 'MMM d')}`}
+            label={`New event on ${format(day, 'MMM d')}`}
             onPress={() => onNewTask(day)}
           />
         ) : null}

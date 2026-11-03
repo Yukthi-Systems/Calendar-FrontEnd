@@ -39,6 +39,7 @@ export const TAGS: { key: TaskTag; label: string; color: string }[] = [
   { key: 'work', label: 'Work', color: '#0ea5e9' },
   { key: 'important', label: 'Important', color: '#8b5cf6' },
   { key: 'urgent', label: 'Urgent', color: '#ef4444' },
+  { key: 'event', label: 'Event', color: '#10b981' },
   { key: 'optional', label: 'Optional', color: '#6b7280' },
   { key: 'personal', label: 'Personal', color: '#ec4899' },
   { key: 'other', label: 'Other', color: '#f59e0b' },
@@ -65,6 +66,7 @@ export const BACKEND_TAG: Record<TaskTag, BackendTaskTag> = {
   optional: 'OPTIONAL',
   personal: 'PERSONAL',
   other: 'OTHER',
+  event: 'EVENT',
 };
 
 export const TAG_FROM_BACKEND: Record<BackendTaskTag, TaskTag> = {
@@ -73,6 +75,7 @@ export const TAG_FROM_BACKEND: Record<BackendTaskTag, TaskTag> = {
   URGENT: 'urgent',
   OPTIONAL: 'optional',
   PERSONAL: 'personal',
+  EVENT: 'event',
   OTHER: 'other',
 };
 

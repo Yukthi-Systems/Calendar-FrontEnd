@@ -167,6 +167,9 @@ export function ItemModal() {
   // assignee on someone else's shared view can still invite/see invitees,
   // same as they could directly against the API.
   const canSeeInvitees = isTaskOwnerOrCreator || isTaskAssignee;
+  // Event tasks invite people by e-mail instead of assigning them — the two
+  // are mutually exclusive in the UI, not just a permission split.
+  const isEventTask = item?.tag === 'event';
 
   // Loaded here (not just inside TaskAlertsSection/EventInviteesSection) so
   // `remove()` below can tell, before showing its confirm dialog, whether
@@ -176,7 +179,7 @@ export function ItemModal() {
   const { deleteAlert } = useTaskAlertMutations();
   const { invitees: taskInvitees } = useEventInvitees(
     activeView ? Number(activeView.id) : undefined,
-    canSeeInvitees ? item?.id : undefined,
+    isEventTask && canSeeInvitees ? item?.id : undefined,
   );
   const { removeInvite } = useEventInviteeMutations(
     activeView ? Number(activeView.id) : undefined,
@@ -472,22 +475,28 @@ export function ItemModal() {
               <Property label="Tag">
                 {tag ? <Badge label={tag.label} color={tag.color} dot /> : null}
               </Property>
-              <Property label="Assignees">
-                {canEdit ? (
-                  <AssigneeQuickAdd
-                    item={item}
-                    canRemove={isTaskOwnerOrCreator}
-                  />
-                ) : (
-                  <View className="flex-1 flex-row items-center gap-2">
-                    <AssigneeAvatars ids={item.assigneeIds} size={22} max={5} />
-                    <AssigneeNames
-                      ids={item.assigneeIds}
-                      className="flex-1 text-sm text-text-heading"
+              {isEventTask ? null : (
+                <Property label="Assignees">
+                  {canEdit ? (
+                    <AssigneeQuickAdd
+                      item={item}
+                      canRemove={isTaskOwnerOrCreator}
                     />
-                  </View>
-                )}
-              </Property>
+                  ) : (
+                    <View className="flex-1 flex-row items-center gap-2">
+                      <AssigneeAvatars
+                        ids={item.assigneeIds}
+                        size={22}
+                        max={5}
+                      />
+                      <AssigneeNames
+                        ids={item.assigneeIds}
+                        className="flex-1 text-sm text-text-heading"
+                      />
+                    </View>
+                  )}
+                </Property>
+              )}
               <Property label="Creator">
                 <PersonRow id={item.createdById} />
               </Property>
@@ -764,7 +773,7 @@ export function ItemModal() {
               <TaskAlertsSection taskId={item.id} taskTitle={item.title} />
             </View>
 
-            {canSeeInvitees && activeView ? (
+            {isEventTask && canSeeInvitees && activeView ? (
               <View className="mb-6">
                 <EventInviteesSection
                   viewId={Number(activeView.id)}

@@ -359,169 +359,162 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
     </ScrollView>
   );
 
-  // ── Desktop: left rail ────────────────────────────────────────────────────
-  const rail = (
-    <View className="w-[248px] border-r border-border-main bg-bg-main">
-      <View className="flex-row items-center gap-2.5 px-4 pb-3 pt-4">
-        <View className="h-7 w-7 items-center justify-center rounded-lg bg-accent">
-          <CalendarCheck2
-            size={16}
-            color={c.accentForeground}
-            strokeWidth={2.25}
-          />
-        </View>
-        {/* The workspace is the organization's — its name, from the user's record
-            (SSO session as a fallback); "YTC" only until that's known. */}
-        <Text
-          numberOfLines={1}
-          className="flex-1 text-base font-semibold text-text-heading"
-        >
-          {profile.organization || 'YTC'}
-        </Text>
-      </View>
-
-      <View className="flex-row items-center gap-1.5 px-3 pb-4">
-        <Popover
-          open={viewPickerOpen}
-          onClose={() => setViewPickerOpen(false)}
-          width={248}
-          variant="menu"
-          renderTrigger={ref => (
-            <View ref={ref} className="flex-1">
-              <Press
-                feedback="subtle"
-                accessibilityRole="button"
-                accessibilityLabel="Switch view"
-                onPress={() => setViewPickerOpen(o => !o)}
-                className="h-9 flex-row items-center gap-2 rounded-lg border border-border-main bg-bg-card px-2.5 hover:border-border-strong"
-              >
-                {active ? viewIcon(active.type, c.text) : null}
-                <Text
-                  numberOfLines={1}
-                  className="flex-1 text-sm font-medium text-text-heading"
-                >
-                  {active?.name ?? 'Select a view'}
-                </Text>
-                <ChevronDown size={14} color={c.subtle} />
-              </Press>
-            </View>
-          )}
-        >
-          {viewPickerList}
-        </Popover>
-        <IconButton
-          icon={Plus}
-          label="New view"
-          onPress={() => {
-            setViewPickerOpen(false);
-            openNewView();
-          }}
-        />
-      </View>
-
-      <View className="gap-0.5 px-3 pb-3">
-        {modeOptions.map(opt => {
-          const isActive = !alertsOpen && contentMode === opt.key;
-          return (
+  // ── Desktop: view switcher + "New view", in the content header ────────────
+  const viewSwitcher = (
+    <View className="flex-row items-center gap-1.5">
+      <Popover
+        open={viewPickerOpen}
+        onClose={() => setViewPickerOpen(false)}
+        width={248}
+        variant="menu"
+        renderTrigger={ref => (
+          <View ref={ref}>
             <Press
-              key={opt.key}
               feedback="subtle"
-              accessibilityRole="tab"
-              accessibilityState={{ selected: isActive }}
-              onPress={() => {
-                setContentMode(opt.key);
-                setAlertsOpen(false);
-              }}
-              className={`h-8 flex-row items-center gap-2.5 rounded-lg pl-2.5 ${
-                isActive ? 'bg-hover' : 'hover:bg-hover/70'
-              }`}
+              accessibilityRole="button"
+              accessibilityLabel="Switch view"
+              onPress={() => setViewPickerOpen(o => !o)}
+              className="h-9 max-w-[280px] flex-row items-center gap-2 rounded-lg border border-border-main bg-bg-main px-2.5 hover:border-border-strong"
             >
-              <opt.icon
-                size={16}
-                color={isActive ? c.heading : c.text}
-                strokeWidth={2}
-              />
+              {active ? viewIcon(active.type, c.text) : null}
               <Text
-                className={`text-sm ${
-                  isActive ? 'font-medium text-text-heading' : 'text-text-main'
-                }`}
+                numberOfLines={1}
+                className="shrink text-sm font-semibold text-text-heading"
               >
-                {opt.label}
+                {active?.name ?? 'Select a view'}
               </Text>
+              <ChevronDown size={14} color={c.subtle} />
             </Press>
-          );
-        })}
-      </View>
-
-      {/* Alerts has nothing to do with any one view (see atoms/alerts.ts), so
-          it's its own nav row, not one of the per-view MODE_OPTIONS tabs above. */}
-      <View className="px-3 pb-3">
-        <Press
-          feedback="subtle"
-          accessibilityRole="tab"
-          accessibilityState={{ selected: alertsOpen }}
-          onPress={() => setAlertsOpen(true)}
-          className={`h-8 flex-row items-center gap-2.5 rounded-lg pl-2.5 ${
-            alertsOpen ? 'bg-hover' : 'hover:bg-hover/70'
-          }`}
-        >
-          <Bell
-            size={16}
-            color={alertsOpen ? c.heading : c.text}
-            strokeWidth={2}
-          />
-          <Text
-            className={`text-sm ${
-              alertsOpen ? 'font-medium text-text-heading' : 'text-text-main'
-            }`}
-          >
-            Alerts
-          </Text>
-        </Press>
-      </View>
-
-      <View className="flex-1" />
-
-      <Press
-        feedback="subtle"
-        accessibilityRole="button"
-        accessibilityLabel="Open profile"
-        onPress={() => setProfileOpen(true)}
-        className="m-2 flex-row items-center gap-2.5 rounded-lg px-2 py-2 hover:bg-hover"
+          </View>
+        )}
       >
-        <InitialsAvatar
-          color={profile.color}
-          initials={profile.initials}
-          size={28}
-        />
-        <View className="flex-1">
-          <Text
-            numberOfLines={1}
-            className="text-sm font-medium text-text-heading"
-          >
-            {profile.name || 'Account'}
-          </Text>
-          {profile.email || profile.role ? (
-            <Text numberOfLines={1} className="text-xs text-text-subtle">
-              {profile.role || profile.email}
-            </Text>
-          ) : null}
-        </View>
-      </Press>
+        {viewPickerList}
+      </Popover>
+      <IconButton
+        icon={Plus}
+        label="New view"
+        onPress={() => {
+          setViewPickerOpen(false);
+          openNewView();
+        }}
+      />
     </View>
+  );
+
+  // ── Desktop navbar: workspace mark, then the Tasks/Recurring/Alerts tabs ──
+  const brand = (
+    <View className="flex-row items-center gap-2.5">
+      <View className="h-7 w-7 items-center justify-center rounded-lg bg-accent">
+        <CalendarCheck2
+          size={16}
+          color={c.accentForeground}
+          strokeWidth={2.25}
+        />
+      </View>
+      {/* The workspace is the organization's — its name, from the user's record
+          (SSO session as a fallback); "YTC" only until that's known. */}
+      <Text
+        numberOfLines={1}
+        className="max-w-[160px] text-base font-semibold text-text-heading"
+      >
+        {profile.organization || 'YTC'}
+      </Text>
+    </View>
+  );
+
+  const navTab = (
+    key: string,
+    label: string,
+    Icon: typeof Bell,
+    isActive: boolean,
+    onPress: () => void,
+  ) => (
+    <Press
+      key={key}
+      feedback="subtle"
+      accessibilityRole="tab"
+      accessibilityState={{ selected: isActive }}
+      onPress={onPress}
+      className={`h-8 flex-row items-center gap-2 rounded-lg px-2.5 ${
+        isActive ? 'bg-hover' : 'hover:bg-hover/70'
+      }`}
+    >
+      <Icon size={16} color={isActive ? c.heading : c.text} strokeWidth={2} />
+      <Text
+        className={`text-sm ${
+          isActive ? 'font-medium text-text-heading' : 'text-text-main'
+        }`}
+      >
+        {label}
+      </Text>
+    </Press>
+  );
+
+  const navTabs = active ? (
+    <View accessibilityRole="tablist" className="flex-row items-center gap-0.5">
+      {modeOptions.map(opt =>
+        navTab(
+          opt.key,
+          opt.label,
+          opt.icon,
+          !alertsOpen && contentMode === opt.key,
+          () => {
+            setContentMode(opt.key);
+            setAlertsOpen(false);
+          },
+        ),
+      )}
+    </View>
+  ) : null;
+
+  // Alerts has nothing to do with any one view (see atoms/alerts.ts) — an
+  // icon on the right, next to profile; pressing it again goes back.
+  const alertsButton = (
+    <Press
+      feedback="subtle"
+      accessibilityRole="button"
+      accessibilityLabel={alertsOpen ? 'Close alerts' : 'Alerts'}
+      accessibilityState={{ selected: alertsOpen }}
+      onPress={() => setAlertsOpen(o => !o)}
+      className={`h-9 w-9 items-center justify-center rounded-lg ${
+        alertsOpen ? 'bg-hover' : 'hover:bg-hover'
+      }`}
+    >
+      <Bell
+        size={17}
+        color={alertsOpen ? c.heading : c.text}
+        strokeWidth={2}
+      />
+    </Press>
+  );
+
+  const navDivider = <View className="h-5 w-px bg-border-main" />;
+
+  // ── Desktop: profile, at the right end of the content header ─────────────
+  const profileButton = (
+    <Press
+      feedback="subtle"
+      accessibilityRole="button"
+      accessibilityLabel={`Open profile${profile.name ? ` (${profile.name})` : ''}`}
+      onPress={() => setProfileOpen(true)}
+      className="h-9 w-9 items-center justify-center rounded-full hover:bg-hover"
+    >
+      <InitialsAvatar
+        color={profile.color}
+        initials={profile.initials}
+        size={28}
+      />
+    </Press>
   );
 
   // ── Content area header (desktop) ─────────────────────────────────────────
   const viewHeader = active ? (
-    <View className="h-14 flex-row items-center gap-3 border-b border-border-main bg-bg-card px-6">
-      {viewIcon(active.type, c.text, 18)}
-      <View className="flex-1 flex-row items-baseline gap-3">
-        <Text
-          numberOfLines={1}
-          className="text-base font-semibold text-text-heading"
-        >
-          {active.name}
-        </Text>
+    <View className="h-14 flex-row items-center gap-3 border-b border-border-main bg-bg-card px-4">
+      {brand}
+      {navDivider}
+      {viewSwitcher}
+      {navTabs}
+      <View className="flex-1 flex-row items-center gap-3">
         {active.shared ? <SharedByBadge ownerId={active.ownerId} /> : null}
         {active.description ? (
           <Text numberOfLines={1} className="flex-1 text-sm text-text-subtle">
@@ -538,8 +531,13 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
           className="h-8 flex-row items-center gap-2 rounded-lg border border-border-main bg-bg-main px-2.5 hover:border-border-strong"
         >
           <Search size={14} color={c.subtle} />
-          <Text className="text-sm text-text-subtle">Search tasks</Text>
-          <Kbd>/</Kbd>
+          {/* The navbar is tight below ~1280px — keep just the icon there. */}
+          {width >= 1280 ? (
+            <>
+              <Text className="text-sm text-text-subtle">Search tasks</Text>
+              <Kbd>/</Kbd>
+            </>
+          ) : null}
         </Press>
       ) : null}
       <IconButton
@@ -551,7 +549,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
       <MenuButton label="View options" onOpen={ref => openMenu(active, ref)} />
       {contentMode === 'tasks' && canCreate ? (
         <Button variant="primary" icon={Plus} onPress={newTask}>
-          New task
+          {active?.type === 'calendar' ? 'New event' : 'New task'}
         </Button>
       ) : null}
       {contentMode === 'recurring' &&
@@ -565,15 +563,28 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
           New event
         </Button>
       ) : null}
+      {alertsButton}
+      {profileButton}
     </View>
-  ) : null;
+  ) : (
+    // No view yet (or still loading) — keep the bar so Alerts/profile stay reachable.
+    <View className="h-14 flex-row items-center gap-3 border-b border-border-main bg-bg-card px-4">
+      {brand}
+      <View className="flex-1" />
+      {alertsButton}
+      {profileButton}
+    </View>
+  );
 
   const alertsHeader = (
-    <View className="h-14 flex-row items-center gap-3 border-b border-border-main bg-bg-card px-6">
-      <Bell size={18} color={c.text} />
-      <Text className="flex-1 text-base font-semibold text-text-heading">
-        Alerts
-      </Text>
+    <View className="h-14 flex-row items-center gap-3 border-b border-border-main bg-bg-card px-4">
+      {brand}
+      {navDivider}
+      {active ? viewSwitcher : null}
+      {navTabs}
+      <View className="flex-1" />
+      {alertsButton}
+      {profileButton}
     </View>
   );
 
@@ -714,13 +725,10 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
       className="flex-1 bg-bg-main"
     >
       {wide ? (
-        <View className="flex-1 flex-row">
-          {rail}
+        <View className="flex-1">
+          {alertsOpen ? alertsHeader : viewHeader}
           <View className="flex-1">
-            {alertsOpen ? alertsHeader : viewHeader}
-            <View className="flex-1">
-              {alertsOpen ? <AlertsScreen /> : content}
-            </View>
+            {alertsOpen ? <AlertsScreen /> : content}
           </View>
         </View>
       ) : alertsOpen ? (
@@ -766,7 +774,11 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
               <Press
                 accessibilityRole="button"
                 accessibilityLabel={
-                  contentMode === 'tasks' ? 'New task' : 'New event'
+                  contentMode === 'tasks'
+                    ? active?.type === 'calendar'
+                      ? 'New event'
+                      : 'New task'
+                    : 'New event'
                 }
                 onPress={
                   contentMode === 'tasks'

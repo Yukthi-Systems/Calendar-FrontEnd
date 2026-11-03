@@ -8,12 +8,13 @@ import {
   isValid,
   parse,
 } from 'date-fns';
+import ChevronRight from 'lucide-react-native/icons/chevron-right';
 import {
   itemFormAtom,
   itemsAtom,
   selectedItemIdAtom,
 } from '../../atoms/project';
-import { allowedStatuses, allowedTags } from '../../data/constants';
+import { TAGS, allowedStatuses, allowedTags } from '../../data/constants';
 import { useActiveView } from '../../hooks/useViews';
 import { currentUserIdAtom } from '../../atoms/members';
 import {
@@ -23,16 +24,19 @@ import {
   type Person,
 } from '../../hooks/useUsers';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
+import { useThemeColors } from '../../hooks/useThemeColors';
 import type { Status, TaskTag } from '../../data/types';
 import { errorMessage, toast } from '../../atoms/feedback';
 import {
   Button,
   Callout,
   Chip,
+  DateField,
   DateTimeField,
   Field,
   Input,
   MarkdownEditor,
+  Press,
   Sheet,
   SheetBody,
   SheetFooter,
@@ -61,6 +65,7 @@ export function ItemFormModal() {
   const { addItem, editItem, isServerBacked, unavailableReason } =
     useTaskMutations();
   const [saving, setSaving] = useState(false);
+  const c = useThemeColors();
 
   const editing =
     form?.mode === 'edit' ? items.find(i => i.id === form.id) : undefined;
@@ -77,7 +82,14 @@ export function ItemFormModal() {
   const taskOwnerId = editing?.ownerId ?? activeView?.ownerId;
   const taskCreatorId = editing?.createdById;
   const statusOptions = allowedStatuses(activeView?.statusFilter);
-  const tagOptions = allowedTags(activeView?.tagFilter);
+  // A Calendar view is for events — a brand-new task made from one only
+  // offers the Event tag. Doesn't apply when editing: an existing task's
+  // real tag (whatever it is) always stays pickable, never force-swapped
+  // just because of which view happened to open it.
+  const calendarEventOnly = activeView?.type === 'calendar' && !editing;
+  const tagOptions = calendarEventOnly
+    ? TAGS.filter(t => t.key === 'event')
+    : allowedTags(activeView?.tagFilter);
 
   const parent =
     form?.mode === 'new' && form.parentId
@@ -111,6 +123,10 @@ export function ItemFormModal() {
   // Errors stay quiet until the first save attempt — no red text on a form
   // you've only just opened.
   const [attempted, setAttempted] = useState(false);
+  // Non-Event tags keep their (optional) times behind this toggle; Event
+  // shows them inline in Start/Due instead. Auto-expanded whenever a
+  // non-Event task already has a time, so it's never hidden.
+  const [showAdvanced, setShowAdvanced] = useState(false);
 
   // Server-backed: adding and removing are their own API calls
   // (POST /assignees/create, DELETE /assignees/remove), sent by addItem/editItem
@@ -153,7 +169,11 @@ export function ItemFormModal() {
         statusOptions,
       ),
     );
-    setTag(pick(editing?.tag ?? fromTemplate?.tag ?? 'other', tagOptions));
+    const resolvedTag = pick(
+      editing?.tag ?? fromTemplate?.tag ?? 'other',
+      tagOptions,
+    );
+    setTag(resolvedTag);
     setAssigneeIds(editing ? editing.assigneeIds : parent?.assigneeIds ?? []);
     const presetStart =
       form.mode === 'new' && form.start ? parseDate(form.start) : null;
@@ -187,8 +207,13 @@ export function ItemFormModal() {
     // both ends; anything else brand new defaults to all day — a time is only
     // ever set if the person (or the template) actually gave one.
     const source = editing ?? parent;
-    setStartTime(source?.startTime ?? fromTemplate?.time ?? '');
-    setEndTime(source?.endTime ?? fromTemplate?.time ?? '');
+    const resolvedStartTime = source?.startTime ?? fromTemplate?.time ?? '';
+    const resolvedEndTime = source?.endTime ?? fromTemplate?.time ?? '';
+    setStartTime(resolvedStartTime);
+    setEndTime(resolvedEndTime);
+    setShowAdvanced(
+      resolvedTag !== 'event' && !!(resolvedStartTime || resolvedEndTime),
+    );
     setAttempted(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [form]);
@@ -322,7 +347,13 @@ export function ItemFormModal() {
     errors.end === 'Due date is before the start' ||
     errors.end === 'Due time is before the start';
   const endError = ordering ? errors.end : show(errors.end);
-  const title_ = editing ? 'Edit task' : parent ? 'New subtask' : 'New task';
+  const title_ = editing
+    ? 'Edit task'
+    : parent
+    ? 'New subtask'
+    : calendarEventOnly
+    ? 'New event'
+    : 'New task';
   const subtitle = editing
     ? undefined
     : parent
@@ -385,7 +416,9 @@ export function ItemFormModal() {
           label="Tag"
           required
           hint={
-            tagOptions.length < 6
+            calendarEventOnly
+              ? 'Calendar views are for events.'
+              : tagOptions.length < 6
               ? `“${activeView?.name}” only shows these tags.`
               : null
           }
@@ -397,94 +430,187 @@ export function ItemFormModal() {
                 label={t.label}
                 color={t.color}
                 active={tag === t.key}
-                onPress={() => setTag(t.key)}
+                onPress={() => {
+                  setTag(t.key);
+                  // Leaving Event with a time already picked: open Advanced
+                  // so that time stays visible instead of riding along hidden.
+                  if (t.key !== 'event' && (startTime || endTime)) {
+                    setShowAdvanced(true);
+                  }
+                }}
               />
             ))}
           </View>
         </Field>
 
-        <Field
-          label="Assignees"
-          right={
-            assigneeIds.length > 0 ? (
-              <Text className="text-xs text-text-subtle">
-                {assigneeIds.length} selected
-              </Text>
-            ) : null
-          }
-          hint={
-            isServerBacked && (toAssign.length > 0 || toUnassign.length > 0)
-              ? `${[
-                  toAssign.length > 0 ? `${toAssign.length} to add` : null,
-                  toUnassign.length > 0
-                    ? `${toUnassign.length} to remove`
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(
-                    ', ',
-                  )} when you save. Removing someone needs permission on the task — it’ll be skipped (not blocked) if you don’t have it.`
-              : assigneeIds.length === 0
-              ? 'Nobody selected — this task will be unassigned.'
-              : !isServerBacked && assigneeIds.includes(CURRENT_USER_ID)
-              ? 'You’re on this task — you can add others, but not remove yourself.'
-              : null
-          }
-        >
-          <MultiSelectDropdown
-            label="Assignees"
-            options={pickablePeople
-              .filter(m => !isServerBacked || m.id !== CURRENT_USER_ID)
-              .filter(m => m.id !== taskOwnerId && m.id !== taskCreatorId)
-              .map(m => ({
-                id: m.id,
-                label: m.name,
-                hint: m.email,
-                color: m.color,
-                locked: !isServerBacked && m.id === CURRENT_USER_ID,
-                lockedLabel: 'You',
-              }))}
-            selectedIds={assigneeIds}
-            onToggle={toggleAssignee}
-            onQueryChange={setAssigneeQuery}
-            placeholder="Select people"
-          />
-        </Field>
+        {tag === 'event' ? (
+          <Callout>
+            Event tasks invite people by e-mail instead of assigning them —
+            you’ll find Invitees on the task once it’s saved.
+          </Callout>
+        ) : null}
 
-        {/* Start and due side by side, each one picker for its date and time
-            (empty time = all day). Ordering errors show at once — they're caused
-            by the other field, not by typing. */}
+        {tag === 'event' ? null : (
+          <Field
+            label="Assignees"
+            right={
+              assigneeIds.length > 0 ? (
+                <Text className="text-xs text-text-subtle">
+                  {assigneeIds.length} selected
+                </Text>
+              ) : null
+            }
+            hint={
+              isServerBacked && (toAssign.length > 0 || toUnassign.length > 0)
+                ? `${[
+                    toAssign.length > 0 ? `${toAssign.length} to add` : null,
+                    toUnassign.length > 0
+                      ? `${toUnassign.length} to remove`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(
+                      ', ',
+                    )} when you save. Removing someone needs permission on the task — it’ll be skipped (not blocked) if you don’t have it.`
+                : assigneeIds.length === 0
+                ? 'Nobody selected — this task will be unassigned.'
+                : !isServerBacked && assigneeIds.includes(CURRENT_USER_ID)
+                ? 'You’re on this task — you can add others, but not remove yourself.'
+                : null
+            }
+          >
+            <MultiSelectDropdown
+              label="Assignees"
+              options={pickablePeople
+                .filter(m => !isServerBacked || m.id !== CURRENT_USER_ID)
+                .filter(m => m.id !== taskOwnerId && m.id !== taskCreatorId)
+                .map(m => ({
+                  id: m.id,
+                  label: m.name,
+                  hint: m.email,
+                  color: m.color,
+                  locked: !isServerBacked && m.id === CURRENT_USER_ID,
+                  lockedLabel: 'You',
+                }))}
+              selectedIds={assigneeIds}
+              onToggle={toggleAssignee}
+              onQueryChange={setAssigneeQuery}
+              placeholder="Select people"
+            />
+          </Field>
+        )}
+
+        {/* Start and due side by side. Event: date and time in one picker
+            (empty time = all day). Other tags: date-only, with optional times
+            under Advanced options below. Ordering errors show at once —
+            they're caused by the other field, not by typing. */}
         <View className="flex-row gap-3">
           <View className="flex-1">
             <Field label="Start" required error={show(errors.start)}>
-              <DateTimeField
-                value={{ date: start, time: startTime }}
-                onChange={v => {
-                  if (v.date !== start) {
-                    changeStart(v.date);
-                  }
-                  setStartTime(v.time);
-                }}
-                invalid={!!show(errors.start)}
-                accessibilityLabel="Start"
-              />
+              {tag === 'event' ? (
+                <DateTimeField
+                  value={{ date: start, time: startTime }}
+                  onChange={v => {
+                    if (v.date !== start) {
+                      changeStart(v.date);
+                    }
+                    setStartTime(v.time);
+                  }}
+                  invalid={!!show(errors.start)}
+                  accessibilityLabel="Start"
+                />
+              ) : (
+                <DateField
+                  value={start}
+                  onChange={changeStart}
+                  invalid={!!show(errors.start)}
+                  accessibilityLabel="Start"
+                />
+              )}
             </Field>
           </View>
           <View className="flex-1">
             <Field label="Due" required error={endError}>
-              <DateTimeField
-                value={{ date: end, time: endTime }}
-                onChange={v => {
-                  setEnd(v.date);
-                  setEndTime(v.time);
-                }}
-                min={validDate(start) ? start : undefined}
-                invalid={!!endError}
-                accessibilityLabel="Due"
-              />
+              {tag === 'event' ? (
+                <DateTimeField
+                  value={{ date: end, time: endTime }}
+                  onChange={v => {
+                    setEnd(v.date);
+                    setEndTime(v.time);
+                  }}
+                  min={validDate(start) ? start : undefined}
+                  invalid={!!endError}
+                  accessibilityLabel="Due"
+                />
+              ) : (
+                <DateField
+                  value={end}
+                  onChange={setEnd}
+                  min={validDate(start) ? start : undefined}
+                  invalid={!!endError}
+                  accessibilityLabel="Due"
+                />
+              )}
             </Field>
           </View>
         </View>
+
+        {tag !== 'event' ? (
+          <>
+            <Press
+              accessibilityRole="button"
+              accessibilityState={{ expanded: showAdvanced }}
+              accessibilityLabel={
+                showAdvanced ? 'Hide advanced options' : 'Advanced options'
+              }
+              onPress={() => setShowAdvanced(v => !v)}
+              className="mt-3 flex-row items-center gap-1.5 self-start rounded-lg px-1 py-0.5 hover:bg-hover"
+            >
+              <View
+                style={{
+                  transform: [{ rotate: showAdvanced ? '90deg' : '0deg' }],
+                }}
+              >
+                <ChevronRight size={14} color={c.text} strokeWidth={2.25} />
+              </View>
+              <Text className="text-sm text-text-heading">
+                {showAdvanced ? 'Hide advanced options' : 'Advanced options'}
+              </Text>
+            </Press>
+
+            {showAdvanced ? (
+              <View className="mt-3 flex-row gap-3">
+                <View className="flex-1">
+                  <Field label="Start time" hint="Optional — all day if empty.">
+                    <DateField
+                      mode="time"
+                      value={startTime}
+                      onChange={setStartTime}
+                      clearable
+                      placeholder="Any time"
+                      accessibilityLabel="Start time"
+                    />
+                  </Field>
+                </View>
+                <View className="flex-1">
+                  <Field label="Due time" hint="Optional — all day if empty.">
+                    <DateField
+                      mode="time"
+                      value={endTime}
+                      onChange={setEndTime}
+                      min={
+                        end === start && startTime ? startTime : undefined
+                      }
+                      clearable
+                      placeholder="Any time"
+                      accessibilityLabel="Due time"
+                    />
+                  </Field>
+                </View>
+              </View>
+            ) : null}
+          </>
+        ) : null}
       </SheetBody>
 
       <SheetFooter>

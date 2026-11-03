@@ -50,9 +50,11 @@ export interface ViewDraft {
   showAssigned: boolean;
 }
 
-// Add (view === null) or edit a view: name, description, layout, the fields
-// shown for Table/Calendar layouts, the status/content filters this view
-// applies, and — when editing — share and delete.
+// Add (view === null) or edit a view: name, description, layout, the
+// status/content filters this view applies, and — when editing — share and
+// delete. Which fields show is picked from the view's own Filter menu
+// instead; this form only carries them through (defaults for a new view or
+// a layout change, the view's current ones otherwise).
 export function ViewModal({
   visible,
   view,
@@ -122,11 +124,6 @@ export function ViewModal({
     setType(next);
     setFields(defaultFieldKeys(next));
   };
-
-  const toggleField = (key: ViewField) =>
-    setFields(prev =>
-      prev.includes(key) ? prev.filter(k => k !== key) : [...prev, key],
-    );
 
   const toggleStatus = (key: Status) =>
     setStatusFilter(prev =>
@@ -263,22 +260,6 @@ export function ViewModal({
           </View>
         </Field>
 
-        {options ? (
-          <Field label="Fields shown" hint="The task title is always shown.">
-            <View className="flex-row flex-wrap gap-1.5">
-              {options.map(o => (
-                <Chip
-                  key={o.key}
-                  role="checkbox"
-                  label={o.label}
-                  active={fields.includes(o.key)}
-                  onPress={() => toggleField(o.key)}
-                />
-              ))}
-            </View>
-          </Field>
-        ) : null}
-
         <Field
           label="Status filter"
           hint={filterHint(
@@ -324,7 +305,7 @@ export function ViewModal({
           </View>
         </Field>
 
-        <Field label="Also show" className="mb-0">
+        <View>
           <View className="rounded-xl border border-border-main px-3 py-1">
             {visibilityToggles.map((t, i) => (
               <View
@@ -340,7 +321,7 @@ export function ViewModal({
               </View>
             ))}
           </View>
-        </Field>
+        </View>
       </SheetBody>
 
       <SheetFooter

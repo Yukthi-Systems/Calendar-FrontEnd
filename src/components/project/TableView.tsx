@@ -25,7 +25,7 @@ import {
 import { currentUserIdAtom } from '../../atoms/members';
 import { allowedStatuses, allowedTags, tagInfo } from '../../data/constants';
 import { MAX_DEPTH, hasSubtasks } from '../../data/tree';
-import { showsField } from '../../data/viewFields';
+import { TABLE_FIELDS, showsField } from '../../data/viewFields';
 import {
   isVirtualRecurringId,
   nextVirtualOccurrences,
@@ -41,7 +41,13 @@ import {
   useViewMutations,
 } from '../../hooks/useViews';
 import { errorMessage, toast } from '../../atoms/feedback';
-import type { ProjectView, Status, TaskTag, WorkItem } from '../../data/types';
+import type {
+  ProjectView,
+  Status,
+  TaskTag,
+  ViewField,
+  WorkItem,
+} from '../../data/types';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { useUserSearch, usePeople, type Person } from '../../hooks/useUsers';
 import {
@@ -464,6 +470,26 @@ export function TableView({ view }: { view: ProjectView }) {
       : updateView({ ...view, quickFilter: undefined });
     save.catch(err => {
       toast.error('Couldn’t save the filter', {
+        description: errorMessage(err, 'Please try again.'),
+      });
+    });
+  };
+  // Which columns this view shows — part of the view's own definition, so
+  // only its owner can change it (a shared view's columns are the owner's).
+  // Saved straight away; every column on is stored as "no restriction".
+  const toggleField = (key: ViewField) => {
+    const current = TABLE_FIELDS.map(f => f.key).filter(k =>
+      showsField(view.fields, k),
+    );
+    const next = current.includes(key)
+      ? current.filter(k => k !== key)
+      : [...current, key];
+    const ordered = TABLE_FIELDS.map(f => f.key).filter(k => next.includes(k));
+    updateView({
+      ...view,
+      fields: ordered.length === TABLE_FIELDS.length ? undefined : ordered,
+    }).catch(err => {
+      toast.error('Couldn’t save the columns', {
         description: errorMessage(err, 'Please try again.'),
       });
     });
@@ -918,6 +944,27 @@ export function TableView({ view }: { view: ProjectView }) {
             )}
           >
             <View className="gap-3 p-3">
+              {!view.shared ? (
+                <View>
+                  <Text className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-text-subtle">
+                    Fields shown
+                  </Text>
+                  <View className="flex-row flex-wrap gap-1.5">
+                    {TABLE_FIELDS.map(f => (
+                      <Chip
+                        key={f.key}
+                        role="checkbox"
+                        label={f.label}
+                        active={showsField(view.fields, f.key)}
+                        onPress={() => toggleField(f.key)}
+                      />
+                    ))}
+                  </View>
+                  <Text className="mt-1 text-2xs text-text-subtle">
+                    The task title is always shown.
+                  </Text>
+                </View>
+              ) : null}
               <View>
                 <Text className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-text-subtle">
                   Status

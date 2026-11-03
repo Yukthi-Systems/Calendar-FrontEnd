@@ -9,13 +9,19 @@ export type ViewType = 'table' | 'kanban' | 'roadmap' | 'calendar';
 // Mirrors Tasks-Main-API's task_tag enum — every task will need one once /tasks is
 // integrated, and a view can restrict itself to a subset (src/data/constants.ts
 // has the display labels/colors and the BACKEND_TAG mapping).
+//
+// 'event' is frontend-only for now — Tasks-Main-API's task_tag Postgres enum
+// doesn't have an EVENT variant yet, so a task saved with this tag will be
+// rejected by the server until that's added there too. Remove this note once
+// it is.
 export type TaskTag =
   | 'work'
   | 'important'
   | 'urgent'
   | 'optional'
   | 'personal'
-  | 'other';
+  | 'other'
+  | 'event';
 
 // How a task repeats: an RFC 5545 RRULE value (e.g. "FREQ=WEEKLY;BYDAY=MO,FR"),
 // anchored on the task's own `start` date. See src/data/rrule.ts for the parser,

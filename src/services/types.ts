@@ -84,13 +84,18 @@ export type BackendTaskStatus =
 
 // Tasks-Main-API task_tag enum — same rename_all as BackendTaskStatus, one
 // casing for both directions.
+//
+// 'EVENT' isn't a real backend variant yet (see data/types.ts's TaskTag) —
+// included here only so the frontend type-checks round-tripping it; sending
+// it to the server will fail until Tasks-Main-API's own enum adds it.
 export type BackendTaskTag =
   | 'WORK'
   | 'IMPORTANT'
   | 'URGENT'
   | 'OPTIONAL'
   | 'PERSONAL'
-  | 'OTHER';
+  | 'OTHER'
+  | 'EVENT';
 
 // GET /views/list/{is_shared}, GET /views/get/{id} row shape.
 export interface TaskViewDbDto {

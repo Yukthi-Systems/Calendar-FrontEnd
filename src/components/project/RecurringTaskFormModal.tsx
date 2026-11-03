@@ -167,7 +167,15 @@ export function RecurringTaskFormModal({
                 label={t.label}
                 color={t.color}
                 active={tag === t.key}
-                onPress={() => setTag(t.key)}
+                onPress={() => {
+                  setTag(t.key);
+                  // Only Event occurrences have a time of day — switching
+                  // away drops whatever time was picked so it doesn't
+                  // silently ride along hidden.
+                  if (t.key !== 'event') {
+                    setTime('');
+                  }
+                }}
               />
             ))}
           </View>
@@ -203,18 +211,20 @@ export function RecurringTaskFormModal({
             </Text>
           ) : null}
         </Field>
-        <Field label="Time" hint="Optional — what time of day this is for.">
-          <View className="w-32">
-            <DateField
-              mode="time"
-              value={time}
-              onChange={setTime}
-              clearable
-              placeholder="Any time"
-              accessibilityLabel="Time of day"
-            />
-          </View>
-        </Field>
+        {tag === 'event' ? (
+          <Field label="Time" hint="Optional — what time of day this is for.">
+            <View className="w-32">
+              <DateField
+                mode="time"
+                value={time}
+                onChange={setTime}
+                clearable
+                placeholder="Any time"
+                accessibilityLabel="Time of day"
+              />
+            </View>
+          </Field>
+        ) : null}
         <Field label="Icon">
           <View className="flex-row flex-wrap gap-1.5">
             {RECURRING_ICONS.map(({ key, icon: Icon, label }) => {
