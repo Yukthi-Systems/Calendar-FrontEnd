@@ -47,6 +47,7 @@ import {
   Chip,
   IconButton,
   Input,
+  RichText,
   Sheet,
   SheetBody,
   SheetHeader,
@@ -302,9 +303,7 @@ export function RecurringTaskViewModal() {
           />
           <SheetBody>
             {template.description ? (
-              <Text className="mb-5 text-base text-text-main">
-                {template.description}
-              </Text>
+              <RichText className="mb-5">{template.description}</RichText>
             ) : null}
 
             {canCreate ? (
@@ -343,6 +342,7 @@ export function RecurringTaskViewModal() {
                 {canCreate ? (
                   <RecurringAssigneeQuickAdd
                     assigneeIds={createdItem?.assigneeIds ?? []}
+                    ownerId={template.ownerId}
                     onAdd={addAssignee}
                   />
                 ) : (
@@ -457,9 +457,11 @@ export function RecurringTaskViewModal() {
 // addAssignee above) creates one first if it hasn't been already.
 function RecurringAssigneeQuickAdd({
   assigneeIds,
+  ownerId,
   onAdd,
 }: {
   assigneeIds: string[];
+  ownerId: string;
   onAdd: (id: string) => Promise<void>;
 }) {
   const CURRENT_USER_ID = useAtomValue(currentUserIdAtom);
@@ -511,7 +513,9 @@ function RecurringAssigneeQuickAdd({
         </View>
       )}
       options={options
-        .filter(p => p.id !== CURRENT_USER_ID)
+        // The owner already has full access on their own — being an
+        // assignee too would be redundant — and you can't assign yourself.
+        .filter(p => p.id !== CURRENT_USER_ID && p.id !== ownerId)
         .map(p => ({
           id: p.id,
           label: p.name,

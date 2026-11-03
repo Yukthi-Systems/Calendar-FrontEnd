@@ -12,3 +12,5 @@ export { EmptyState, Skeleton, Callout, Kbd } from './Feedback';
 export { ToastHost } from './Toast';
 export { ConfirmHost } from './ConfirmDialog';
 export { MenuItem, MenuSeparator, MenuLabel } from './MenuItem';
+export { RichText } from './RichText';
+export { MarkdownEditor } from './MarkdownEditor';

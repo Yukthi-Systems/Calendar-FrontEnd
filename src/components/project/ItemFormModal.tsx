@@ -32,6 +32,7 @@ import {
   DateTimeField,
   Field,
   Input,
+  MarkdownEditor,
   Sheet,
   SheetBody,
   SheetFooter,
@@ -352,11 +353,10 @@ export function ItemFormModal() {
           />
         </Field>
         <Field label="Description">
-          <Input
+          <MarkdownEditor
             value={description}
             onChangeText={setDescription}
             placeholder="Add details, links or context (optional)"
-            multiline
           />
         </Field>
 

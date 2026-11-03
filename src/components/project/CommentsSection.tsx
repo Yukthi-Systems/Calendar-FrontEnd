@@ -13,7 +13,15 @@ import { useCommentMutations, useComments } from '../../hooks/useComments';
 import { usePerson } from '../../hooks/useUsers';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { isServerTaskId } from '../../data/taskSync';
-import { Button, Chip, IconButton, Input, Popover, Press } from '../ui';
+import {
+  Button,
+  Chip,
+  IconButton,
+  MarkdownEditor,
+  Popover,
+  Press,
+  RichText,
+} from '../ui';
 import { Avatar } from './shared';
 import type { CommentDbDto } from '../../services/types';
 
@@ -179,11 +187,10 @@ export function CommentsSection({ taskId }: { taskId: string }) {
 
         <View className="flex-row items-end gap-2">
           <View className="flex-1">
-            <Input
+            <MarkdownEditor
               value={draft}
               onChangeText={setDraft}
               placeholder="Write a comment…"
-              multiline
               minHeight={40}
             />
           </View>
@@ -248,10 +255,9 @@ function CommentRow({
 
         {editing ? (
           <View className="mt-1 gap-2">
-            <Input
+            <MarkdownEditor
               value={draft}
               onChangeText={setDraft}
-              multiline
               minHeight={40}
               autoFocus
             />
@@ -272,9 +278,9 @@ function CommentRow({
             </View>
           </View>
         ) : (
-          <Text className="mt-0.5 text-sm text-text-main">
+          <RichText className="mt-0.5" size="sm">
             {comment.content}
-          </Text>
+          </RichText>
         )}
 
         <View className="mt-1.5 flex-row flex-wrap items-center gap-1.5">

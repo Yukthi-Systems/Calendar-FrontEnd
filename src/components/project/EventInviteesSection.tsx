@@ -21,7 +21,7 @@ import { useUserSearch, type Person } from '../../hooks/useUsers';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { Badge, Button, IconButton, Input, Press } from '../ui';
 import { Avatar } from './shared';
-import { SuggestPortal } from './SuggestPortal';
+import { SuggestPortal } from '../ui/SuggestPortal';
 
 // Deliberately stricter than bare RFC 5322 (which technically allows local
 // parts like "user#name" and TLDs like "com2" — the `email-validator`

@@ -42,7 +42,9 @@ import {
 import { useThemeColors } from '../../hooks/useThemeColors';
 import {
   useActiveView,
+  useMyShare,
   useViewAccess,
+  useViewList,
   useViewMutations,
 } from '../../hooks/useViews';
 import {
@@ -52,6 +54,7 @@ import {
   Chip,
   IconButton,
   Press,
+  RichText,
   Sheet,
   SheetBody,
   SheetFooter,
@@ -127,9 +130,38 @@ export function ItemModal() {
     !!item &&
     (item.ownerId === CURRENT_USER_ID || item.createdById === CURRENT_USER_ID);
   const isTaskAssignee = !!item && item.assigneeIds.includes(CURRENT_USER_ID);
-  const canEditTask = canEdit || isTaskOwnerOrCreator;
-  const canDeleteTask = canDelete || isTaskOwnerOrCreator;
+  // canEdit/canDelete (the view's own blanket grant) come from whichever
+  // view is open — but a task you were granted real permission on through
+  // someone's shared view doesn't stop being editable just because you
+  // happen to be looking at it through your *own* view instead (e.g. it
+  // also showed up there via "show tasks assigned to me"). So: if the
+  // active view is itself that owner's share, use its grant directly;
+  // otherwise look up whether *any* view that owner shared with you grants
+  // it, so the same task offers the same actions no matter which view you
+  // opened it from.
+  const { sharedViews } = useViewList();
+  const ownerSharedView =
+    item && !activeView?.shared
+      ? sharedViews.find(v => v.ownerId === item.ownerId)
+      : undefined;
+  const { data: ownerShare } = useMyShare(ownerSharedView);
+  const canEditViaShare = activeView?.shared
+    ? canEdit
+    : !!ownerShare?.can_edit;
+  const canDeleteViaShare = activeView?.shared
+    ? canDelete
+    : !!ownerShare?.can_delete;
+  const canEditTask = canEditViaShare || isTaskOwnerOrCreator;
+  const canDeleteTask = canDeleteViaShare || isTaskOwnerOrCreator;
   const canCreateSubtask = canCreate || isTaskOwnerOrCreator || isTaskAssignee;
+  // Shown in the header when this task, inside your own view, actually
+  // belongs to someone else — explains why Edit/Delete might not be there
+  // (or, if they are, that it's thanks to a share, not this view itself).
+  const sharedTaskOwner = usePeople(
+    item && !activeView?.shared && item.ownerId !== CURRENT_USER_ID
+      ? [item.ownerId]
+      : [],
+  ).get(item?.ownerId ?? '');
   // The server's own invite permission (event_invitees::can_invite/
   // can_delete_invite) checks task ownership only, not the view's grant — an
   // assignee on someone else's shared view can still invite/see invitees,
@@ -358,6 +390,16 @@ export function ItemModal() {
                 {item.title}
               </Text>
             }
+            description={
+              sharedTaskOwner ? (
+                <View className="mt-1">
+                  <Badge
+                    label={`Shared with you by ${sharedTaskOwner.name}`}
+                    size="sm"
+                  />
+                </View>
+              ) : null
+            }
             actions={
               <>
                 <IconButton
@@ -389,9 +431,7 @@ export function ItemModal() {
           />
           <SheetBody>
             {item.description ? (
-              <Text className="mb-5 text-base text-text-main">
-                {item.description}
-              </Text>
+              <RichText className="mb-5">{item.description}</RichText>
             ) : null}
 
             {!isServerBacked && unavailableReason ? (
@@ -774,22 +814,19 @@ export function ItemModal() {
           </Text>
         </SheetBody>
         <SheetFooter>
-          <Button variant="secondary" onPress={() => setDeletePrompt(false)}>
-            Cancel
-          </Button>
           {taskInvitees.length > 0 ? (
             <>
-              <Button
-                variant="destructive-ghost"
-                onPress={() => performDelete(false)}
-              >
-                Delete
-              </Button>
               <Button
                 variant="destructive"
                 onPress={() => performDelete(true)}
               >
                 Delete and Notify
+              </Button>
+              <Button
+                variant="destructive-ghost"
+                onPress={() => performDelete(false)}
+              >
+                Delete
               </Button>
             </>
           ) : (
@@ -797,6 +834,9 @@ export function ItemModal() {
               Delete
             </Button>
           )}
+          <Button variant="secondary" onPress={() => setDeletePrompt(false)}>
+            Cancel
+          </Button>
         </SheetFooter>
       </Sheet>
     ) : null}

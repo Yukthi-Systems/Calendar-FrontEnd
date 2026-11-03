@@ -21,6 +21,7 @@ import {
   DateField,
   Field,
   Input,
+  MarkdownEditor,
   Press,
   Sheet,
   SheetBody,
@@ -151,11 +152,10 @@ export function RecurringTaskFormModal({
           />
         </Field>
         <Field label="Description" hint="Optional.">
-          <Input
+          <MarkdownEditor
             value={description}
             onChangeText={setDescription}
             placeholder="What this event is for"
-            multiline
             minHeight={60}
           />
         </Field>
