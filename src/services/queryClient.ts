@@ -16,6 +16,9 @@ export const queryClient = new QueryClient({
         }
         return failureCount < 1;
       },
+      // Randomised, so a server hiccup doesn't make every open browser retry
+      // in the same instant.
+      retryDelay: attempt => 1000 * 2 ** attempt + Math.random() * 2000,
       staleTime: 30_000,
       refetchOnWindowFocus: false,
     },

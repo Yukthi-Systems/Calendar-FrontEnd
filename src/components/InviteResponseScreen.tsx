@@ -62,7 +62,6 @@ const RESPONSE_BANNER: Record<
     box: string;
     tone: 'success' | 'warning' | 'destructive';
     heading: string;
-    message: string;
   }
 > = {
   ACCEPTED: {
@@ -70,21 +69,18 @@ const RESPONSE_BANNER: Record<
     box: 'border-success/25 bg-success/10',
     tone: 'success',
     heading: 'You’re in',
-    message: 'We’ve let them know you’ll be there.',
   },
   MAYBE: {
     icon: CircleHelp,
     box: 'border-warning/30 bg-warning/10',
     tone: 'warning',
     heading: 'Marked as maybe',
-    message: 'We’ve let them know you might make it.',
   },
   DECLINED: {
     icon: CircleX,
     box: 'border-destructive/30 bg-destructive/10',
     tone: 'destructive',
     heading: 'Response recorded',
-    message: 'We’ve let them know you can’t make it.',
   },
 };
 
@@ -442,9 +438,6 @@ export function InviteResponseScreen({ route }: { route: InviteRouteParams }) {
                   <View className="items-center gap-1">
                     <Text className="text-lg font-semibold text-text-heading">
                       {banner.heading}
-                    </Text>
-                    <Text className="text-center text-sm text-text-subtle">
-                      {banner.message}
                     </Text>
                     {currentDetails?.percentage !== undefined ? (
                       <Text className="text-center text-sm text-text-subtle">

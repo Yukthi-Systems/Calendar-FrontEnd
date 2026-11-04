@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useQueryClient } from '@tanstack/react-query';
-import { format, parseISO } from 'date-fns';
+import { endOfDay, format, parseISO } from 'date-fns';
 import ArrowRight from 'lucide-react-native/icons/arrow-right';
 import Bell from 'lucide-react-native/icons/bell';
 import ChevronRight from 'lucide-react-native/icons/chevron-right';
@@ -341,7 +341,7 @@ export function ItemModal() {
     }
     setRefreshing(true);
     try {
-      await refreshLevelOf(item.parentId);
+      await refreshLevelOf(item.parentId, [item.start]);
       if (activeView) {
         await queryClient.invalidateQueries({
           queryKey: inviteesKey(Number(activeView.id), item.id),
@@ -780,6 +780,13 @@ export function ItemModal() {
                   taskId={item.id}
                   canInvite={canSeeInvitees}
                   canRemove={isTaskOwnerOrCreator}
+                  // Same "past due" rule as DueDate: exact with a due time,
+                  // end of the day for an all-day task.
+                  eventEnded={
+                    (item.endTime
+                      ? parseISO(`${item.end}T${item.endTime}`)
+                      : endOfDay(parseISO(item.end))) < new Date()
+                  }
                 />
               </View>
             ) : null}

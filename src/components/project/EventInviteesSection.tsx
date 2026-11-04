@@ -60,11 +60,14 @@ export function EventInviteesSection({
   taskId,
   canInvite,
   canRemove,
+  eventEnded = false,
 }: {
   viewId: number;
   taskId: string;
   canInvite: boolean;
   canRemove: boolean;
+  // Due date already passed — re-sending an invite to it is pointless.
+  eventEnded?: boolean;
 }) {
   const c = useThemeColors();
   const { invitees, isLoading } = useEventInvitees(viewId, taskId);
@@ -432,9 +435,11 @@ export function EventInviteesSection({
                     <IconButton
                       icon={resendLocked ? Clock : Mail}
                       size="sm"
-                      disabled={busy || resendLocked}
+                      disabled={busy || resendLocked || eventEnded}
                       label={
-                        resendLocked
+                        eventEnded
+                          ? 'Can’t resend — the due date has passed'
+                          : resendLocked
                           ? `Resend invite to ${
                               inv.invitee_email
                             } again in ${formatRemaining(lockUntil - now)}`

@@ -88,3 +88,16 @@ export type RecurringFormState =
   | { mode: 'edit'; template: RecurringTemplate }
   | null;
 export const recurringFormAtom = atom<RecurringFormState>(null);
+
+// The dates the Calendar view is showing (whole months, 'yyyy-MM-dd'), set by
+// CalendarView — its root task list is fetched for this range only (see
+// useRootTasksQuery). null = no calendar on screen.
+export interface CalendarRange {
+  from: string;
+  to: string;
+  // The side panel's selected day and its "Upcoming" days, which can be far
+  // from the grid (today's agenda while browsing another month).
+  agendaFrom?: string;
+  agendaTo?: string;
+}
+export const calendarRangeAtom = atom<CalendarRange | null>(null);

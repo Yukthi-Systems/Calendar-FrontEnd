@@ -4,6 +4,7 @@ import { useAtomValue } from 'jotai';
 import { itemsAtom } from '../atoms/project';
 import { errorMessage, toast } from '../atoms/feedback';
 import { useTaskMutations } from './useTaskMutations';
+import { refetchCalendarBuckets } from './useTasksSync';
 import { myShareKey, useActiveView, useViewList } from './useViews';
 
 // The refresh button: re-read everything on screen from the server — the view
@@ -26,7 +27,15 @@ export function useRefresh() {
       await Promise.all([
         refetchViews(),
         view ? queryClient.invalidateQueries({ queryKey: myShareKey(view.id) }) : null,
-        view ? queryClient.invalidateQueries({ queryKey: ['tasks', Number(view.id)] }) : null,
+        // A Calendar's month buckets are re-read oldest first, so one answer
+        // can stand in for the later months (see refetchCalendarBuckets).
+        view
+          ? queryClient.invalidateQueries({
+              queryKey: ['tasks', Number(view.id)],
+              predicate: q => view.type !== 'calendar' || q.queryKey[4] !== 'bucket',
+            })
+          : null,
+        view?.type === 'calendar' ? refetchCalendarBuckets(queryClient, view) : null,
         queryClient.invalidateQueries({ queryKey: ['taskSearch'] }),
       ]);
       // Only parents that are themselves loaded in this view (an orphaned subtask

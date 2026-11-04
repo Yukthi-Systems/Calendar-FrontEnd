@@ -50,6 +50,7 @@ import { useTasksSync } from '../../hooks/useTasksSync';
 import { useTaskAlertMutations } from '../../hooks/useTaskAlerts';
 import { useRefresh } from '../../hooks/useRefresh';
 import { useShortcuts } from '../../hooks/useShortcuts';
+import { useOnboarding } from '../../hooks/useOnboarding';
 import { VIEW_TYPES } from '../../data/constants';
 import type { ProjectView, ViewType } from '../../data/types';
 import {
@@ -73,6 +74,8 @@ import { KanbanView } from './KanbanView';
 import { ProfileEditModal } from './ProfileEditModal';
 import { ProfileModal } from './ProfileModal';
 import { MobileHome } from './MobileHome';
+import { OnboardingTips } from './OnboardingTips';
+import { tourTarget } from './tourTargets';
 import { RecurringTasksView } from './RecurringTasksView';
 import { RoadmapView } from './RoadmapView';
 import { SearchModal } from './SearchModal';
@@ -125,6 +128,8 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
     useViewList();
   const setActiveId = useSetAtom(activeViewIdAtom);
   const { createView, updateView, deleteView } = useViewMutations();
+  // A new account's starter views and first-run tips.
+  const onboarding = useOnboarding();
   useViewUrlSync();
   // undefined = closed, null = creating, ProjectView = editing.
   const [modalView, setModalView] = useState<ProjectView | null | undefined>(
@@ -362,42 +367,46 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   // ── Desktop: view switcher + "New view", in the content header ────────────
   const viewSwitcher = (
     <View className="flex-row items-center gap-1.5">
-      <Popover
-        open={viewPickerOpen}
-        onClose={() => setViewPickerOpen(false)}
-        width={248}
-        variant="menu"
-        renderTrigger={ref => (
-          <View ref={ref}>
-            <Press
-              feedback="subtle"
-              accessibilityRole="button"
-              accessibilityLabel="Switch view"
-              onPress={() => setViewPickerOpen(o => !o)}
-              className="h-9 max-w-[280px] flex-row items-center gap-2 rounded-lg border border-border-main bg-bg-main px-2.5 hover:border-border-strong"
-            >
-              {active ? viewIcon(active.type, c.text) : null}
-              <Text
-                numberOfLines={1}
-                className="shrink text-sm font-semibold text-text-heading"
+      <View ref={tourTarget('views')}>
+        <Popover
+          open={viewPickerOpen}
+          onClose={() => setViewPickerOpen(false)}
+          width={248}
+          variant="menu"
+          renderTrigger={ref => (
+            <View ref={ref}>
+              <Press
+                feedback="subtle"
+                accessibilityRole="button"
+                accessibilityLabel="Switch view"
+                onPress={() => setViewPickerOpen(o => !o)}
+                className="h-9 max-w-[280px] flex-row items-center gap-2 rounded-lg border border-border-main bg-bg-main px-2.5 hover:border-border-strong"
               >
-                {active?.name ?? 'Select a view'}
-              </Text>
-              <ChevronDown size={14} color={c.subtle} />
-            </Press>
-          </View>
-        )}
-      >
-        {viewPickerList}
-      </Popover>
-      <IconButton
-        icon={Plus}
-        label="New view"
-        onPress={() => {
-          setViewPickerOpen(false);
-          openNewView();
-        }}
-      />
+                {active ? viewIcon(active.type, c.text) : null}
+                <Text
+                  numberOfLines={1}
+                  className="shrink text-sm font-semibold text-text-heading"
+                >
+                  {active?.name ?? 'Select a view'}
+                </Text>
+                <ChevronDown size={14} color={c.subtle} />
+              </Press>
+            </View>
+          )}
+        >
+          {viewPickerList}
+        </Popover>
+      </View>
+      <View ref={tourTarget('newView')}>
+        <IconButton
+          icon={Plus}
+          label="New view"
+          onPress={() => {
+            setViewPickerOpen(false);
+            openNewView();
+          }}
+        />
+      </View>
     </View>
   );
 
@@ -451,7 +460,11 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   );
 
   const navTabs = active ? (
-    <View accessibilityRole="tablist" className="flex-row items-center gap-0.5">
+    <View
+      ref={tourTarget('tabs')}
+      accessibilityRole="tablist"
+      className="flex-row items-center gap-0.5"
+    >
       {modeOptions.map(opt =>
         navTab(
           opt.key,
@@ -470,41 +483,47 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   // Alerts has nothing to do with any one view (see atoms/alerts.ts) — an
   // icon on the right, next to profile; pressing it again goes back.
   const alertsButton = (
-    <Press
-      feedback="subtle"
-      accessibilityRole="button"
-      accessibilityLabel={alertsOpen ? 'Close alerts' : 'Alerts'}
-      accessibilityState={{ selected: alertsOpen }}
-      onPress={() => setAlertsOpen(o => !o)}
-      className={`h-9 w-9 items-center justify-center rounded-lg ${
-        alertsOpen ? 'bg-hover' : 'hover:bg-hover'
-      }`}
-    >
-      <Bell
-        size={17}
-        color={alertsOpen ? c.heading : c.text}
-        strokeWidth={2}
-      />
-    </Press>
+    <View ref={tourTarget('alerts')}>
+      <Press
+        feedback="subtle"
+        accessibilityRole="button"
+        accessibilityLabel={alertsOpen ? 'Close alerts' : 'Alerts'}
+        accessibilityState={{ selected: alertsOpen }}
+        onPress={() => setAlertsOpen(o => !o)}
+        className={`h-9 w-9 items-center justify-center rounded-lg ${
+          alertsOpen ? 'bg-hover' : 'hover:bg-hover'
+        }`}
+      >
+        <Bell
+          size={17}
+          color={alertsOpen ? c.heading : c.text}
+          strokeWidth={2}
+        />
+      </Press>
+    </View>
   );
 
   const navDivider = <View className="h-5 w-px bg-border-main" />;
 
   // ── Desktop: profile, at the right end of the content header ─────────────
   const profileButton = (
-    <Press
-      feedback="subtle"
-      accessibilityRole="button"
-      accessibilityLabel={`Open profile${profile.name ? ` (${profile.name})` : ''}`}
-      onPress={() => setProfileOpen(true)}
-      className="h-9 w-9 items-center justify-center rounded-full hover:bg-hover"
-    >
-      <InitialsAvatar
-        color={profile.color}
-        initials={profile.initials}
-        size={28}
-      />
-    </Press>
+    <View ref={tourTarget('profile')}>
+      <Press
+        feedback="subtle"
+        accessibilityRole="button"
+        accessibilityLabel={`Open profile${
+          profile.name ? ` (${profile.name})` : ''
+        }`}
+        onPress={() => setProfileOpen(true)}
+        className="h-9 w-9 items-center justify-center rounded-full hover:bg-hover"
+      >
+        <InitialsAvatar
+          color={profile.color}
+          initials={profile.initials}
+          size={28}
+        />
+      </Press>
+    </View>
   );
 
   // ── Content area header (desktop) ─────────────────────────────────────────
@@ -523,22 +542,24 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
         ) : null}
       </View>
       {contentMode === 'tasks' ? (
-        <Press
-          feedback="subtle"
-          accessibilityRole="button"
-          accessibilityLabel="Search tasks"
-          onPress={openSearch}
-          className="h-8 flex-row items-center gap-2 rounded-lg border border-border-main bg-bg-main px-2.5 hover:border-border-strong"
-        >
-          <Search size={14} color={c.subtle} />
-          {/* The navbar is tight below ~1280px — keep just the icon there. */}
-          {width >= 1280 ? (
-            <>
-              <Text className="text-sm text-text-subtle">Search tasks</Text>
-              <Kbd>/</Kbd>
-            </>
-          ) : null}
-        </Press>
+        <View ref={tourTarget('search')}>
+          <Press
+            feedback="subtle"
+            accessibilityRole="button"
+            accessibilityLabel="Search tasks"
+            onPress={openSearch}
+            className="h-8 flex-row items-center gap-2 rounded-lg border border-border-main bg-bg-main px-2.5 hover:border-border-strong"
+          >
+            <Search size={14} color={c.subtle} />
+            {/* The navbar is tight below ~1280px — keep just the icon there. */}
+            {width >= 1280 ? (
+              <>
+                <Text className="text-sm text-text-subtle">Search tasks</Text>
+                <Kbd>/</Kbd>
+              </>
+            ) : null}
+          </Press>
+        </View>
       ) : null}
       <IconButton
         icon={RefreshCw}
@@ -548,9 +569,11 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
       />
       <MenuButton label="View options" onOpen={ref => openMenu(active, ref)} />
       {contentMode === 'tasks' && canCreate ? (
-        <Button variant="primary" icon={Plus} onPress={newTask}>
-          {active?.type === 'calendar' ? 'New event' : 'New task'}
-        </Button>
+        <View ref={tourTarget('newTask')}>
+          <Button variant="primary" icon={Plus} onPress={newTask}>
+            {active?.type === 'calendar' ? 'New event' : 'New task'}
+          </Button>
+        </View>
       ) : null}
       {contentMode === 'recurring' &&
       canCreate &&
@@ -588,56 +611,59 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
     </View>
   );
 
-  const content = !ready ? (
-    <View className="flex-1 gap-3 p-6">
-      <Skeleton className="h-8 w-64 rounded-lg" />
-      <Skeleton className="h-64 w-full rounded-xl" />
-    </View>
-  ) : error ? (
-    <EmptyState
-      icon={CloudOff}
-      title="Couldn’t load your views"
-      description={errorMessage(error, 'The server didn’t respond.')}
-      action={
-        <Button variant="primary" onPress={() => refetch()}>
-          Try again
-        </Button>
-      }
-    />
-  ) : !active ? (
-    <EmptyState
-      icon={LayoutGrid}
-      title="Create your first view"
-      description="Views are saved layouts of your tasks — a table, a calendar, a board. Tasks always live inside a view."
-      action={
-        <View className="flex-row flex-wrap justify-center gap-2">
-          <Button
-            variant="primary"
-            icon={Table2}
-            onPress={() => openNewView({ name: 'All tasks', type: 'table' })}
-          >
-            Task table
+  const content =
+    !ready || onboarding.settingUp ? (
+      <View className="flex-1 gap-3 p-6">
+        <Skeleton className="h-8 w-64 rounded-lg" />
+        <Skeleton className="h-64 w-full rounded-xl" />
+      </View>
+    ) : error ? (
+      <EmptyState
+        icon={CloudOff}
+        title="Couldn’t load your views"
+        description={errorMessage(error, 'The server didn’t respond.')}
+        action={
+          <Button variant="primary" onPress={() => refetch()}>
+            Try again
           </Button>
-          <Button
-            icon={CalendarDays}
-            onPress={() => openNewView({ name: 'Calendar', type: 'calendar' })}
-          >
-            Calendar
-          </Button>
-          <Button variant="ghost" icon={Plus} onPress={() => openNewView()}>
-            Custom…
-          </Button>
-        </View>
-      }
-    />
-  ) : contentMode === 'recurring' ? (
-    <RecurringTasksView view={active} />
-  ) : ActiveView ? (
-    <>
-      {active.shared ? <SharedNote view={active} /> : null}
-      <ActiveView key={active.id} view={active} />
-    </>
-  ) : null;
+        }
+      />
+    ) : !active ? (
+      <EmptyState
+        icon={LayoutGrid}
+        title="Create your first view"
+        description="Views are saved layouts of your tasks — a table, a calendar, a board. Tasks always live inside a view."
+        action={
+          <View className="flex-row flex-wrap justify-center gap-2">
+            <Button
+              variant="primary"
+              icon={Table2}
+              onPress={() => openNewView({ name: 'All tasks', type: 'table' })}
+            >
+              Task table
+            </Button>
+            <Button
+              icon={CalendarDays}
+              onPress={() =>
+                openNewView({ name: 'Calendar', type: 'calendar' })
+              }
+            >
+              Calendar
+            </Button>
+            <Button variant="ghost" icon={Plus} onPress={() => openNewView()}>
+              Custom…
+            </Button>
+          </View>
+        }
+      />
+    ) : contentMode === 'recurring' ? (
+      <RecurringTasksView view={active} />
+    ) : ActiveView ? (
+      <>
+        {active.shared ? <SharedNote view={active} /> : null}
+        <ActiveView key={active.id} view={active} />
+      </>
+    ) : null;
 
   // ── Phone: header + tab strip ─────────────────────────────────────────────
   const phoneHeader = (
@@ -867,6 +893,11 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
       />
       <ProfileModal onSignOut={onSignOut} />
       <ProfileEditModal />
+      <OnboardingTips
+        visible={onboarding.tipsOpen}
+        onClose={onboarding.closeTips}
+        onDismiss={onboarding.dismissTips}
+      />
     </SafeAreaView>
   );
 }

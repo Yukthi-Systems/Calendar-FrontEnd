@@ -1,4 +1,12 @@
-import { addYears, endOfDay, format, parseISO, startOfDay } from 'date-fns';
+import {
+  addMonths,
+  addYears,
+  endOfDay,
+  format,
+  parseISO,
+  startOfDay,
+  subMonths,
+} from 'date-fns';
 import {
   BACKEND_STATUS,
   BACKEND_TAG,
@@ -166,27 +174,118 @@ export const FETCH_PAGE_LIMIT = 100;
 // the same pattern).
 export const MAX_PAGES = 20;
 
+// The Calendar loads tasks in "month buckets": every top-level task that
+// *starts* in one calendar month, whatever its end. /tasks/list can only
+// return tasks lying entirely inside [start_at, end_at], so a bucket asks for
+// start_at = the month's first day and end_at = far future, then stops paging
+// once tasks start after the month (results come back ordered by start_at).
+// Buckets are cached per month and shared by Day/Week/Month/Year, so moving
+// to the next month usually costs one new bucket, not a whole new range.
+//
+// A calendar needs every task *overlapping* what it shows, so it also loads
+// this many earlier months' buckets for long tasks that began before the
+// screen. A task that started even earlier won't show — the backend has no
+// overlap filter to do better.
+export const CALENDAR_LOOKBACK_MONTHS = 6;
+
+// 'yyyy-MM' — one bucket.
+export type MonthKey = string;
+
+// A bucket reaches one day past its month: an all-day task is stored at UTC
+// midnight while a timed one keeps its real instant, so a task near a month
+// edge can land on either side depending on the viewer's timezone. The
+// overlap duplicates are dropped when buckets are merged.
+const bucketBounds = (month: MonthKey) => {
+  const first = parseISO(`${month}-01`);
+  return {
+    start: toTimestamp(month + '-01'),
+    endMs:
+      Date.parse(toTimestamp(format(addMonths(first, 1), DATE_FMT))) +
+      24 * 3600e3,
+  };
+};
+
+export const bucketFilter = (
+  view: Pick<ProjectView, 'statusFilter' | 'tagFilter'>,
+  month: MonthKey,
+  cursor?: { cursor_start_at: string; cursor_task_id: number },
+): TaskFilterQuery => ({
+  ...buildTaskFilter(view, undefined, cursor),
+  start_at: bucketBounds(month).start,
+});
+
+// A bucket's span as epoch ms: tasks starting in [startMs, endMs) belong to it.
+export const bucketRange = (month: MonthKey) => {
+  const b = bucketBounds(month);
+  return { startMs: Date.parse(b.start), endMs: b.endMs };
+};
+
+// Whether `row` belongs to `month`'s bucket (start before its far edge), and
+// so whether paging should go on after a page ending in it.
+export const startsWithinBucket = (month: MonthKey, startAt: string) =>
+  Date.parse(startAt) < bucketBounds(month).endMs;
+
+// The bucket(s) a task starting on `date` ('yyyy-MM-dd') lives in — its own
+// month, and on a month's first day also the previous one (see bucketBounds).
+export const bucketsForDate = (date: string): MonthKey[] => {
+  const d = parseISO(date);
+  const own = format(d, 'yyyy-MM');
+  return d.getDate() === 1 ? [format(subMonths(d, 1), 'yyyy-MM'), own] : [own];
+};
+
+// The part of TableView's quick filter the list API can apply itself. Assignee
+// and "due on or after" have no TaskFilterDto field, so they stay client-side.
+export interface ServerQuickFilter {
+  statuses: Status[];
+  tags: TaskTag[];
+  // 'yyyy-MM-dd' or '' — sent as the request's end_at bound.
+  dueTo: string;
+}
+
+export const toServerQuickFilter = (f: {
+  statuses: Status[];
+  tags: TaskTag[];
+  dueTo: string;
+}): ServerQuickFilter | undefined =>
+  f.statuses.length || f.tags.length || f.dueTo
+    ? { statuses: f.statuses, tags: f.tags, dueTo: f.dueTo }
+    : undefined;
+
 // Builds a POST /tasks/list/{view_id} filter body for `view`. The view's own
 // statusFilter/tagFilter (if set) restrict which values the API will even allow
 // asking for (TaskViewPermission.check_status/check_tag), so "no filter" here
-// must still spell out every value — the API has no shorthand for "all".
+// must still spell out every value — the API has no shorthand for "all". A
+// quick filter only ever narrows within that.
 export function buildTaskFilter(
   view: Pick<ProjectView, 'statusFilter' | 'tagFilter'>,
   parentTaskId?: number,
   cursor?: { cursor_start_at: string; cursor_task_id: number },
+  quick?: ServerQuickFilter,
 ): TaskFilterQuery {
-  const statuses = (
-    view.statusFilter?.length ? view.statusFilter : ALL_STATUSES
-  ).map(s => BACKEND_STATUS[s]);
-  const tags = (view.tagFilter?.length ? view.tagFilter : ALL_TAGS).map(
-    t => BACKEND_TAG[t],
-  );
+  const viewStatuses = view.statusFilter?.length
+    ? view.statusFilter
+    : ALL_STATUSES;
+  const viewTags = view.tagFilter?.length ? view.tagFilter : ALL_TAGS;
+  const statuses = quick?.statuses.length
+    ? viewStatuses.filter(s => quick.statuses.includes(s))
+    : viewStatuses;
+  const tags = quick?.tags.length
+    ? viewTags.filter(t => quick.tags.includes(t))
+    : viewTags;
+  const window = wideTaskWindow();
+  // The whole "To" day, in local time. Can over-include a little next to
+  // midnight UTC — the client-side filter still trims to the exact day.
+  const dueToEnd = quick?.dueTo ? toTimestamp(quick.dueTo, '23:59') : null;
   return {
     parent_task_id: parentTaskId,
-    any_of_task_status: statuses,
-    any_of_task_tag: tags,
+    any_of_task_status: statuses.map(s => BACKEND_STATUS[s]),
+    any_of_task_tag: tags.map(t => BACKEND_TAG[t]),
     limit: FETCH_PAGE_LIMIT,
-    ...wideTaskWindow(),
+    start_at: window.start_at,
+    end_at:
+      dueToEnd && dueToEnd < window.end_at && dueToEnd > window.start_at
+        ? dueToEnd
+        : window.end_at,
     ...(cursor ?? {}),
   };
 }

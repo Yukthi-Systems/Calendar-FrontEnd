@@ -34,6 +34,7 @@ import {
   withoutCreatedOccurrences,
 } from '../../data/recurringOccurrences';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
+import { useRootTasksQuery } from '../../hooks/useTasksSync';
 import { useRecurringTasks } from '../../hooks/useRecurringTasks';
 import {
   useUpdateMySharedViewInfo,
@@ -71,6 +72,7 @@ import {
   SubtaskBadge,
   namesOf,
 } from './shared';
+import { tourTarget } from './tourTargets';
 
 type SortKey =
   | 'title'
@@ -212,6 +214,8 @@ type Row =
     };
 
 const LEVEL_W = 22; // width of one indentation column
+// How close to the bottom (px) scrolling gets before the next page is fetched.
+const LOAD_MORE_THRESHOLD_PX = 400;
 const ROW_H = 44;
 const CHILD_ROW_H = 40;
 const GROUP_ROW_H = 32; // loading / add-subtask rows
@@ -365,6 +369,36 @@ export function TableView({ view }: { view: ProjectView }) {
     displayItems.flatMap(i => [...i.assigneeIds, i.createdById, i.ownerId]),
   );
   const tasksLoading = useAtomValue(tasksLoadingAtom);
+  // Root tasks arrive a page at a time; scrolling near the bottom asks for the
+  // next one (same cache useTasksSync renders from).
+  const {
+    hasNextPage: hasMoreRoots,
+    isFetchingNextPage: loadingMoreRoots,
+    fetchNextPage: fetchMoreRoots,
+    data: rootPages,
+  } = useRootTasksQuery(view);
+  const rootPageCount = rootPages?.pages.length ?? 0;
+  const loadMoreRoots = () => {
+    if (hasMoreRoots && !loadingMoreRoots) {
+      fetchMoreRoots();
+    }
+  };
+  const [bodyHeight, setBodyHeight] = useState(0);
+  // Nothing matching on the pages loaded so far (an assignee/"due from"
+  // filter, applied here, not by the server) shows an empty state with
+  // nothing to scroll — keep fetching until something matches or it runs out.
+  const nothingShown = filterActive && displayItems.length === 0;
+  useEffect(() => {
+    if (nothingShown && hasMoreRoots && !loadingMoreRoots) {
+      fetchMoreRoots();
+    }
+  }, [
+    nothingShown,
+    hasMoreRoots,
+    loadingMoreRoots,
+    fetchMoreRoots,
+    rootPageCount,
+  ]);
   const setForm = useSetAtom(itemFormAtom);
   const select = useSetAtom(selectedItemIdAtom);
   const selectTemplate = useSetAtom(selectedTemplateIdAtom);
@@ -660,8 +694,11 @@ export function TableView({ view }: { view: ProjectView }) {
     });
   };
 
+  // With a filter on, an empty list means "nothing matches", not "no tasks" —
+  // that case keeps the toolbar (and its Clear filters) below.
   if (
     !tasksLoading &&
+    !filterActive &&
     allItems.length === 0 &&
     virtualOccurrences.length === 0
   ) {
@@ -912,15 +949,18 @@ export function TableView({ view }: { view: ProjectView }) {
     <View className="flex-1 px-4 pb-4 pt-3 lg:px-6">
       <View className="mb-3 h-8 flex-row items-center justify-between">
         <Text className="text-sm text-text-main">
-          <Text className="font-medium text-text-heading">{roots.length}</Text>
-          {roots.length === 1 ? ' task' : ' tasks'}
+          <Text className="font-medium text-text-heading">
+            {roots.length}
+            {hasMoreRoots ? '+' : ''}
+          </Text>
+          {roots.length === 1 && !hasMoreRoots ? ' task' : ' tasks'}
           {rootParents > 0 ? (
             <Text className="text-text-subtle">
               {' '}
               · {rootParents} with subtasks
             </Text>
           ) : null}
-          {filterActive && allItems.length !== items.length ? (
+          {filterActive ? (
             <Text className="text-text-subtle"> · filtered</Text>
           ) : null}
         </Text>
@@ -932,14 +972,16 @@ export function TableView({ view }: { view: ProjectView }) {
             variant="menu"
             renderTrigger={ref => (
               <View ref={ref}>
-                <Button
-                  variant={filterCount > 0 ? 'secondary' : 'ghost'}
-                  size="sm"
-                  icon={Filter}
-                  onPress={() => setFilterOpen(o => !o)}
-                >
-                  {filterCount > 0 ? `Filter (${filterCount})` : 'Filter'}
-                </Button>
+                <View ref={tourTarget('filter')}>
+                  <Button
+                    variant={filterCount > 0 ? 'secondary' : 'ghost'}
+                    size="sm"
+                    icon={Filter}
+                    onPress={() => setFilterOpen(o => !o)}
+                  >
+                    {filterCount > 0 ? `Filter (${filterCount})` : 'Filter'}
+                  </Button>
+                </View>
               </View>
             )}
           >
@@ -1067,7 +1109,13 @@ export function TableView({ view }: { view: ProjectView }) {
         </View>
       </View>
 
-      {filterActive && displayItems.length === 0 ? (
+      {nothingShown && hasMoreRoots ? (
+        <View className="flex-1 items-center justify-center">
+          <Text className="text-sm text-text-subtle">
+            Looking for matching tasks…
+          </Text>
+        </View>
+      ) : nothingShown ? (
         <EmptyState
           compact
           icon={Filter}
@@ -1132,7 +1180,29 @@ export function TableView({ view }: { view: ProjectView }) {
                   );
                 })}
               </View>
-              <ScrollView className="flex-1" contentContainerClassName="pb-16">
+              <ScrollView
+                className="flex-1"
+                contentContainerClassName="pb-16"
+                scrollEventThrottle={100}
+                onLayout={e => setBodyHeight(e.nativeEvent.layout.height)}
+                onScroll={e => {
+                  const { contentOffset, contentSize, layoutMeasurement } =
+                    e.nativeEvent;
+                  if (
+                    contentOffset.y + layoutMeasurement.height >=
+                    contentSize.height - LOAD_MORE_THRESHOLD_PX
+                  ) {
+                    loadMoreRoots();
+                  }
+                }}
+                // Not enough rows to scroll yet (a short first page, or a
+                // client-side filter hiding most of it) — keep loading.
+                onContentSizeChange={(_, h) => {
+                  if (bodyHeight > 0 && h <= bodyHeight) {
+                    loadMoreRoots();
+                  }
+                }}
+              >
                 {tasksLoading && items.length === 0
                   ? Array.from({ length: 8 }, (_, n) => (
                       <View
@@ -1147,6 +1217,22 @@ export function TableView({ view }: { view: ProjectView }) {
                       </View>
                     ))
                   : rows.map(renderRow)}
+                {hasMoreRoots && items.length > 0 ? (
+                  <View
+                    style={{ width: viewportWidth || undefined }}
+                    className="h-12 items-center justify-center"
+                  >
+                    {loadingMoreRoots ? (
+                      <Text className="text-sm text-text-subtle">
+                        Loading more tasks…
+                      </Text>
+                    ) : (
+                      <Button variant="ghost" size="sm" onPress={loadMoreRoots}>
+                        Load more
+                      </Button>
+                    )}
+                  </View>
+                ) : null}
               </ScrollView>
             </View>
           </ScrollView>

@@ -1,15 +1,27 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  useMutation,
+  useQueryClient,
+  type InfiniteData,
+} from '@tanstack/react-query';
 import { useAtom, useAtomValue } from 'jotai';
 import { tokenAtom } from '../atoms/auth';
 import { itemsAtom } from '../atoms/project';
 import { useActiveView } from './useViews';
-import { createTask, deleteTask, updateTask } from '../services/tasks';
+import { createTask, deleteTask, getTask, updateTask } from '../services/tasks';
 import {
   assignUserToTask,
   removeUserFromTask,
 } from '../services/taskAssignees';
-import { drainPages, rootTasksKey } from './useTasksSync';
 import {
+  bucketKey,
+  drainPages,
+  findRootByTitle,
+  useRootRequest,
+  type Bucket,
+  refetchCalendarBuckets,
+} from './useTasksSync';
+import {
+  bucketsForDate,
   isServerTaskId,
   taskFromServer,
   taskToCreatePayload,
@@ -35,6 +47,7 @@ export interface AssigneeChanges {
 export function useTaskMutations() {
   const token = useAtomValue(tokenAtom);
   const activeView = useActiveView();
+  const { key: rootKey } = useRootRequest(activeView);
   const [items, setItems] = useAtom(itemsAtom);
   const queryClient = useQueryClient();
 
@@ -73,14 +86,67 @@ export function useTaskMutations() {
 
   // ── Re-reading from the server ──────────────────────────────────────────
 
-  // Root level: refetch the view's root list query (useTasksSync renders it).
-  const refreshRoots = (): Promise<TaskInfoDto[]> =>
-    queryClient.fetchQuery({
-      queryKey: rootTasksKey(activeView),
-      queryFn: () =>
-        withAuthRetry(token, t => drainPages(t, viewId!, activeView!)),
-      staleTime: 0,
+  // Root level: refetch the view's paged root list (useTasksSync renders it) —
+  // every page loaded so far, not the whole list, so a long table stays cheap
+  // to refresh. Returns the rows now loaded.
+  type RootPages = InfiniteData<TaskInfoDto[], unknown>;
+  const isCalendar = activeView?.type === 'calendar';
+  const isBucketKey = (key: readonly unknown[]) => key[4] === 'bucket';
+  const loadedRoots = (): TaskInfoDto[] =>
+    isCalendar
+      ? queryClient
+          .getQueriesData<Bucket>({ queryKey: ['tasks', viewId] })
+          .filter(([key]) => isBucketKey(key))
+          .flatMap(([, d]) => d?.rows ?? [])
+      : queryClient.getQueryData<RootPages>(rootKey)?.pages.flat() ?? [];
+  // `dates`: start dates ('yyyy-MM-dd') the write touched — a Calendar then
+  // refetches only those months' buckets (if cached) instead of every month
+  // on screen; without them it refetches the buckets on screen.
+  const refreshRoots = async (dates?: string[]): Promise<TaskInfoDto[]> => {
+    if (isCalendar) {
+      const months = dates ? [...new Set(dates.flatMap(bucketsForDate))] : null;
+      await (months
+        ? Promise.all(
+            months.map(m =>
+              queryClient.refetchQueries({
+                queryKey: bucketKey(activeView, m),
+                exact: true,
+              }),
+            ),
+          )
+        : activeView && refetchCalendarBuckets(queryClient, activeView));
+    } else {
+      await queryClient.refetchQueries({ queryKey: rootKey, exact: true });
+    }
+    // This view's other cached lists (another quick filter) may hold the task
+    // just written — refetch them when next shown. Calendar buckets are
+    // left alone: a write only changes the months refetched above.
+    await queryClient.invalidateQueries({
+      queryKey: ['tasks', viewId],
+      refetchType: 'none',
+      predicate: q => !isBucketKey(q.queryKey),
     });
+    return loadedRoots();
+  };
+  // A root task that isn't on any loaded page (e.g. just created, or edited
+  // to a later start date than the pages scrolled so far) — put it on the
+  // first page so it's on screen and its detail sheet keeps working. The next
+  // refetch places it back in its real position. First page, not last: the
+  // last page's last row is the cursor for loading more.
+  // (Calendar: a task outside the loaded months isn't on screen anyway — it's
+  // only added to the list so its just-opened detail sheet has something.)
+  const pinRoot = (row: TaskInfoDto) =>
+    isCalendar
+      ? setItems(prev =>
+          prev.some(i => i.id === String(row.task_id))
+            ? prev
+            : [...prev, taskFromServer(row)],
+        )
+      : queryClient.setQueryData<RootPages>(rootKey, d =>
+          !d || d.pages.some(p => p.some(r => r.task_id === row.task_id))
+            ? d
+            : { ...d, pages: [[row, ...d.pages[0]], ...d.pages.slice(1)] },
+        );
 
   // One parent's direct children (POST /tasks/list with parent_task_id).
   const loadChildren = async (parentId: string): Promise<WorkItem[]> => {
@@ -100,15 +166,37 @@ export function useTaskMutations() {
 
   // Re-read the level a task lives on. A subtask's parent also lives on a level
   // whose `total_sub_tasks` just changed, so that one is re-read too.
-  const refreshLevelOf = async (parentId: string | null): Promise<void> => {
+  const refreshLevelOf = async (
+    parentId: string | null,
+    dates?: string[],
+  ): Promise<void> => {
     if (!parentId) {
-      await refreshRoots();
+      await refreshRoots(dates);
       return;
     }
     await loadChildren(parentId);
     const parent = items.find(i => i.id === parentId);
     if (parent) {
-      await (parent.parentId ? loadChildren(parent.parentId) : refreshRoots());
+      await (parent.parentId
+        ? loadChildren(parent.parentId)
+        : refreshRoots([parent.start]));
+    }
+  };
+
+  // After an edit moves a root task past the loaded pages (a later start
+  // date), fetch it alone and pin it, rather than have it vanish mid-edit.
+  const keepRootLoaded = async (vid: number, item: WorkItem) => {
+    if (
+      item.parentId ||
+      loadedRoots().some(r => String(r.task_id) === item.id)
+    ) {
+      return;
+    }
+    const row = await withAuthRetry(token, t =>
+      getTask(t, vid, Number(item.id)),
+    ).catch(() => null);
+    if (row) {
+      pinRoot(row);
     }
   };
 
@@ -150,8 +238,18 @@ export function useTaskMutations() {
       ? await withAuthRetry(token, t =>
           drainPages(t, vid, activeView!, Number(draft.parentId)),
         )
-      : await refreshRoots();
-    const created = level.find(r => r.title === draft.title);
+      : await refreshRoots([draft.start]);
+    // A new root task is often past the pages loaded so far (or outside the
+    // active quick filter) — look it up by title on the server instead.
+    let created = level.find(r => r.title === draft.title);
+    if (!created && !draft.parentId) {
+      created = await withAuthRetry(token, t =>
+        findRootByTitle(t, vid, activeView!, draft.title),
+      );
+      if (created) {
+        pinRoot(created);
+      }
+    }
     if (!created) {
       throw new Error(
         'The task was created, but the server list doesn’t show it yet — it will appear after the next refresh.',
@@ -162,7 +260,7 @@ export function useTaskMutations() {
     const failedAssignees = await applyAssignees(vid, created.task_id, changes);
     if (assigning) {
       // Assignments changed the level just read — read it again.
-      await refreshLevelOf(draft.parentId);
+      await refreshLevelOf(draft.parentId, [draft.start]);
     } else if (draft.parentId) {
       // The lookup above already is the fresh child list; only the parent's own
       // level (its total_sub_tasks) still needs a re-read.
@@ -171,7 +269,9 @@ export function useTaskMutations() {
         ...level.map(taskFromServer),
       ]);
       const parent = items.find(i => i.id === draft.parentId);
-      await (parent?.parentId ? loadChildren(parent.parentId) : refreshRoots());
+      await (parent?.parentId
+        ? loadChildren(parent.parentId)
+        : refreshRoots(parent ? [parent.start] : undefined));
     }
     // (Root task, no assignees: refreshRoots() above was the re-read.)
     return { id: String(created.task_id), failedAssignees };
@@ -183,9 +283,17 @@ export function useTaskMutations() {
     changes?: AssigneeChanges,
   ): Promise<{ failedAssignees: string[] }> => {
     const vid = ensure(item.id);
+    // Moving a task's start date moves it between month buckets — refresh both.
+    const before = items.find(i => i.id === item.id);
     await call(t => updateTask(t, vid, taskToUpdatePayload(item)));
     const failedAssignees = await applyAssignees(vid, Number(item.id), changes);
-    await refreshLevelOf(item.parentId);
+    await refreshLevelOf(item.parentId, [
+      item.start,
+      before?.start ?? item.start,
+    ]);
+    if (!isCalendar) {
+      await keepRootLoaded(vid, item);
+    }
     return { failedAssignees };
   };
 
@@ -203,7 +311,7 @@ export function useTaskMutations() {
   ): Promise<{ failedAssignees: string[] }> => {
     const vid = ensure(item.id);
     const failedAssignees = await applyAssignees(vid, Number(item.id), changes);
-    await refreshLevelOf(item.parentId);
+    await refreshLevelOf(item.parentId, [item.start]);
     return { failedAssignees };
   };
 
@@ -216,7 +324,7 @@ export function useTaskMutations() {
       ...descendantsOf(items, item.id).map(d => d.id),
     ]);
     setItems(prev => prev.filter(i => !gone.has(i.id)));
-    await refreshLevelOf(item.parentId);
+    await refreshLevelOf(item.parentId, [item.start]);
   };
 
   // A task's full nested subtree, depth-first — only for nodes the server says

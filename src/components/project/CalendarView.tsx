@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   PanResponder,
   ScrollView,
@@ -37,6 +37,7 @@ import {
 } from 'date-fns';
 import {
   itemFormAtom,
+  calendarRangeAtom,
   itemsAtom,
   selectedItemIdAtom,
   selectedTemplateIdAtom,
@@ -53,6 +54,7 @@ import { showsField } from '../../data/viewFields';
 import type { ProjectView, ViewField, WorkItem } from '../../data/types';
 import { useThemeColors, useTone } from '../../hooks/useThemeColors';
 import { useRecurringTasks } from '../../hooks/useRecurringTasks';
+import { useCalendarBuckets } from '../../hooks/useTasksSync';
 import { useShortcuts } from '../../hooks/useShortcuts';
 import { useViewAccess } from '../../hooks/useViews';
 import { mix } from '../../theme/color';
@@ -151,6 +153,12 @@ function layoutWeek(occ: Occ[], weekStart: Date): Segment[] {
 // merged items the grid itself was built from (see CalendarView's occRange).
 const AGENDA_LOOKAHEAD = 7;
 
+// Occurrences from overlapping ranges, each once.
+const dedupeById = <T extends { item: { id: string } }>(list: T[]): T[] => {
+  const seen = new Set<string>();
+  return list.filter(o => !seen.has(o.item.id) && !!seen.add(o.item.id));
+};
+
 export function CalendarView({ view }: { view: ProjectView }) {
   const [mode, setMode] = useState<CalMode>('month');
   const [cursor, setCursor] = useState(() => new Date());
@@ -188,15 +196,60 @@ export function CalendarView({ view }: { view: ProjectView }) {
     const gridEnd = endOfWeek(endOfMonth(cursor), WEEK);
     return [gridStart, addDays(gridEnd, AGENDA_LOOKAHEAD)] as const;
   }, [mode, cursor]);
+
+  // Tell the task loader which dates are on screen, rounded out to whole
+  // months — moving between days/weeks inside the same month(s) reuses the
+  // tasks already fetched instead of asking the server again.
+  const [selected, setSelected] = useState(() => new Date());
+  // The side panel's days — the selected one and its "Upcoming" list.
+  const agendaRange = useMemo(
+    () =>
+      [
+        startOfDay(selected),
+        addDays(startOfDay(selected), UPCOMING_DAYS),
+      ] as const,
+    [selected],
+  );
+  const setCalendarRange = useSetAtom(calendarRangeAtom);
+  const rangeFrom = format(startOfMonth(occRange[0]), DATE_FMT);
+  const rangeTo = format(endOfMonth(occRange[1]), DATE_FMT);
+  const agendaFrom = format(startOfMonth(agendaRange[0]), DATE_FMT);
+  const agendaTo = format(endOfMonth(agendaRange[1]), DATE_FMT);
+  useEffect(() => {
+    setCalendarRange({ from: rangeFrom, to: rangeTo, agendaFrom, agendaTo });
+  }, [rangeFrom, rangeTo, agendaFrom, agendaTo, setCalendarRange]);
+  useEffect(() => () => setCalendarRange(null), [setCalendarRange]);
+  const { loadingEarlier, truncatedMonths } = useCalendarBuckets(view);
+  const loadNote = truncatedMonths.length
+    ? `Over 2,000 tasks in ${truncatedMonths
+        .map(m => format(parseISO(`${m}-01`), 'MMM yyyy'))
+        .join(', ')} — not all shown`
+    : loadingEarlier
+    ? 'Loading earlier tasks…'
+    : null;
   const virtualOccurrences = useMemo(
     () =>
       view.showRecurring === false || recurringTemplates.length === 0
         ? []
         : withoutCreatedOccurrences(
-            templateOccurrences(recurringTemplates, occRange[0], occRange[1]),
+            dedupeById([
+              ...templateOccurrences(
+                recurringTemplates,
+                occRange[0],
+                occRange[1],
+              ),
+              // The side panel's days, when they're off the grid.
+              ...(agendaRange[0] < occRange[0] || agendaRange[1] > occRange[1]
+                ? templateOccurrences(
+                    recurringTemplates,
+                    agendaRange[0],
+                    agendaRange[1],
+                  )
+                : []),
+            ]),
             allItems,
           ),
-    [view.showRecurring, recurringTemplates, occRange, allItems],
+    [view.showRecurring, recurringTemplates, occRange, agendaRange, allItems],
   );
   const items = useMemo(
     () => [
@@ -226,8 +279,6 @@ export function CalendarView({ view }: { view: ProjectView }) {
   const { width } = useWindowDimensions();
   const split = width >= SPLIT;
   const narrow = width < NARROW;
-
-  const [selected, setSelected] = useState(() => new Date());
 
   const goToday = () => {
     const today = new Date();
@@ -351,6 +402,7 @@ export function CalendarView({ view }: { view: ProjectView }) {
         {!narrow ? (
           <Text className="text-xs text-text-subtle">
             {visibleCount} {visibleCount === 1 ? 'task' : 'tasks'}
+            {loadNote ? ` · ${loadNote}` : ''}
           </Text>
         ) : null}
         <SegmentedControl options={MODES} value={mode} onChange={setMode} />
