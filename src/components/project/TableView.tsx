@@ -960,9 +960,6 @@ export function TableView({ view }: { view: ProjectView }) {
               · {rootParents} with subtasks
             </Text>
           ) : null}
-          {filterActive ? (
-            <Text className="text-text-subtle"> · filtered</Text>
-          ) : null}
         </Text>
         <View className="flex-row items-center gap-1.5">
           <Popover

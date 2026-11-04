@@ -12,6 +12,12 @@ linkage = ENV['USE_FRAMEWORKS']
 if linkage != nil
   Pod::UI.puts "Configuring Pod with #{linkage}ally linked Frameworks".green
   use_frameworks! :linkage => linkage.to_sym
+else
+  # react-native-firebase resolves Firebase via Swift Package Manager, whose
+  # products are static libraries — with static pod linkage (the template's
+  # default) every RNFB pod embeds its own copy, colliding as duplicate
+  # symbols at link time. Dynamic linkage is required; see rnfirebase.io/ios-spm.
+  use_frameworks! :linkage => :dynamic
 end
 
 target 'YTCFronend' do

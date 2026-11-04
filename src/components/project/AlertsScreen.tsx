@@ -155,54 +155,64 @@ function AlertGroup({
           return (
             <View
               key={`${a.task_id}:${a.alert_at}`}
-              className="flex-row items-center gap-3 rounded-xl border border-border-main bg-bg-card px-3.5 py-3"
+              className="flex-row items-start gap-3 rounded-2xl border border-border-main bg-bg-card p-3.5 shadow-sm"
             >
-              <View className="flex-1">
-                <Press
-                  feedback="none"
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open ${cardLabel}`}
-                  onPress={() => onOpenTask(String(a.task_id))}
-                >
-                  <Text numberOfLines={1} className="text-sm font-medium text-accent">
-                    {cardLabel}
-                  </Text>
-                </Press>
-                <Text className="mt-0.5 text-sm text-text-heading">
+              <View className="h-10 w-10 items-center justify-center rounded-full bg-accent-soft">
+                <Bell size={17} color={c.accent} />
+              </View>
+              <View className="flex-1 gap-1">
+                <View className="flex-row items-start justify-between gap-2">
+                  <Press
+                    feedback="none"
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open ${cardLabel}`}
+                    onPress={() => onOpenTask(String(a.task_id))}
+                    className="flex-1"
+                  >
+                    <Text numberOfLines={1} className="text-sm font-semibold text-accent">
+                      {cardLabel}
+                    </Text>
+                  </Press>
+                  <View className="-mr-1.5 -mt-1.5 flex-row items-center">
+                    {editable ? (
+                      <IconButton
+                        icon={Pencil}
+                        label="Edit alert"
+                        size="sm"
+                        onPress={() => onEdit(a, title ?? idLabel)}
+                      />
+                    ) : null}
+                    <IconButton
+                      icon={Trash2}
+                      label="Delete alert"
+                      size="sm"
+                      onPress={() => onDelete(a)}
+                    />
+                  </View>
+                </View>
+                <Text className="text-sm text-text-heading">
                   {format(parseISO(a.alert_at), 'EEE, MMM d, yyyy · h:mm a')}
                 </Text>
-                <View className="mt-1 flex-row items-center gap-2.5">
+                <View className="mt-1 flex-row flex-wrap items-center gap-1.5">
                   {a.notify_via_email ? (
-                    <View className="flex-row items-center gap-1">
+                    <View className="flex-row items-center gap-1 rounded-full bg-hover px-2 py-0.5">
                       <Mail size={11} color={c.subtle} />
                       <Text className="text-2xs text-text-subtle">Email</Text>
                     </View>
                   ) : null}
                   {a.notify_via_push ? (
-                    <View className="flex-row items-center gap-1">
+                    <View className="flex-row items-center gap-1 rounded-full bg-hover px-2 py-0.5">
                       <Smartphone size={11} color={c.subtle} />
                       <Text className="text-2xs text-text-subtle">Push</Text>
                     </View>
                   ) : null}
                   {a.notification_sent ? (
-                    <Text className="text-2xs text-text-subtle">Sent</Text>
+                    <View className="flex-row items-center gap-1 rounded-full bg-hover px-2 py-0.5">
+                      <Text className="text-2xs text-text-subtle">Sent</Text>
+                    </View>
                   ) : null}
                 </View>
               </View>
-              {editable ? (
-                <IconButton
-                  icon={Pencil}
-                  label="Edit alert"
-                  size="sm"
-                  onPress={() => onEdit(a, title ?? idLabel)}
-                />
-              ) : null}
-              <IconButton
-                icon={Trash2}
-                label="Delete alert"
-                size="sm"
-                onPress={() => onDelete(a)}
-              />
             </View>
           );
         })}

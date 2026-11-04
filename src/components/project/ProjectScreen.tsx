@@ -667,48 +667,28 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
 
   // ── Phone: header + tab strip ─────────────────────────────────────────────
   const phoneHeader = (
-    <View className="flex-row items-center gap-1 border-b border-border-main bg-bg-card px-2 pb-1 pt-2">
+    <View className="flex-row items-center gap-1 bg-bg-main px-2 pb-1 pt-2">
       <IconButton
         icon={ChevronLeft}
         label="Back to home"
         onPress={() => setMobileHome(true)}
         size="lg"
       />
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerClassName="items-center gap-1 pr-2"
-        className="flex-1"
+      <Press
+        feedback="subtle"
+        accessibilityRole="button"
+        accessibilityLabel={active ? `${active.name} options` : 'View options'}
+        onPress={() => active && openMenu(active)}
+        className="h-9 flex-1 flex-row items-center gap-1.5 rounded-lg px-2"
       >
-        {views.map(v => {
-          const isActive = v.id === active?.id;
-          return (
-            <Press
-              key={v.id}
-              feedback="subtle"
-              accessibilityRole="tab"
-              accessibilityState={{ selected: isActive }}
-              onPress={() => setActiveId(v.id)}
-              onLongPress={() => openMenu(v)}
-              className={`h-9 flex-row items-center gap-1.5 rounded-lg px-3 ${
-                isActive ? 'bg-hover' : ''
-              }`}
-            >
-              {viewIcon(v.type, isActive ? c.heading : c.text, 15)}
-              <Text
-                numberOfLines={1}
-                className={`text-sm ${
-                  isActive
-                    ? 'font-semibold text-text-heading'
-                    : 'text-text-main'
-                }`}
-              >
-                {v.name}
-              </Text>
-            </Press>
-          );
-        })}
-      </ScrollView>
+        {active ? viewIcon(active.type, c.heading, 15) : null}
+        <Text
+          numberOfLines={1}
+          className="flex-1 text-base font-semibold text-text-heading"
+        >
+          {active?.name ?? 'YTC'}
+        </Text>
+      </Press>
       {contentMode === 'tasks' ? (
         <IconButton
           icon={Search}
@@ -735,12 +715,13 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   );
 
   const modeToggle = active ? (
-    <View className="border-b border-border-main bg-bg-card px-3 pb-2">
+    <View className="bg-bg-main px-3 pb-2">
       <SegmentedControl
         size="sm"
         options={modeOptions}
         value={contentMode}
         onChange={setContentMode}
+        trackClassName="bg-bg-main"
       />
     </View>
   ) : null;
@@ -759,7 +740,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
         </View>
       ) : alertsOpen ? (
         <>
-          <View className="flex-row items-center gap-1 border-b border-border-main bg-bg-card px-2 pb-1 pt-2">
+          <View className="flex-row items-center gap-1.5 bg-bg-main px-2 pb-2 pt-2.5">
             <IconButton
               icon={ChevronLeft}
               label="Back"

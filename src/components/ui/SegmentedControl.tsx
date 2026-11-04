@@ -11,11 +11,15 @@ export function SegmentedControl<K extends string>({
   value,
   onChange,
   size = 'md',
+  trackClassName = 'bg-muted',
 }: {
   options: { key: K; label: string; icon?: LucideIcon }[];
   value: K;
   onChange: (key: K) => void;
   size?: 'sm' | 'md';
+  // Override the pill track's own background — e.g. to blend into a page
+  // that already set its background, instead of standing out as a "well".
+  trackClassName?: string;
 }) {
   const c = useThemeColors();
   const [layouts, setLayouts] = useState<Record<string, { x: number; width: number }>>({});
@@ -46,7 +50,7 @@ export function SegmentedControl<K extends string>({
   return (
     <View
       accessibilityRole="radiogroup"
-      className="flex-row rounded-lg bg-muted p-0.5"
+      className={`flex-row rounded-lg p-0.5 ${trackClassName}`}
     >
       {layouts[value] ? (
         <Animated.View
