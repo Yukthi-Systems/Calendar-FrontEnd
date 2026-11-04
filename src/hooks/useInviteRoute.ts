@@ -48,18 +48,66 @@ const decodeInviteParam = (encoded: string): InviteRouteParams | null => {
   }
 };
 
+// `e=` is base64url (or plain base64), usually unpadded — e.g.
+// "aW52aXRlZUBleGFtcGxlLmNvbQ" → "invitee@example.com". Decoded as UTF-8 so a
+// non-ASCII address survives. Encoding only, not encryption: no key involved.
+const decodeBase64Email = (encoded: string): string | null => {
+  try {
+    const b64 = encoded.replace(/-/g, '+').replace(/_/g, '/');
+    const padded = b64 + '='.repeat((4 - (b64.length % 4)) % 4);
+    const binary = atob(padded);
+    const bytes = Uint8Array.from(binary, ch => ch.charCodeAt(0));
+    const email = new TextDecoder('utf-8', { fatal: true })
+      .decode(bytes)
+      .trim();
+    return email.includes('@') ? email : null;
+  } catch {
+    return null;
+  }
+};
+
+const INVITE_PATH_RE =
+  /^\/invite\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\/?$/i;
+
+// `/invite/{uuid}?t={task_id}&e={base64 email}` — the uuid is the
+// validation code.
+const parseInvitePath = (
+  pathname: string,
+  params: URLSearchParams,
+): InviteRouteParams | null => {
+  const match = INVITE_PATH_RE.exec(pathname);
+  if (!match) {
+    return null;
+  }
+  const taskId = Number(params.get('t'));
+  const encodedEmail = params.get('e');
+  if (!Number.isInteger(taskId) || taskId <= 0 || !encodedEmail) {
+    return null;
+  }
+  const inviteeEmail = decodeBase64Email(encodedEmail);
+  if (!inviteeEmail) {
+    return null;
+  }
+  return { validationCode: match[1], taskId, inviteeEmail };
+};
+
 // Detects an invite-response link (see EventInviteesSection.tsx /
-// InviteResponseScreen.tsx) from the page's own query string — either the
-// base64 `?d=<payload>` form above, or the legacy
-// `?invite=<validation_code>&task_id=<id>&email=<address>` form. Web only:
-// there's no deep-link handling for this on native yet, and the app has no
-// other route concept to hang this off of (see App.tsx) — so it's a plain
-// query string on the app's own root URL, not a path.
+// InviteResponseScreen.tsx) from the page's URL, in order: the
+// `/invite/{uuid}?t=&e=` path form, the base64 `?d=<payload>` form, or the
+// legacy `?invite=<validation_code>&task_id=<id>&email=<address>` form. Web
+// only: there's no deep-link handling for this on native yet. The path form
+// needs the host to serve index.html for /invite/* (dev server's
+// historyApiFallback already does).
 export function getInviteRouteParams(): InviteRouteParams | null {
   if (Platform.OS !== 'web' || typeof window === 'undefined') {
     return null;
   }
   const params = new URLSearchParams(window.location.search);
+
+  const fromPath = parseInvitePath(window.location.pathname, params);
+  if (fromPath) {
+    return fromPath;
+  }
 
   const encoded = params.get('d');
   if (encoded) {

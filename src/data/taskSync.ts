@@ -3,6 +3,7 @@ import {
   BACKEND_STATUS,
   BACKEND_TAG,
   STATUS_FROM_BACKEND,
+  TAGS,
   TAG_FROM_BACKEND,
 } from './constants';
 import type { ProjectView, Reminder, Status, TaskTag, WorkItem } from './types';
@@ -157,14 +158,7 @@ const ALL_STATUSES: Status[] = [
   'rejected',
   'on_hold',
 ];
-const ALL_TAGS: TaskTag[] = [
-  'work',
-  'important',
-  'urgent',
-  'optional',
-  'personal',
-  'other',
-];
+const ALL_TAGS: TaskTag[] = TAGS.map(t => t.key);
 
 export const FETCH_PAGE_LIMIT = 100;
 // Safety cap on pages drained per list (root or one parent's children) — a

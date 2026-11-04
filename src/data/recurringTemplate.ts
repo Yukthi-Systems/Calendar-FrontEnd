@@ -1,4 +1,4 @@
-import { BACKEND_TAG, TAG_FROM_BACKEND } from './constants';
+import { BACKEND_TAG, TAGS, TAG_FROM_BACKEND } from './constants';
 import type { TaskTag } from './types';
 import type {
   BackendTaskTag,
@@ -85,14 +85,7 @@ export function templateToUpdatePayload(
   };
 }
 
-const ALL_TAGS: TaskTag[] = [
-  'work',
-  'important',
-  'urgent',
-  'optional',
-  'personal',
-  'other',
-];
+const ALL_TAGS: TaskTag[] = TAGS.map(t => t.key);
 
 // POST /recurring/list/{view_id} body — like /tasks/list, an empty tag list
 // matches nothing server-side (WHERE task_tag = ANY('{}') is always false), so
