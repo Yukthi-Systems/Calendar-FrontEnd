@@ -18,7 +18,9 @@ export type ContentMode = 'tasks' | 'recurring';
 // back from the URL before the correction had landed and stomp it to the
 // wrong value. Reading it here, once, before first render, removes the race.
 const initialContentMode = (): ContentMode => {
-  if (typeof window === 'undefined') {
+  // React Native defines a global `window`, but not `window.location` — only
+  // the web build has a real URL to read the mode back from.
+  if (typeof window === 'undefined' || !window.location) {
     return 'tasks';
   }
   return new URLSearchParams(window.location.search).get('mode') === 'recurring'
