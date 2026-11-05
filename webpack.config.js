@@ -105,6 +105,10 @@ module.exports = (_env, argv) => {
             from: path.resolve(__dirname, 'web/firebase-messaging-sw.js'),
             to: path.resolve(__dirname, 'web-build/firebase-messaging-sw.js'),
           },
+          {
+            from: path.resolve(__dirname, 'web/favicon.png'),
+            to: path.resolve(__dirname, 'web-build/favicon.png'),
+          },
         ],
       }),
       new Dotenv({
