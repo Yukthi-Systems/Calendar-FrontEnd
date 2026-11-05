@@ -11,6 +11,7 @@ cat > ./web-build/env-config.js <<CONFIG
 window._env_ = {
   API_URL: "${API_URL}",
   SSO_URL: "${SSO_URL}",
+  SSO_API_URL: "${SSO_API_URL}",
   SSO_APP_ID: "${SSO_APP_ID}",
   FIREBASE_API_KEY: "${FIREBASE_API_KEY}",
   FIREBASE_AUTH_DOMAIN: "${FIREBASE_AUTH_DOMAIN}",

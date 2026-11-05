@@ -13,6 +13,7 @@ import type { EnvKey } from './keys';
 const buildValues: Record<EnvKey, string | undefined> = {
   API_URL: process.env.API_URL,
   SSO_URL: process.env.SSO_URL,
+  SSO_API_URL: process.env.SSO_API_URL,
   SSO_APP_ID: process.env.SSO_APP_ID,
   FIREBASE_API_KEY: process.env.FIREBASE_API_KEY,
   FIREBASE_AUTH_DOMAIN: process.env.FIREBASE_AUTH_DOMAIN,

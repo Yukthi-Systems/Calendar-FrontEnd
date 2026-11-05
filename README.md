@@ -28,7 +28,7 @@ cookie, then `POST /auth/login` on YCT-Mesh-API exchanges that cookie for an acc
 (sent as `x-session-access-id`) and a refresh token. The session is persisted, verified on
 launch, refreshed a minute before expiry, and torn down on both the API and SSO at logout.
 
-- Set `API_URL`, `SSO_URL` and `SSO_APP_ID` in `.env` (see `.env.example`).
+- Set `API_URL`, `SSO_URL`, `SSO_API_URL` and `SSO_APP_ID` in `.env` (see `.env.example`).
 - **Web** (`src/services/sso.web.ts`) uses `@rjyspl/phoenix-sso-react`: a popup that falls
   back to a full-page redirect, plus a hidden-iframe silent check. The web origin must be
   in YCT-Mesh-API's CORS allow-list and accepted by the SSO service's origin check.
@@ -53,7 +53,7 @@ never leave the device.
   `web-build/` by `webpack.config.js`'s `CopyWebpackPlugin` — it ships with `__FIREBASE_*__`
   placeholders (a service worker can't read `.env`/`window._env_`), which `env.sh` fills in from
   the container's `FIREBASE_*` env vars at container start, the same way it writes
-  `env-config.js` for `API_URL`/`SSO_URL`/`SSO_APP_ID`. A container started with any
+  `env-config.js` for `API_URL`/`SSO_URL`/`SSO_API_URL`/`SSO_APP_ID`. A container started with any
   `FIREBASE_*` var unset gets that field blanked out, so background push fails to initialize
   until it's set. Local dev (`npm run web`) never runs `env.sh`, so this file is served with the
   placeholders as-is there — set up a local override if you need to test background push from

@@ -83,6 +83,13 @@ function uiInfoOverrides(uiInfo: Record<string, unknown> | null | undefined) {
   };
 }
 
+// ui_info.onboarding: see useOnboarding.ts for why the tips count rides along here.
+function tipsShownFrom(uiInfo: Record<string, unknown> | null | undefined) {
+  const n = (uiInfo?.onboarding as { tips_shown?: unknown } | undefined)
+    ?.tips_shown;
+  return typeof n === 'number' ? n : undefined;
+}
+
 export function viewFromServer(
   dto: TaskViewDbDto,
   shared = false,
@@ -110,6 +117,7 @@ export function viewFromServer(
     // it, so an explicit `null` and an absent/invalid filter mean the same
     // thing here: no filter.
     quickFilter: overrides.quickFilter ?? undefined,
+    tipsShown: tipsShownFrom(dto.ui_info),
   };
 }
 
@@ -151,6 +159,9 @@ export function viewToCreatePayload(
       type: view.type,
       fields: view.fields ?? null,
       filter: view.quickFilter ?? null,
+      ...(view.tipsShown === undefined
+        ? {}
+        : { onboarding: { tips_shown: view.tipsShown } }),
     },
     status_filter: (view.statusFilter ?? []).map(s => BACKEND_STATUS[s]),
     task_tag_filter: (view.tagFilter ?? []).map(t => BACKEND_TAG[t]),

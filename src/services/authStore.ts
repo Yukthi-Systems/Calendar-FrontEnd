@@ -5,7 +5,6 @@ import {
   silentSsoAuthenticate,
   isReturningFromSsoRedirect,
   ssoLogout,
-  leaveAfterLogout,
   isSsoSessionActive,
   fetchSsoUserInfo,
 } from './sso';
@@ -17,6 +16,7 @@ import {
   sessionFlag,
   isAfterLogout,
   clearDeviceData,
+  markLoggedOut,
   markSessionEnded,
   clearAuthReturnState,
 } from './runtime';
@@ -415,7 +415,7 @@ export const logout = async () => {
     if (apiLoggedOut) {
       await clearDeviceData();
     }
-    leaveAfterLogout();
+    markLoggedOut();
     store.set(isAuthLoadingAtom, false);
   }
 };

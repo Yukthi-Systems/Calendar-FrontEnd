@@ -9,6 +9,7 @@
 export type EnvKey =
   | 'API_URL'
   | 'SSO_URL'
+  | 'SSO_API_URL'
   | 'SSO_APP_ID'
   // Firebase Cloud Messaging (push notifications) — web SDK only; native
   // (iOS/Android) auto-configures from GoogleService-Info.plist /

@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import CookieManager from '@preeternal/react-native-cookie-manager';
+import { TIPS_SHOWN_KEY_PREFIX } from './deviceKeys';
 
 // iOS/Android: AsyncStorage for the persisted session; per-launch flags and the
 // post-logout marker live in memory (there's no URL or tab session to hang them on).
@@ -12,10 +13,17 @@ export const storage = {
   removeItem: (key: string) => AsyncStorage.removeItem(key),
 };
 
-// After a successful sign-out: everything in AsyncStorage, and all cookies.
+// After a successful sign-out: everything in AsyncStorage (except the tips count,
+// see deviceKeys.ts), and all cookies.
 export const clearDeviceData = async (): Promise<void> => {
   await Promise.allSettled([
-    AsyncStorage.clear(),
+    AsyncStorage.getAllKeys().then(keys =>
+      Promise.all(
+        keys
+          .filter(key => !key.startsWith(TIPS_SHOWN_KEY_PREFIX))
+          .map(key => AsyncStorage.removeItem(key)),
+      ),
+    ),
     Platform.OS === 'ios'
       ? CookieManager.clearAllStores()
       : CookieManager.clearAll(),

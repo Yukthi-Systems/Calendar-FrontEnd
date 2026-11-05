@@ -1,3 +1,5 @@
+import { TIPS_SHOWN_KEY_PREFIX } from './deviceKeys';
+
 // Web: localStorage for the persisted session, sessionStorage for per-tab flags, and
 // the `?logout=true` query param as the post-logout marker (same as YFS-FrontEnd).
 // Native counterpart: runtime.native.ts.
@@ -26,14 +28,16 @@ export const storage = {
   },
 };
 
-// After a successful sign-out: everything this site keeps in localStorage, and
-// every cookie it can see. A cookie has to be expired with the domain and path it
+// After a successful sign-out: everything this site keeps in localStorage (except
+// the tips count, see deviceKeys.ts), and every cookie it can see. A cookie has to be expired with the domain and path it
 // was set on, which JS can't read, so each is tried on this host and its parents.
 // HttpOnly cookies (SSO-Session-ID) can't be touched from here — the logout
 // responses remove those.
 export const clearDeviceData = async (): Promise<void> => {
   try {
-    localStorage.clear();
+    Object.keys(localStorage)
+      .filter(key => !key.startsWith(TIPS_SHOWN_KEY_PREFIX))
+      .forEach(key => localStorage.removeItem(key));
   } catch {
     /* ignore */
   }
@@ -91,6 +95,11 @@ export const sessionFlag = {
 // (`expired`); either way, don't sign straight back in automatically.
 export const isAfterLogout = (): boolean =>
   new URLSearchParams(window.location.search).has('logout');
+
+// Full reload so no signed-in state survives.
+export const markLoggedOut = (): void => {
+  window.location.search = 'logout=true';
+};
 
 // Signed out because the SSO session ended (hourly check) — not by the user.
 export const markSessionEnded = (): void => {

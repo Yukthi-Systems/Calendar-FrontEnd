@@ -238,7 +238,9 @@ export function RecurringTasksView({
                     </Text>
                   </View>
                   <OwnerCell id={t.ownerId} />
-                  <View className="self-center">
+                  {/* Fixed width (fits "Important"), so the owner beside it
+                      lines up from row to row. */}
+                  <View className="w-20 items-start self-center">
                     <Badge
                       label={tagInfo(t.tag).label}
                       color={tagInfo(t.tag).color}

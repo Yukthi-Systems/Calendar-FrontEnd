@@ -2,13 +2,19 @@ import {
   openLoginPopup,
   redirectToLogin,
   checkSilentAuth,
+  ssoLogout as sdkSsoLogout,
   PopupBlockedError,
   validateSession,
   getUserInfo,
   type SSOUserInfo,
 } from '@rjyspl/phoenix-sso-react';
 import { ssoLogin } from './auth';
-import { extractSsoProfile, getSsoAppId, getSsoUrl } from './ssoProfile';
+import {
+  extractSsoProfile,
+  getSsoApiUrl,
+  getSsoAppId,
+  getSsoUrl,
+} from './ssoProfile';
 import type { SsoAuthResponse } from './types';
 
 // Web: popup + postMessage handshake via the Yukthi SSO SDK, same as YFS-FrontEnd.
@@ -80,20 +86,8 @@ export const silentSsoAuthenticate = async (): Promise<SsoAuthResponse> => {
 export const isReturningFromSsoRedirect = (): boolean =>
   new URLSearchParams(window.location.search).get(SSO_REDIRECT_PARAM) === '1';
 
-// Nothing to call first on web. The SDK's ssoLogout does a DELETE on SSO_URL, but
-// that host only serves the SSO website (its API is elsewhere and refuses other
-// origins), so the session survived it. See leaveAfterLogout.
-export const ssoLogout = async (): Promise<void> => {};
-
-// The last step of signing out: SSO's own /logout page ends the session and
-// removes SSO-Session-ID, then sends the browser back to the login screen. A full
-// page load, so no signed-in state survives.
-export const leaveAfterLogout = (): void => {
-  const back = `${window.location.origin}/?logout=true`;
-  window.location.href = `${getSsoUrl()}/logout?redirect_uri=${encodeURIComponent(
-    back,
-  )}`;
-};
+// Clears the SSO session cookies.
+export const ssoLogout = (): Promise<void> => sdkSsoLogout(getSsoApiUrl());
 
 // Is the SSO session still alive? `false` = signed out at SSO (401, incl. a session
 // waiting on 2FA); throws when SSO can't be reached — "couldn't check", not "signed out".

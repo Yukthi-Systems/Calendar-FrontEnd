@@ -313,6 +313,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
         showComments: removed.showComments,
         showSubtasks: removed.showSubtasks,
         showAssigned: removed.showAssigned,
+        tipsShown: removed.tipsShown,
       };
       toast.info(`Deleted “${removed.name}”`, {
         action: { label: 'Undo', onPress: () => create(draft) },

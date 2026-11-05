@@ -1,16 +1,21 @@
 import { useEffect, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAtomValue, useSetAtom } from 'jotai';
 import { currentUserIdAtom } from '../atoms/members';
+import { TIPS_SHOWN_KEY_PREFIX } from '../services/deviceKeys';
 import { storage } from '../services/runtime';
 import { activeViewIdAtom } from '../atoms/project';
 import { errorMessage, toast } from '../atoms/feedback';
 import { STATUSES, TAGS } from '../data/constants';
 import { CALENDAR_FIELDS, TABLE_FIELDS } from '../data/viewFields';
+import { viewFromServer } from '../data/viewSync';
 import type { TaskTag } from '../data/types';
+import type { TaskViewDbDto } from '../services/types';
 import { useMe, useUpdateMyInfo } from './useUsers';
 import {
   useViewList,
   useViewMutations,
+  viewsKey,
   type ViewDraftFields,
 } from './useViews';
 
@@ -78,11 +83,16 @@ const readOnboarding = (
     : null;
 };
 
-// The count is also kept on this device: POST /auth/login currently resets
-// private_info to {} on every sign-in (Tasks-Main-API's create_user_session), so
-// the server's copy alone would make everyone look brand new each time. The
-// higher of the two wins, and a wiped server copy is written back.
-const deviceKey = (userId: string) => `onboarding.tipsShown.${userId}`;
+// private_info alone can't hold the count: POST /auth/login currently resets it to
+// {} on every sign-in (Tasks-Main-API's create_user_session), which would make
+// everyone look brand new each time. So it's also kept in:
+// - the ui_info of the user's own views, which sign-in leaves alone — that's what
+//   carries it to another device. Lost only if all of those views are deleted.
+// - this device, where signing out leaves it in place (see deviceKeys.ts).
+// The highest of the three wins, and any copy behind it is written back. Once the
+// backend stops resetting private_info, the other two can go.
+const VIEWS_HOLDING_COUNT = 3;
+const deviceKey = (userId: string) => `${TIPS_SHOWN_KEY_PREFIX}${userId}`;
 const readDeviceCount = async (userId: string) => {
   const n = Number(await storage.getItem(deviceKey(userId)));
   return Number.isFinite(n) ? n : 0;
@@ -97,7 +107,8 @@ export function useOnboarding() {
   const me = useMe();
   const userId = useAtomValue(currentUserIdAtom);
   const { myViews, ready, error } = useViewList();
-  const { createView } = useViewMutations();
+  const { createView, updateView } = useViewMutations();
+  const queryClient = useQueryClient();
   const updateMyInfo = useUpdateMyInfo();
   const setActiveId = useSetAtom(activeViewIdAtom);
   const [settingUp, setSettingUp] = useState(false);
@@ -109,6 +120,16 @@ export function useOnboarding() {
 
   const record = (tipsShown: number) => {
     storage.setItem(deviceKey(userId), String(tipsShown));
+    // From the cache, not `myViews`: a new account's views were only just created.
+    const views = (
+      queryClient.getQueryData<TaskViewDbDto[]>(viewsKey('mine')) ?? []
+    ).map(row => viewFromServer(row));
+    views
+      .slice(0, VIEWS_HOLDING_COUNT)
+      .filter(view => (view.tipsShown ?? 0) < tipsShown)
+      .forEach(view =>
+        updateView({ ...view, tipsShown }).catch(() => undefined),
+      );
     return updateMyInfo
       .mutateAsync({
         isPublic: false,
@@ -154,15 +175,20 @@ export function useOnboarding() {
     (async () => {
       const saved = readOnboarding(priv);
       const onDevice = await readDeviceCount(userId);
-      const shown = Math.max(saved?.tips_shown ?? 0, onDevice);
+      const inViews = Math.max(0, ...myViews.map(v => v.tipsShown ?? 0));
+      const shown = Math.max(saved?.tips_shown ?? 0, onDevice, inViews);
       setResolved(true);
-      // Not `saved` but something else in private_info: an account from before
-      // the tips existed, which never gets them.
-      if (!isEmpty && !saved) {
+      // Something else in private_info and no count anywhere: an account from
+      // before the tips existed, which never gets them.
+      if (!isEmpty && shown === 0) {
         return;
       }
       if (shown >= TIPS_LIMIT) {
-        if ((saved?.tips_shown ?? 0) < shown) {
+        if (
+          (saved?.tips_shown ?? 0) < shown ||
+          onDevice < shown ||
+          inViews < shown
+        ) {
           record(shown);
         }
         return;

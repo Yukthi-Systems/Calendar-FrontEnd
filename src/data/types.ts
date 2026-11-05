@@ -127,4 +127,6 @@ export interface ProjectView {
   showAssigned?: boolean;
   // Undefined = no filter saved for this view yet (or it was cleared).
   quickFilter?: TaskQuickFilter;
+  // How many times the owner has seen the first-run tips (see useOnboarding.ts).
+  tipsShown?: number;
 }

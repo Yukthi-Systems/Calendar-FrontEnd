@@ -13,6 +13,10 @@ export const getSsoUrl = () => {
   return url;
 };
 
+// SSO_URL is the SSO website (login pages); its API can live on another host.
+export const getSsoApiUrl = () =>
+  getEnv('SSO_API_URL').trim().replace(/\/$/, '') || getSsoUrl();
+
 // Field names vary, so read snake_case and camelCase, one level deep.
 export const extractSsoProfile = (message: unknown): SsoProfile => {
   const data = (message ?? {}) as Record<string, unknown>;

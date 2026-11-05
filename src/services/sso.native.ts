@@ -2,8 +2,12 @@ import { Platform } from 'react-native';
 import CookieManager from '@preeternal/react-native-cookie-manager';
 import { getEnv } from '../config/env';
 import { ssoLogin } from './auth';
-import { markLoggedOut } from './runtime';
-import { extractSsoProfile, getSsoAppId, getSsoUrl } from './ssoProfile';
+import {
+  extractSsoProfile,
+  getSsoApiUrl,
+  getSsoAppId,
+  getSsoUrl,
+} from './ssoProfile';
 import { requestSsoLogin } from './ssoLoginRequest';
 import type { SsoAuthResponse } from './types';
 import type { SSOUserInfo } from '@rjyspl/phoenix-sso-react';
@@ -20,7 +24,7 @@ const syncWebViewCookies = async () => {
   if (Platform.OS !== 'ios') {
     return;
   }
-  const urls = [getEnv('API_URL'), getSsoUrl()].filter(Boolean);
+  const urls = [getEnv('API_URL'), getSsoUrl(), getSsoApiUrl()].filter(Boolean);
   for (const url of urls) {
     const cookies = await CookieManager.getAsArray(url, {
       iosCookieStore: 'webKit',
@@ -58,12 +62,10 @@ export const isReturningFromSsoRedirect = (): boolean => false;
 
 // Clears the SSO session server-side, then drops local cookies so the WebView
 // doesn't sign straight back in on the next login.
-// The last step of signing out. The cookies are already cleared by ssoLogout.
-export const leaveAfterLogout = (): void => markLoggedOut();
-
 export const ssoLogout = async (): Promise<void> => {
   try {
-    const res = await fetch(`${getSsoUrl()}/auth/logout`, {
+    await syncWebViewCookies();
+    const res = await fetch(`${getSsoApiUrl()}/auth/logout`, {
       method: 'DELETE',
       credentials: 'include',
     });
