@@ -33,13 +33,13 @@ const TIPS: { target: TourTargetKey; title: string; body: string }[] = [
   },
   {
     target: 'tabs',
-    title: 'Tasks and recurring',
-    body: 'Tasks shows the view’s tasks. When a view has recurring tasks turned on, Recurring lists the repeating ones.',
+    title: 'Tasks and Recurring Events',
+    body: 'Tasks shows the view’s tasks. When a view has Recurring Event turned on, this tab lists the ones that repeat.',
   },
   {
     target: 'newTask',
-    title: 'Tasks and events',
-    body: 'Add a task here. Pick the Event tag for meetings — events have start and due times and you can invite people. Other tags are by date; set a time under Advanced options if you need one.',
+    title: 'Add something new',
+    body: 'Add a task here. When the view allows them, you can also choose New Event or New Recurring Event. Events have start and due times and you can invite people. Tasks are by date; set a time under Advanced options if you need one.',
   },
   {
     target: 'filter',

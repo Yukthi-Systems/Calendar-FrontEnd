@@ -5,6 +5,7 @@ import {
   silentSsoAuthenticate,
   isReturningFromSsoRedirect,
   ssoLogout,
+  leaveAfterLogout,
   isSsoSessionActive,
   fetchSsoUserInfo,
 } from './sso';
@@ -15,7 +16,7 @@ import {
   storage,
   sessionFlag,
   isAfterLogout,
-  markLoggedOut,
+  clearDeviceData,
   markSessionEnded,
   clearAuthReturnState,
 } from './runtime';
@@ -180,7 +181,10 @@ export const runSsoCheck = async () => {
     try {
       active = await isSsoSessionActive();
     } catch (err) {
-      console.warn('SSO session check failed; will retry at the next check', err);
+      console.warn(
+        'SSO session check failed; will retry at the next check',
+        err,
+      );
       return;
     }
     if (!active) {
@@ -220,12 +224,18 @@ const stopSsoChecks = () => {
 };
 
 // Runs whenever there's a session (sign-in, restored session) and stops with it.
-store.sub(tokenAtom, () => (store.get(tokenAtom) ? startSsoChecks() : stopSsoChecks()));
+store.sub(tokenAtom, () =>
+  store.get(tokenAtom) ? startSsoChecks() : stopSsoChecks(),
+);
 if (store.get(tokenAtom)) {
   startSsoChecks();
 }
 AppState.addEventListener('change', state => {
-  if (state === 'active' && store.get(tokenAtom) && Date.now() - lastSsoCheck >= SSO_CHECK_MS) {
+  if (
+    state === 'active' &&
+    store.get(tokenAtom) &&
+    Date.now() - lastSsoCheck >= SSO_CHECK_MS
+  ) {
     runSsoCheck();
   }
 });
@@ -382,10 +392,12 @@ export const loginWithSso = async () => {
 export const logout = async () => {
   store.set(isAuthLoadingAtom, true);
   const currentToken = store.get(tokenAtom);
+  let apiLoggedOut = false;
   try {
     if (currentToken) {
       try {
         await apiLogout(currentToken);
+        apiLoggedOut = true;
       } catch (err) {
         console.error('YCT API logout failed', err);
       }
@@ -398,7 +410,12 @@ export const logout = async () => {
   } finally {
     clearSession();
     sessionFlag.clear(AUTO_SSO_ATTEMPTED_KEY);
-    markLoggedOut();
+    // After SSO's logout, which still needs its cookie. If the API refused, the
+    // session above is still dropped, but nothing else is touched.
+    if (apiLoggedOut) {
+      await clearDeviceData();
+    }
+    leaveAfterLogout();
     store.set(isAuthLoadingAtom, false);
   }
 };

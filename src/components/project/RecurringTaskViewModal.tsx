@@ -119,7 +119,7 @@ export function RecurringTaskViewModal() {
       return creating.current;
     }
     if (!template) {
-      return Promise.reject(new Error('No event selected'));
+      return Promise.reject(new Error('No Recurring Event selected'));
     }
     const date = format(next ?? new Date(), DATE_FMT);
     const prefill = templateFormPrefill(template);
@@ -252,7 +252,7 @@ export function RecurringTaskViewModal() {
     const ok = await confirm({
       title: `Delete “${template.title}”?`,
       message:
-        'This only removes the event — it won’t touch any tasks already made from it.',
+        'This only removes the Recurring Event — it won’t touch any tasks already made from it.',
       confirmLabel: 'Delete',
       destructive: true,
     });
@@ -262,9 +262,9 @@ export function RecurringTaskViewModal() {
     try {
       await deleteTemplate(template);
       close();
-      toast.success('Event deleted');
+      toast.success('Recurring Event deleted');
     } catch (err) {
-      toast.error('Couldn’t delete the event', {
+      toast.error('Couldn’t delete the Recurring Event', {
         description: errorMessage(err, 'Please try again.'),
       });
     }
@@ -293,7 +293,7 @@ export function RecurringTaskViewModal() {
                 {canDelete ? (
                   <IconButton
                     icon={Trash2}
-                    label="Delete event"
+                    label="Delete Recurring Event"
                     color={c.destructive}
                     onPress={remove}
                   />
@@ -367,11 +367,6 @@ export function RecurringTaskViewModal() {
                   </Text>
                 </View>
               </Property>
-              <Property label="RRULE">
-                <Text selectable className="flex-1 text-xs text-text-subtle">
-                  {template.rrule}
-                </Text>
-              </Property>
               <Property label="Next">
                 <Text className="text-sm text-text-heading">
                   {next
@@ -427,7 +422,7 @@ export function RecurringTaskViewModal() {
                       </Button>
                     </View>
                     <Text className="text-sm text-text-main">
-                      No alerts yet — adding one creates a task from this event.
+                      No alerts yet — adding one creates a task from this Recurring Event.
                     </Text>
                   </View>
                 )}

@@ -766,7 +766,7 @@ export function TableView({ view }: { view: ProjectView }) {
           <View className="ml-1.5 flex-row items-center gap-1 rounded-md bg-muted px-1.5 py-0.5">
             <Repeat size={10} color={c.subtle} />
             <Text className="text-2xs font-medium text-text-subtle">
-              Recurring
+              Recurring Event
             </Text>
           </View>
         ) : null}

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { useSetAtom } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
+import { currentUserIdAtom } from '../atoms/members';
+import { storage } from '../services/runtime';
 import { activeViewIdAtom } from '../atoms/project';
 import { errorMessage, toast } from '../atoms/feedback';
 import { STATUSES, TAGS } from '../data/constants';
@@ -12,7 +14,8 @@ import {
   type ViewDraftFields,
 } from './useViews';
 
-// First-run setup, tracked in the signed-in user's private_info:
+// First-run setup, tracked in the signed-in user's private_info (and on this
+// device — see deviceKey below):
 //   onboarding { tips_shown: number }
 // A brand-new account (private_info is `{}`) gets three starter views — only if
 // it has none of its own yet — and the help tips. The tips come back on the next
@@ -75,49 +78,52 @@ const readOnboarding = (
     : null;
 };
 
-// Once per app load, whatever remounts — so a re-render or StrictMode's double
-// effect can't create the views twice or count one visit as two.
-let handledThisLoad = false;
+// The count is also kept on this device: POST /auth/login currently resets
+// private_info to {} on every sign-in (Tasks-Main-API's create_user_session), so
+// the server's copy alone would make everyone look brand new each time. The
+// higher of the two wins, and a wiped server copy is written back.
+const deviceKey = (userId: string) => `onboarding.tipsShown.${userId}`;
+const readDeviceCount = async (userId: string) => {
+  const n = Number(await storage.getItem(deviceKey(userId)));
+  return Number.isFinite(n) ? n : 0;
+};
+
+// Once per app load for each signed-in user, whatever remounts — so a re-render
+// or StrictMode's double effect can't create the views twice or count one visit
+// as two, while signing in as someone else in the same tab still gets checked.
+let handledUserId: string | null = null;
 
 export function useOnboarding() {
   const me = useMe();
+  const userId = useAtomValue(currentUserIdAtom);
   const { myViews, ready, error } = useViewList();
   const { createView } = useViewMutations();
   const updateMyInfo = useUpdateMyInfo();
   const setActiveId = useSetAtom(activeViewIdAtom);
   const [settingUp, setSettingUp] = useState(false);
   const [tipsOpen, setTipsOpen] = useState(false);
+  const [resolved, setResolved] = useState(handledUserId === userId);
 
   const priv = me.data?.private_info;
-  const isNewUser = !!me.data && Object.keys(priv ?? {}).length === 0;
+  const isEmpty = !!me.data && Object.keys(priv ?? {}).length === 0;
+
+  const record = (tipsShown: number) => {
+    storage.setItem(deviceKey(userId), String(tipsShown));
+    return updateMyInfo
+      .mutateAsync({
+        isPublic: false,
+        patch: { onboarding: { tips_shown: tipsShown } },
+      })
+      .catch(() => undefined);
+  };
 
   useEffect(() => {
-    if (handledThisLoad || !me.data || !ready) {
+    if (handledUserId === userId || !me.data || !ready) {
       return;
     }
-    const saved = readOnboarding(priv);
-    if (!isNewUser && (!saved || saved.tips_shown >= TIPS_LIMIT)) {
-      handledThisLoad = true;
-      return;
-    }
-    handledThisLoad = true;
+    handledUserId = userId;
 
-    const record = (tipsShown: number) =>
-      updateMyInfo
-        .mutateAsync({
-          isPublic: false,
-          patch: { onboarding: { tips_shown: tipsShown } },
-        })
-        .catch(() => undefined);
-
-    if (saved) {
-      // A returning visit that still gets the tips.
-      setTipsOpen(true);
-      record(saved.tips_shown + 1);
-      return;
-    }
-
-    (async () => {
+    const setUpNewAccount = async () => {
       // Only when the list of my views really is empty — not when it failed.
       if (myViews.length === 0 && !error) {
         setSettingUp(true);
@@ -143,10 +149,35 @@ export function useOnboarding() {
       }
       setTipsOpen(true);
       record(1);
+    };
+
+    (async () => {
+      const saved = readOnboarding(priv);
+      const onDevice = await readDeviceCount(userId);
+      const shown = Math.max(saved?.tips_shown ?? 0, onDevice);
+      setResolved(true);
+      // Not `saved` but something else in private_info: an account from before
+      // the tips existed, which never gets them.
+      if (!isEmpty && !saved) {
+        return;
+      }
+      if (shown >= TIPS_LIMIT) {
+        if ((saved?.tips_shown ?? 0) < shown) {
+          record(shown);
+        }
+        return;
+      }
+      if (shown > 0) {
+        // A returning visit that still gets the tips.
+        setTipsOpen(true);
+        record(shown + 1);
+        return;
+      }
+      await setUpNewAccount();
     })();
     // Runs once the user record and the view lists have both loaded.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [me.data, ready]);
+  }, [me.data, ready, userId]);
 
   return {
     // True while a brand-new account's views are being made — or while it is
@@ -154,19 +185,13 @@ export function useOnboarding() {
     // screen doesn't flash up first.
     settingUp:
       settingUp ||
-      (myViews.length === 0 &&
-        (me.isLoading || (isNewUser && !handledThisLoad))),
+      (myViews.length === 0 && (me.isLoading || (isEmpty && !resolved))),
     tipsOpen,
     closeTips: () => setTipsOpen(false),
     // "Don't show again": skip any visits left.
     dismissTips: () => {
       setTipsOpen(false);
-      updateMyInfo
-        .mutateAsync({
-          isPublic: false,
-          patch: { onboarding: { tips_shown: TIPS_LIMIT } },
-        })
-        .catch(() => undefined);
+      record(TIPS_LIMIT);
     },
   };
 }

@@ -2,7 +2,6 @@ import {
   openLoginPopup,
   redirectToLogin,
   checkSilentAuth,
-  ssoLogout as sdkSsoLogout,
   PopupBlockedError,
   validateSession,
   getUserInfo,
@@ -81,8 +80,20 @@ export const silentSsoAuthenticate = async (): Promise<SsoAuthResponse> => {
 export const isReturningFromSsoRedirect = (): boolean =>
   new URLSearchParams(window.location.search).get(SSO_REDIRECT_PARAM) === '1';
 
-// Clears the SSO session cookies.
-export const ssoLogout = (): Promise<void> => sdkSsoLogout(getSsoUrl());
+// Nothing to call first on web. The SDK's ssoLogout does a DELETE on SSO_URL, but
+// that host only serves the SSO website (its API is elsewhere and refuses other
+// origins), so the session survived it. See leaveAfterLogout.
+export const ssoLogout = async (): Promise<void> => {};
+
+// The last step of signing out: SSO's own /logout page ends the session and
+// removes SSO-Session-ID, then sends the browser back to the login screen. A full
+// page load, so no signed-in state survives.
+export const leaveAfterLogout = (): void => {
+  const back = `${window.location.origin}/?logout=true`;
+  window.location.href = `${getSsoUrl()}/logout?redirect_uri=${encodeURIComponent(
+    back,
+  )}`;
+};
 
 // Is the SSO session still alive? `false` = signed out at SSO (401, incl. a session
 // waiting on 2FA); throws when SSO can't be reached — "couldn't check", not "signed out".
@@ -91,4 +102,5 @@ export const isSsoSessionActive = async (): Promise<boolean> =>
 
 // The signed-in user's profile, fresh from SSO's database (not the cached session);
 // null when there's no session. Throws when SSO can't be reached.
-export const fetchSsoUserInfo = (): Promise<SSOUserInfo | null> => getUserInfo(getSsoUrl());
+export const fetchSsoUserInfo = (): Promise<SSOUserInfo | null> =>
+  getUserInfo(getSsoUrl());

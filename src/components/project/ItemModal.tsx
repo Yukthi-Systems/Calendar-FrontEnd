@@ -26,7 +26,10 @@ import {
   useEventInvitees,
   useEventInviteeMutations,
 } from '../../hooks/useEventInvitees';
-import { useTaskAlerts, useTaskAlertMutations } from '../../hooks/useTaskAlerts';
+import {
+  useTaskAlerts,
+  useTaskAlertMutations,
+} from '../../hooks/useTaskAlerts';
 import { usePeople, useUserSearch, type Person } from '../../hooks/useUsers';
 import type { WorkItem } from '../../data/types';
 import { describeRecurrence } from '../../data/rrule';
@@ -145,9 +148,7 @@ export function ItemModal() {
       ? sharedViews.find(v => v.ownerId === item.ownerId)
       : undefined;
   const { data: ownerShare } = useMyShare(ownerSharedView);
-  const canEditViaShare = activeView?.shared
-    ? canEdit
-    : !!ownerShare?.can_edit;
+  const canEditViaShare = activeView?.shared ? canEdit : !!ownerShare?.can_edit;
   const canDeleteViaShare = activeView?.shared
     ? canDelete
     : !!ownerShare?.can_delete;
@@ -360,164 +361,165 @@ export function ItemModal() {
 
   return (
     <>
-    <Sheet visible={!!item} onClose={close} size="lg">
-      {item ? (
-        <>
-          <SheetHeader
-            onClose={close}
-            eyebrow={
-              <View className="flex-row flex-wrap items-center gap-1">
-                {crumbs.map(cr => (
-                  <View key={cr.id} className="flex-row items-center gap-1">
-                    <Press
-                      feedback="none"
-                      accessibilityRole="link"
-                      accessibilityLabel={`Open ${cr.title}`}
-                      onPress={() => open(cr.id)}
-                      className="rounded px-0.5"
-                    >
-                      <Text
-                        numberOfLines={1}
-                        className="max-w-[160px] text-xs font-medium text-text-main hover:text-accent"
+      <Sheet visible={!!item} onClose={close} size="lg">
+        {item ? (
+          <>
+            <SheetHeader
+              onClose={close}
+              eyebrow={
+                <View className="flex-row flex-wrap items-center gap-1">
+                  {crumbs.map(cr => (
+                    <View key={cr.id} className="flex-row items-center gap-1">
+                      <Press
+                        feedback="none"
+                        accessibilityRole="link"
+                        accessibilityLabel={`Open ${cr.title}`}
+                        onPress={() => open(cr.id)}
+                        className="rounded px-0.5"
                       >
-                        {cr.title}
-                      </Text>
-                    </Press>
-                    <ChevronRight size={12} color={c.subtle} />
-                  </View>
-                ))}
-              </View>
-            }
-            title={
-              <Text className="text-xl font-semibold text-text-heading">
-                {item.title}
-              </Text>
-            }
-            description={
-              sharedTaskOwner ? (
-                <View className="mt-1">
-                  <Badge
-                    label={`Shared with you by ${sharedTaskOwner.name}`}
-                    size="sm"
-                  />
-                </View>
-              ) : null
-            }
-            actions={
-              <>
-                <IconButton
-                  icon={RefreshCw}
-                  label="Refresh this task"
-                  disabled={refreshing}
-                  onPress={refresh}
-                />
-                {canEditTask ? (
-                  <IconButton
-                    icon={Pencil}
-                    label="Edit task"
-                    onPress={() => {
-                      setForm({ mode: 'edit', id: item.id });
-                      close();
-                    }}
-                  />
-                ) : null}
-                {canDeleteTask ? (
-                  <IconButton
-                    icon={Trash2}
-                    label="Delete task"
-                    color={c.destructive}
-                    onPress={remove}
-                  />
-                ) : null}
-              </>
-            }
-          />
-          <SheetBody>
-            {item.description ? (
-              <RichText className="mb-5">{item.description}</RichText>
-            ) : null}
-
-            {!isServerBacked && unavailableReason ? (
-              <View className="mb-4">
-                <Callout kind="warning">{unavailableReason}</Callout>
-              </View>
-            ) : null}
-
-            {canEdit ? (
-              <View className="mb-5 flex-row flex-wrap gap-1.5">
-                {allowedStatuses(activeView?.statusFilter).map(s => (
-                  <Chip
-                    key={s.key}
-                    label={s.label}
-                    color={s.color}
-                    active={s.key === item.status}
-                    onPress={() => setStatus(s.key)}
-                  />
-                ))}
-              </View>
-            ) : (
-              <View className="mb-5 flex-row items-center gap-2">
-                <StatusBadge status={item.status} />
-                {activeView?.shared ? (
-                  <Text className="text-xs text-text-subtle">
-                    {canDelete
-                      ? 'You can’t edit tasks in this view'
-                      : 'View only'}
-                  </Text>
-                ) : null}
-              </View>
-            )}
-
-            <View className="mb-6 rounded-xl border border-border-main">
-              <Property label="ID" first>
-                <Text className="text-sm text-text-heading">{item.id}</Text>
-              </Property>
-              <Property label="Tag">
-                {tag ? <Badge label={tag.label} color={tag.color} dot /> : null}
-              </Property>
-              {isEventTask ? null : (
-                <Property label="Assignees">
-                  {canEdit ? (
-                    <AssigneeQuickAdd
-                      item={item}
-                      canRemove={isTaskOwnerOrCreator}
-                    />
-                  ) : (
-                    <View className="flex-1 flex-row items-center gap-2">
-                      <AssigneeAvatars
-                        ids={item.assigneeIds}
-                        size={22}
-                        max={5}
-                      />
-                      <AssigneeNames
-                        ids={item.assigneeIds}
-                        className="flex-1 text-sm text-text-heading"
-                      />
+                        <Text
+                          numberOfLines={1}
+                          className="max-w-[160px] text-xs font-medium text-text-main hover:text-accent"
+                        >
+                          {cr.title}
+                        </Text>
+                      </Press>
+                      <ChevronRight size={12} color={c.subtle} />
                     </View>
-                  )}
-                </Property>
-              )}
-              <Property label="Creator">
-                <PersonRow id={item.createdById} />
-              </Property>
-              <Property label="Owner">
-                <PersonRow id={item.ownerId} />
-              </Property>
-              <Property label="Dates">
-                <View className="flex-row items-center gap-2">
-                  <Text className="text-sm text-text-heading">
-                    {format(parseISO(item.start), 'MMM d')}
-                    {item.startTime ? ` ${item.startTime}` : ''}
-                  </Text>
-                  <ArrowRight size={13} color={c.subtle} />
-                  <DueDate item={item} />
-                  <Text className="text-sm text-text-subtle">
-                    {format(parseISO(item.end), 'yyyy')}
-                  </Text>
+                  ))}
                 </View>
-              </Property>
-              {item.recurrence ? (
+              }
+              title={
+                <Text className="text-xl font-semibold text-text-heading">
+                  {item.title}
+                </Text>
+              }
+              description={
+                sharedTaskOwner ? (
+                  <View className="mt-1">
+                    <Badge
+                      label={`Shared with you by ${sharedTaskOwner.name}`}
+                      size="sm"
+                    />
+                  </View>
+                ) : null
+              }
+              actions={
                 <>
+                  <IconButton
+                    icon={RefreshCw}
+                    label="Refresh this task"
+                    disabled={refreshing}
+                    onPress={refresh}
+                  />
+                  {canEditTask ? (
+                    <IconButton
+                      icon={Pencil}
+                      label="Edit task"
+                      onPress={() => {
+                        setForm({ mode: 'edit', id: item.id });
+                        close();
+                      }}
+                    />
+                  ) : null}
+                  {canDeleteTask ? (
+                    <IconButton
+                      icon={Trash2}
+                      label="Delete task"
+                      color={c.destructive}
+                      onPress={remove}
+                    />
+                  ) : null}
+                </>
+              }
+            />
+            <SheetBody>
+              {item.description ? (
+                <RichText className="mb-5">{item.description}</RichText>
+              ) : null}
+
+              {!isServerBacked && unavailableReason ? (
+                <View className="mb-4">
+                  <Callout kind="warning">{unavailableReason}</Callout>
+                </View>
+              ) : null}
+
+              {canEdit ? (
+                <View className="mb-5 flex-row flex-wrap gap-1.5">
+                  {allowedStatuses(activeView?.statusFilter).map(s => (
+                    <Chip
+                      key={s.key}
+                      label={s.label}
+                      color={s.color}
+                      active={s.key === item.status}
+                      onPress={() => setStatus(s.key)}
+                    />
+                  ))}
+                </View>
+              ) : (
+                <View className="mb-5 flex-row items-center gap-2">
+                  <StatusBadge status={item.status} />
+                  {activeView?.shared ? (
+                    <Text className="text-xs text-text-subtle">
+                      {canDelete
+                        ? 'You can’t edit tasks in this view'
+                        : 'View only'}
+                    </Text>
+                  ) : null}
+                </View>
+              )}
+
+              <View className="mb-6 rounded-xl border border-border-main">
+                <Property label="ID" first>
+                  <Text className="text-sm text-text-heading">{item.id}</Text>
+                </Property>
+                <Property label="Tag">
+                  {tag ? (
+                    <Badge label={tag.label} color={tag.color} dot />
+                  ) : null}
+                </Property>
+                {isEventTask ? null : (
+                  <Property label="Assignees">
+                    {canEdit ? (
+                      <AssigneeQuickAdd
+                        item={item}
+                        canRemove={isTaskOwnerOrCreator}
+                      />
+                    ) : (
+                      <View className="flex-1 flex-row items-center gap-2">
+                        <AssigneeAvatars
+                          ids={item.assigneeIds}
+                          size={22}
+                          max={5}
+                        />
+                        <AssigneeNames
+                          ids={item.assigneeIds}
+                          className="flex-1 text-sm text-text-heading"
+                        />
+                      </View>
+                    )}
+                  </Property>
+                )}
+                <Property label="Creator">
+                  <PersonRow id={item.createdById} />
+                </Property>
+                <Property label="Owner">
+                  <PersonRow id={item.ownerId} />
+                </Property>
+                <Property label="Dates">
+                  <View className="flex-row items-center gap-2">
+                    <Text className="text-sm text-text-heading">
+                      {format(parseISO(item.start), 'MMM d')}
+                      {item.startTime ? ` ${item.startTime}` : ''}
+                    </Text>
+                    <ArrowRight size={13} color={c.subtle} />
+                    <DueDate item={item} />
+                    <Text className="text-sm text-text-subtle">
+                      {format(parseISO(item.end), 'yyyy')}
+                    </Text>
+                  </View>
+                </Property>
+                {item.recurrence ? (
                   <Property label="Repeats">
                     <View className="flex-row items-center gap-1.5">
                       <Repeat size={13} color={c.text} />
@@ -526,336 +528,334 @@ export function ItemModal() {
                       </Text>
                     </View>
                   </Property>
-                  <Property label="RRULE">
-                    <Text
-                      selectable
-                      className="flex-1 text-xs text-text-subtle"
-                    >
-                      {item.recurrence}
-                    </Text>
+                ) : null}
+                {(item.reminders ?? []).length > 0 ? (
+                  <Property label="Reminders">
+                    <View className="flex-row flex-wrap items-center gap-1.5">
+                      <Bell size={13} color={c.text} />
+                      <Text className="text-sm text-text-heading">
+                        {item.reminders
+                          .map(
+                            r =>
+                              `${
+                                r.offsetDays === 0
+                                  ? 'On the day'
+                                  : `${r.offsetDays}d before`
+                              } at ${r.time}`,
+                          )
+                          .join(' · ')}
+                      </Text>
+                    </View>
                   </Property>
-                </>
-              ) : null}
-              {(item.reminders ?? []).length > 0 ? (
-                <Property label="Reminders">
-                  <View className="flex-row flex-wrap items-center gap-1.5">
-                    <Bell size={13} color={c.text} />
-                    <Text className="text-sm text-text-heading">
-                      {item.reminders
-                        .map(
-                          r =>
-                            `${
-                              r.offsetDays === 0
-                                ? 'On the day'
-                                : `${r.offsetDays}d before`
-                            } at ${r.time}`,
-                        )
-                        .join(' · ')}
-                    </Text>
-                  </View>
-                </Property>
-              ) : null}
-            </View>
+                ) : null}
+              </View>
 
-            {/* Nothing a shared viewer can do about subtasks being off (only
+              {/* Nothing a shared viewer can do about subtasks being off (only
                 the owner's "Turn on for this view" button, below, can) —
                 showing the section just to say so is clutter for them, so
                 it's left out entirely for a shared view; the owner still
                 sees it, as the way to turn subtasks on. */}
-            {subtasksEnabled || !activeView?.shared ? (
-              <View className="mb-6">
-                <View className="mb-2 flex-row items-center gap-2">
-                  <ListTree size={15} color={c.text} />
-                  <Text className="text-sm font-semibold text-text-heading">
-                    Subtasks
-                  </Text>
-                  {progress && progress.total > 0 ? (
-                    <Text className="text-sm text-text-subtle">
-                      {progress.loaded
-                        ? `${progress.done}/${progress.total}`
-                        : progress.total}
+              {subtasksEnabled || !activeView?.shared ? (
+                <View className="mb-6">
+                  <View className="mb-2 flex-row items-center gap-2">
+                    <ListTree size={15} color={c.text} />
+                    <Text className="text-sm font-semibold text-text-heading">
+                      Subtasks
                     </Text>
-                  ) : null}
-                  <View className="flex-1" />
-                  {!subtasksEnabled || !canCreateSubtask ? null : canAdd ? (
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      icon={Plus}
-                      onPress={() => {
-                        setForm({ mode: 'new', parentId: item.id });
-                        close();
-                      }}
-                    >
-                      Add subtask
-                    </Button>
-                  ) : (
-                    <Text className="text-xs text-text-subtle">
-                      Max depth ({MAX_DEPTH}) reached
-                    </Text>
-                  )}
-                </View>
-                {!subtasksEnabled ? (
-                  <Callout
-                    kind="info"
-                    title="Subtasks are turned off in this view"
-                  >
-                    <View className="gap-2">
-                      <Text className="text-sm text-text-main">
-                        {activeView && !activeView.shared
-                          ? 'Turn them on to see and add subtasks here.'
-                          : 'Only the view’s owner can turn them on.'}
+                    {progress && progress.total > 0 ? (
+                      <Text className="text-sm text-text-subtle">
+                        {progress.loaded
+                          ? `${progress.done}/${progress.total}`
+                          : progress.total}
                       </Text>
-                      {activeView && !activeView.shared ? (
-                        <View className="self-start">
-                          <Button
-                            size="sm"
-                            loading={enablingSubtasks}
-                            onPress={turnOnSubtasks}
-                          >
-                            Turn on for this view
-                          </Button>
-                        </View>
-                      ) : null}
-                    </View>
-                  </Callout>
-                ) : null}
-                {subtasksEnabled &&
-                progress &&
-                progress.total > 0 &&
-                progress.loaded ? (
-                  <View className="mb-2 h-1 overflow-hidden rounded-full bg-muted">
-                    <View
-                      style={{
-                        width: `${(progress.done / progress.total) * 100}%`,
-                      }}
-                      className="h-1 rounded-full bg-success"
-                    />
+                    ) : null}
+                    <View className="flex-1" />
+                    {!subtasksEnabled || !canCreateSubtask ? null : canAdd ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        icon={Plus}
+                        onPress={() => {
+                          setForm({ mode: 'new', parentId: item.id });
+                          close();
+                        }}
+                      >
+                        Add subtask
+                      </Button>
+                    ) : (
+                      <Text className="text-xs text-text-subtle">
+                        Max depth ({MAX_DEPTH}) reached
+                      </Text>
+                    )}
                   </View>
-                ) : null}
-                {!subtasksEnabled || !progress || progress.total === 0 ? (
-                  subtasksEnabled ? (
-                    <Text className="py-1 text-sm text-text-subtle">
-                      No subtasks yet
-                    </Text>
-                  ) : null
-                ) : !subtasksOpen ? (
-                  <Press
-                    accessibilityRole="button"
-                    accessibilityState={{ expanded: false }}
-                    accessibilityLabel={`Show ${progress.total} subtasks`}
-                    onPress={() => toggleSubtask(item.id)}
-                    className="flex-row items-center gap-1.5 self-start rounded-lg border border-border-main px-3 py-1.5 hover:bg-hover"
-                  >
-                    <ChevronRight size={14} color={c.text} strokeWidth={2.25} />
-                    <Text className="text-sm text-text-heading">
-                      Show {progress.total} subtask
-                      {progress.total === 1 ? '' : 's'}
-                    </Text>
-                  </Press>
-                ) : (
-                  <>
+                  {!subtasksEnabled ? (
+                    <Callout
+                      kind="info"
+                      title="Subtasks are turned off in this view"
+                    >
+                      <View className="gap-2">
+                        <Text className="text-sm text-text-main">
+                          {activeView && !activeView.shared
+                            ? 'Turn them on to see and add subtasks here.'
+                            : 'Only the view’s owner can turn them on.'}
+                        </Text>
+                        {activeView && !activeView.shared ? (
+                          <View className="self-start">
+                            <Button
+                              size="sm"
+                              loading={enablingSubtasks}
+                              onPress={turnOnSubtasks}
+                            >
+                              Turn on for this view
+                            </Button>
+                          </View>
+                        ) : null}
+                      </View>
+                    </Callout>
+                  ) : null}
+                  {subtasksEnabled &&
+                  progress &&
+                  progress.total > 0 &&
+                  progress.loaded ? (
+                    <View className="mb-2 h-1 overflow-hidden rounded-full bg-muted">
+                      <View
+                        style={{
+                          width: `${(progress.done / progress.total) * 100}%`,
+                        }}
+                        className="h-1 rounded-full bg-success"
+                      />
+                    </View>
+                  ) : null}
+                  {!subtasksEnabled || !progress || progress.total === 0 ? (
+                    subtasksEnabled ? (
+                      <Text className="py-1 text-sm text-text-subtle">
+                        No subtasks yet
+                      </Text>
+                    ) : null
+                  ) : !subtasksOpen ? (
                     <Press
                       accessibilityRole="button"
-                      accessibilityState={{ expanded: true }}
-                      accessibilityLabel="Hide subtasks"
+                      accessibilityState={{ expanded: false }}
+                      accessibilityLabel={`Show ${progress.total} subtasks`}
                       onPress={() => toggleSubtask(item.id)}
-                      className="mb-1.5 flex-row items-center gap-1.5 self-start rounded-lg px-1 py-0.5 hover:bg-hover"
+                      className="flex-row items-center gap-1.5 self-start rounded-lg border border-border-main px-3 py-1.5 hover:bg-hover"
                     >
-                      <View style={{ transform: [{ rotate: '90deg' }] }}>
-                        <ChevronRight
-                          size={14}
-                          color={c.text}
-                          strokeWidth={2.25}
-                        />
-                      </View>
+                      <ChevronRight
+                        size={14}
+                        color={c.text}
+                        strokeWidth={2.25}
+                      />
                       <Text className="text-sm text-text-heading">
-                        Hide subtasks
+                        Show {progress.total} subtask
+                        {progress.total === 1 ? '' : 's'}
                       </Text>
                     </Press>
-                    {loadingTopSubtasks && subtasks.length === 0 ? (
-                      <Text className="py-1 text-sm text-text-subtle">
-                        Loading subtasks…
-                      </Text>
-                    ) : (
-                      <View className="overflow-hidden rounded-xl border border-border-main">
-                        {subtasks.map(({ item: s, depth: d }, idx) => {
-                          // Same per-level lazy load as the task itself: a subtask
-                          // with its own children gets its own chevron, and only
-                          // fetches them (loadChildren) the first time it's opened.
-                          const kids = hasSubtasks(s);
-                          const rowExpanded = expandedSubtasks.has(s.id);
-                          const rowLoading = loadingSubtaskRows.has(s.id);
-                          const rowChildrenShown = subtasks.some(
-                            r => r.item.parentId === s.id,
-                          );
-                          return (
-                            <View key={s.id}>
-                              <Press
-                                feedback="none"
-                                accessibilityRole="button"
-                                accessibilityLabel={`Open ${s.title}`}
-                                onPress={() => open(s.id)}
-                                style={{ paddingLeft: 4 + (d - 1) * 16 }}
-                                className={`flex-row items-center gap-2 py-2 pr-3 hover:bg-hover ${
-                                  idx > 0 ? 'border-t border-border-main' : ''
-                                }`}
-                              >
-                                <View className="h-5 w-5 items-center justify-center">
-                                  {kids ? (
-                                    <Press
-                                      accessibilityRole="button"
-                                      accessibilityLabel={
-                                        rowExpanded
-                                          ? `Collapse ${s.title}`
-                                          : `Expand ${s.title}`
-                                      }
-                                      accessibilityState={{
-                                        expanded: rowExpanded,
-                                      }}
-                                      onPress={() => toggleSubtask(s.id)}
-                                      hitSlop={6}
-                                      className="h-5 w-5 items-center justify-center rounded-md hover:bg-border-main"
-                                    >
-                                      <View
-                                        style={{
-                                          transform: [
-                                            {
-                                              rotate: rowExpanded
-                                                ? '90deg'
-                                                : '0deg',
-                                            },
-                                          ],
+                  ) : (
+                    <>
+                      <Press
+                        accessibilityRole="button"
+                        accessibilityState={{ expanded: true }}
+                        accessibilityLabel="Hide subtasks"
+                        onPress={() => toggleSubtask(item.id)}
+                        className="mb-1.5 flex-row items-center gap-1.5 self-start rounded-lg px-1 py-0.5 hover:bg-hover"
+                      >
+                        <View style={{ transform: [{ rotate: '90deg' }] }}>
+                          <ChevronRight
+                            size={14}
+                            color={c.text}
+                            strokeWidth={2.25}
+                          />
+                        </View>
+                        <Text className="text-sm text-text-heading">
+                          Hide subtasks
+                        </Text>
+                      </Press>
+                      {loadingTopSubtasks && subtasks.length === 0 ? (
+                        <Text className="py-1 text-sm text-text-subtle">
+                          Loading subtasks…
+                        </Text>
+                      ) : (
+                        <View className="overflow-hidden rounded-xl border border-border-main">
+                          {subtasks.map(({ item: s, depth: d }, idx) => {
+                            // Same per-level lazy load as the task itself: a subtask
+                            // with its own children gets its own chevron, and only
+                            // fetches them (loadChildren) the first time it's opened.
+                            const kids = hasSubtasks(s);
+                            const rowExpanded = expandedSubtasks.has(s.id);
+                            const rowLoading = loadingSubtaskRows.has(s.id);
+                            const rowChildrenShown = subtasks.some(
+                              r => r.item.parentId === s.id,
+                            );
+                            return (
+                              <View key={s.id}>
+                                <Press
+                                  feedback="none"
+                                  accessibilityRole="button"
+                                  accessibilityLabel={`Open ${s.title}`}
+                                  onPress={() => open(s.id)}
+                                  style={{ paddingLeft: 4 + (d - 1) * 16 }}
+                                  className={`flex-row items-center gap-2 py-2 pr-3 hover:bg-hover ${
+                                    idx > 0 ? 'border-t border-border-main' : ''
+                                  }`}
+                                >
+                                  <View className="h-5 w-5 items-center justify-center">
+                                    {kids ? (
+                                      <Press
+                                        accessibilityRole="button"
+                                        accessibilityLabel={
+                                          rowExpanded
+                                            ? `Collapse ${s.title}`
+                                            : `Expand ${s.title}`
+                                        }
+                                        accessibilityState={{
+                                          expanded: rowExpanded,
                                         }}
+                                        onPress={() => toggleSubtask(s.id)}
+                                        hitSlop={6}
+                                        className="h-5 w-5 items-center justify-center rounded-md hover:bg-border-main"
                                       >
-                                        <ChevronRight
-                                          size={13}
-                                          color={c.text}
-                                          strokeWidth={2.25}
-                                        />
-                                      </View>
-                                    </Press>
-                                  ) : null}
-                                </View>
-                                <StatusIcon status={s.status} size={14} />
-                                <Text
-                                  numberOfLines={1}
-                                  className="flex-1 text-sm text-text-heading"
-                                >
-                                  {s.title}
-                                </Text>
-                                <AssigneeAvatars
-                                  ids={s.assigneeIds}
-                                  size={18}
-                                />
-                              </Press>
-                              {rowExpanded &&
-                              rowLoading &&
-                              !rowChildrenShown ? (
-                                <Text
-                                  style={{ paddingLeft: 4 + d * 16 }}
-                                  className="border-t border-border-main py-1.5 text-xs text-text-subtle"
-                                >
-                                  Loading…
-                                </Text>
-                              ) : null}
-                            </View>
-                          );
-                        })}
-                      </View>
-                    )}
-                  </>
-                )}
-              </View>
-            ) : null}
+                                        <View
+                                          style={{
+                                            transform: [
+                                              {
+                                                rotate: rowExpanded
+                                                  ? '90deg'
+                                                  : '0deg',
+                                              },
+                                            ],
+                                          }}
+                                        >
+                                          <ChevronRight
+                                            size={13}
+                                            color={c.text}
+                                            strokeWidth={2.25}
+                                          />
+                                        </View>
+                                      </Press>
+                                    ) : null}
+                                  </View>
+                                  <StatusIcon status={s.status} size={14} />
+                                  <Text
+                                    numberOfLines={1}
+                                    className="flex-1 text-sm text-text-heading"
+                                  >
+                                    {s.title}
+                                  </Text>
+                                  <AssigneeAvatars
+                                    ids={s.assigneeIds}
+                                    size={18}
+                                  />
+                                </Press>
+                                {rowExpanded &&
+                                rowLoading &&
+                                !rowChildrenShown ? (
+                                  <Text
+                                    style={{ paddingLeft: 4 + d * 16 }}
+                                    className="border-t border-border-main py-1.5 text-xs text-text-subtle"
+                                  >
+                                    Loading…
+                                  </Text>
+                                ) : null}
+                              </View>
+                            );
+                          })}
+                        </View>
+                      )}
+                    </>
+                  )}
+                </View>
+              ) : null}
 
-            <View className="mb-6">
-              <TaskAlertsSection taskId={item.id} taskTitle={item.title} />
-            </View>
-
-            {isEventTask && canSeeInvitees && activeView ? (
               <View className="mb-6">
-                <EventInviteesSection
-                  viewId={Number(activeView.id)}
-                  taskId={item.id}
-                  canInvite={canSeeInvitees}
-                  canRemove={isTaskOwnerOrCreator}
-                  // Same "past due" rule as DueDate: exact with a due time,
-                  // end of the day for an all-day task.
-                  eventEnded={
-                    (item.endTime
-                      ? parseISO(`${item.end}T${item.endTime}`)
-                      : endOfDay(parseISO(item.end))) < new Date()
-                  }
-                />
+                <TaskAlertsSection taskId={item.id} taskTitle={item.title} />
               </View>
-            ) : null}
 
-            <CommentsSection taskId={item.id} />
-          </SheetBody>
-        </>
-      ) : null}
-    </Sheet>
-    {item ? (
-      <Sheet
-        visible={deletePrompt}
-        onClose={() => setDeletePrompt(false)}
-        size="sm"
-      >
-        <SheetHeader
-          title="Delete this task?"
+              {isEventTask && canSeeInvitees && activeView ? (
+                <View className="mb-6">
+                  <EventInviteesSection
+                    viewId={Number(activeView.id)}
+                    taskId={item.id}
+                    canInvite={canSeeInvitees}
+                    canRemove={isTaskOwnerOrCreator}
+                    // Same "past due" rule as DueDate: exact with a due time,
+                    // end of the day for an all-day task.
+                    eventEnded={
+                      (item.endTime
+                        ? parseISO(`${item.end}T${item.endTime}`)
+                        : endOfDay(parseISO(item.end))) < new Date()
+                    }
+                  />
+                </View>
+              ) : null}
+
+              <CommentsSection taskId={item.id} />
+            </SheetBody>
+          </>
+        ) : null}
+      </Sheet>
+      {item ? (
+        <Sheet
+          visible={deletePrompt}
           onClose={() => setDeletePrompt(false)}
-        />
-        <SheetBody scroll={false}>
-          <Text className="text-sm text-text-main">
-            “{item.title}” and its{' '}
-            {[
-              taskAlerts.length > 0
-                ? `${taskAlerts.length} alert${
-                    taskAlerts.length === 1 ? '' : 's'
-                  }`
-                : null,
-              taskInvitees.length > 0
-                ? `${taskInvitees.length} invitee${
-                    taskInvitees.length === 1 ? '' : 's'
-                  }`
-                : null,
-            ]
-              .filter(Boolean)
-              .join(' and ')}{' '}
-            will be deleted. This can’t be undone.
-            {taskInvitees.length > 0
-              ? ' “Delete and Notify” also removes each invitee first, so they’re notified; “Delete” leaves that to the task’s own removal.'
-              : ''}
-          </Text>
-        </SheetBody>
-        <SheetFooter>
-          {taskInvitees.length > 0 ? (
-            <>
+          size="sm"
+        >
+          <SheetHeader
+            title="Delete this task?"
+            onClose={() => setDeletePrompt(false)}
+          />
+          <SheetBody scroll={false}>
+            <Text className="text-sm text-text-main">
+              “{item.title}” and its{' '}
+              {[
+                taskAlerts.length > 0
+                  ? `${taskAlerts.length} alert${
+                      taskAlerts.length === 1 ? '' : 's'
+                    }`
+                  : null,
+                taskInvitees.length > 0
+                  ? `${taskInvitees.length} invitee${
+                      taskInvitees.length === 1 ? '' : 's'
+                    }`
+                  : null,
+              ]
+                .filter(Boolean)
+                .join(' and ')}{' '}
+              will be deleted. This can’t be undone.
+              {taskInvitees.length > 0
+                ? ' “Delete and Notify” also removes each invitee first, so they’re notified; “Delete” leaves that to the task’s own removal.'
+                : ''}
+            </Text>
+          </SheetBody>
+          <SheetFooter>
+            {taskInvitees.length > 0 ? (
+              <>
+                <Button
+                  variant="destructive"
+                  onPress={() => performDelete(true)}
+                >
+                  Delete and Notify
+                </Button>
+                <Button
+                  variant="destructive-ghost"
+                  onPress={() => performDelete(false)}
+                >
+                  Delete
+                </Button>
+              </>
+            ) : (
               <Button
                 variant="destructive"
-                onPress={() => performDelete(true)}
-              >
-                Delete and Notify
-              </Button>
-              <Button
-                variant="destructive-ghost"
                 onPress={() => performDelete(false)}
               >
                 Delete
               </Button>
-            </>
-          ) : (
-            <Button variant="destructive" onPress={() => performDelete(false)}>
-              Delete
+            )}
+            <Button variant="secondary" onPress={() => setDeletePrompt(false)}>
+              Cancel
             </Button>
-          )}
-          <Button variant="secondary" onPress={() => setDeletePrompt(false)}>
-            Cancel
-          </Button>
-        </SheetFooter>
-      </Sheet>
-    ) : null}
+          </SheetFooter>
+        </Sheet>
+      ) : null}
     </>
   );
 }

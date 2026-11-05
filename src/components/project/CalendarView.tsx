@@ -777,7 +777,7 @@ function EventBar({
             ? `${item.title} · ${format(
                 seg.occ.start,
                 'MMM d',
-              )} · recurring event`
+              )} · Recurring Event`
             : `${item.title} · ${format(seg.occ.start, 'MMM d')} – ${format(
                 seg.occ.end,
                 'MMM d',

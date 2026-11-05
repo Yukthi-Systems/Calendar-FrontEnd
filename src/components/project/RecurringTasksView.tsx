@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ScrollView, Text, View } from 'react-native';
-import { useAtom, useSetAtom } from 'jotai';
+import { useSetAtom } from 'jotai';
 import { format, parseISO } from 'date-fns';
 import CloudOff from 'lucide-react-native/icons/cloud-off';
 import Pencil from 'lucide-react-native/icons/pencil';
@@ -43,7 +43,6 @@ import {
   Skeleton,
 } from '../ui';
 import { Avatar } from './shared';
-import { RecurringTaskFormModal } from './RecurringTaskFormModal';
 
 // A library of reusable recurrence rules for this view (/recurring) — separate
 // from a task's own "Repeats" field, which already covers one task repeating on
@@ -58,12 +57,10 @@ export function RecurringTasksView({
 }) {
   const toneOf = useTone();
   const { templates, isLoading, error, enabled } = useRecurringTasks(view);
-  const { createTemplate, updateTemplate, deleteTemplate } =
-    useRecurringTaskMutations(view);
+  const { deleteTemplate } = useRecurringTaskMutations(view);
   const { canCreate, canEdit, canDelete } = useViewAccess(view);
-  // Global, not local: the navbar's "New event" (ProjectScreen) opens this
-  // same modal, not just the rows/empty-state here.
-  const [form, setForm] = useAtom(recurringFormAtom);
+  // The form itself is mounted in ProjectScreen (RecurringFormHost).
+  const setForm = useSetAtom(recurringFormAtom);
   // A row click opens RecurringTaskViewModal (mounted globally in
   // ProjectScreen — Table/Calendar's own occurrence clicks open the same
   // one), which is where Create/Delete actually live.
@@ -87,7 +84,7 @@ export function RecurringTasksView({
       <EmptyState
         icon={Repeat}
         title="Open a view"
-        description="Pick a view to see its recurring events."
+        description="Pick a view to see its Recurring Events."
       />
     );
   }
@@ -95,7 +92,7 @@ export function RecurringTasksView({
     return (
       <EmptyState
         icon={Repeat}
-        title="Recurring events are off for this view"
+        title="Recurring Events are off for this view"
         description={
           view.shared
             ? 'Ask the view’s owner to turn them on.'
@@ -109,7 +106,7 @@ export function RecurringTasksView({
     const ok = await confirm({
       title: `Delete “${t.title}”?`,
       message:
-        'This only removes the event — it won’t touch any tasks already made from it.',
+        'This only removes the Recurring Event — it won’t touch any tasks already made from it.',
       confirmLabel: 'Delete',
       destructive: true,
     });
@@ -118,9 +115,9 @@ export function RecurringTasksView({
     }
     try {
       await deleteTemplate(t);
-      toast.success('Event deleted');
+      toast.success('Recurring Event deleted');
     } catch (err) {
-      toast.error('Couldn’t delete the event', {
+      toast.error('Couldn’t delete the Recurring Event', {
         description: errorMessage(err, 'Please try again.'),
       });
     }
@@ -131,12 +128,14 @@ export function RecurringTasksView({
       <ScrollView contentContainerClassName="px-4 pb-10 pt-4 lg:px-6">
         <Text className="mb-3 text-sm text-text-subtle">
           {templates.length === 0
-            ? 'No events yet'
+            ? 'No Recurring Events yet'
             : q
-            ? `${visible.length} of ${templates.length} event${
+            ? `${visible.length} of ${templates.length} Recurring Event${
                 templates.length === 1 ? '' : 's'
               }`
-            : `${templates.length} event${templates.length === 1 ? '' : 's'}`}
+            : `${templates.length} Recurring Event${
+                templates.length === 1 ? '' : 's'
+              }`}
         </Text>
 
         {templates.length > 0 ? (
@@ -145,7 +144,7 @@ export function RecurringTasksView({
               icon={Search}
               value={query}
               onChangeText={setQuery}
-              placeholder="Search events by name…"
+              placeholder="Search Recurring Events by name…"
               right={
                 query ? (
                   <IconButton
@@ -168,7 +167,7 @@ export function RecurringTasksView({
         ) : error ? (
           <EmptyState
             icon={CloudOff}
-            title="Couldn’t load events"
+            title="Couldn’t load Recurring Events"
             description={errorMessage(error, 'The server didn’t respond.')}
           />
         ) : !enabled ? (
@@ -176,8 +175,8 @@ export function RecurringTasksView({
         ) : templates.length === 0 ? (
           <EmptyState
             icon={Repeat}
-            title="No recurring events"
-            description="An event is a reusable rule — name, tag and an RFC 5545 schedule — for the kind of thing that repeats."
+            title="No Recurring Events"
+            description="A Recurring Event is a reusable rule — a name, a tag and a schedule — for the kind of thing that repeats."
             action={
               canCreate ? (
                 <Button
@@ -185,7 +184,7 @@ export function RecurringTasksView({
                   icon={Plus}
                   onPress={() => setForm({ mode: 'new' })}
                 >
-                  New event
+                  New Recurring Event
                 </Button>
               ) : undefined
             }
@@ -194,7 +193,7 @@ export function RecurringTasksView({
           <EmptyState
             compact
             icon={SearchX}
-            title="No matching events"
+            title="No matching Recurring Events"
             description="Try another name."
           />
         ) : (
@@ -281,21 +280,6 @@ export function RecurringTasksView({
           </View>
         )}
       </ScrollView>
-
-      <RecurringTaskFormModal
-        visible={!!form}
-        view={view}
-        template={form?.mode === 'edit' ? form.template : null}
-        onClose={() => setForm(null)}
-        onSave={async draft => {
-          if (form?.mode === 'edit') {
-            await updateTemplate({ id: form.template.id, ...draft });
-          } else {
-            await createTemplate(draft);
-          }
-          setForm(null);
-        }}
-      />
     </View>
   );
 }

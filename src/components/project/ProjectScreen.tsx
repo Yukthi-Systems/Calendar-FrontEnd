@@ -23,6 +23,7 @@ import RefreshCw from 'lucide-react-native/icons/refresh-cw';
 import Repeat from 'lucide-react-native/icons/repeat';
 import Search from 'lucide-react-native/icons/search';
 import Table2 from 'lucide-react-native/icons/table-2';
+import type { LucideIcon } from 'lucide-react-native';
 import { useAtom, useSetAtom } from 'jotai';
 import {
   activeViewIdAtom,
@@ -51,7 +52,7 @@ import { useTaskAlertMutations } from '../../hooks/useTaskAlerts';
 import { useRefresh } from '../../hooks/useRefresh';
 import { useShortcuts } from '../../hooks/useShortcuts';
 import { useOnboarding } from '../../hooks/useOnboarding';
-import { VIEW_TYPES } from '../../data/constants';
+import { VIEW_TYPES, allowedTags } from '../../data/constants';
 import type { ProjectView, ViewType } from '../../data/types';
 import {
   Badge,
@@ -59,6 +60,7 @@ import {
   EmptyState,
   IconButton,
   Kbd,
+  MenuItem,
   Popover,
   Press,
   SegmentedControl,
@@ -76,6 +78,7 @@ import { ProfileModal } from './ProfileModal';
 import { MobileHome } from './MobileHome';
 import { OnboardingTips } from './OnboardingTips';
 import { tourTarget } from './tourTargets';
+import { RecurringFormHost } from './RecurringTaskFormModal';
 import { RecurringTasksView } from './RecurringTasksView';
 import { RoadmapView } from './RoadmapView';
 import { SearchModal } from './SearchModal';
@@ -91,7 +94,7 @@ const MODE_OPTIONS: {
   icon: typeof ListTodo;
 }[] = [
   { key: 'tasks', label: 'Tasks', icon: ListTodo },
-  { key: 'recurring', label: 'Recurring', icon: Repeat },
+  { key: 'recurring', label: 'Recurring Event', icon: Repeat },
 ];
 
 // Width at which the view tabs become a left rail.
@@ -171,12 +174,10 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   const ActiveView = active ? VIEW_COMPONENTS[active.type] : null;
   useTasksSync(active);
 
-  // The Recurring tab only makes sense when the active view's own "Recurring
-  // tasks" toggle (ViewModal's "Also show" section) is on — hide it rather
-  // than offer a tab into content the view itself says not to show.
-  const modeOptions = active?.showRecurring
-    ? MODE_OPTIONS
-    : MODE_OPTIONS.filter(opt => opt.key !== 'recurring');
+  // The Tasks/Recurring tabs only make sense when the active view's own
+  // "Recurring tasks" toggle is on — otherwise Tasks is all there is, so there's
+  // nothing to switch between and neither tab is shown.
+  const showModeTabs = !!active?.showRecurring;
   // Switching to a view with it off while already on that tab would otherwise
   // strand the content area showing recurring events with no tab left to get
   // back to it from.
@@ -191,6 +192,66 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   // New task only where I may create (always in my own views; per share otherwise).
   const { canCreate } = useViewAccess(active);
   const newTask = () => setItemForm({ mode: 'new' });
+  const [newMenuOpen, setNewMenuOpen] = useState(false);
+  // What this view can make — the server refuses a tag outside the view's
+  // filter, and a Recurring Event where they're off. More than one choice is a
+  // "New" menu; a single one is just a button for it (see newButton, fab).
+  const viewTags = allowedTags(active?.tagFilter);
+  const newOptions: { label: string; icon: LucideIcon; open: () => void }[] = [
+    ...(viewTags.some(t => t.key === 'event')
+      ? [
+          {
+            label: 'New Event',
+            icon: CalendarDays,
+            open: () => setItemForm({ mode: 'new', kind: 'event' }),
+          },
+        ]
+      : []),
+    ...(viewTags.some(t => t.key !== 'event')
+      ? [
+          {
+            label: 'New Task',
+            icon: ListTodo,
+            open: () => setItemForm({ mode: 'new', kind: 'task' }),
+          },
+        ]
+      : []),
+    ...(active?.showRecurring
+      ? [
+          {
+            label: 'New Recurring Event',
+            icon: Repeat,
+            open: () => setRecurringForm({ mode: 'new' }),
+          },
+        ]
+      : []),
+  ];
+  const onlyNewOption = newOptions.length === 1 ? newOptions[0] : null;
+  const newMenu = (
+    renderTrigger: (ref: RefObject<ViewInstance | null>) => React.ReactNode,
+  ) => (
+    <Popover
+      open={newMenuOpen}
+      onClose={() => setNewMenuOpen(false)}
+      width={220}
+      variant="menu"
+      renderTrigger={renderTrigger}
+    >
+      <View className="p-1.5">
+        {newOptions.map(o => (
+          <MenuItem
+            key={o.label}
+            icon={o.icon}
+            label={o.label}
+            onPress={() => {
+              setNewMenuOpen(false);
+              o.open();
+            }}
+          />
+        ))}
+      </View>
+    </Popover>
+  );
   const openSearch = () => setSearchOpen(true);
   const { refresh, refreshing } = useRefresh();
 
@@ -459,13 +520,13 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
     </Press>
   );
 
-  const navTabs = active ? (
+  const navTabs = showModeTabs ? (
     <View
       ref={tourTarget('tabs')}
       accessibilityRole="tablist"
       className="flex-row items-center gap-0.5"
     >
-      {modeOptions.map(opt =>
+      {MODE_OPTIONS.map(opt =>
         navTab(
           opt.key,
           opt.label,
@@ -570,9 +631,24 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
       <MenuButton label="View options" onOpen={ref => openMenu(active, ref)} />
       {contentMode === 'tasks' && canCreate ? (
         <View ref={tourTarget('newTask')}>
-          <Button variant="primary" icon={Plus} onPress={newTask}>
-            {active?.type === 'calendar' ? 'New event' : 'New task'}
-          </Button>
+          {onlyNewOption ? (
+            <Button variant="primary" icon={Plus} onPress={onlyNewOption.open}>
+              {onlyNewOption.label}
+            </Button>
+          ) : (
+            newMenu(ref => (
+              <View ref={ref}>
+                <Button
+                  variant="primary"
+                  icon={Plus}
+                  iconRight={ChevronDown}
+                  onPress={() => setNewMenuOpen(o => !o)}
+                >
+                  New
+                </Button>
+              </View>
+            ))
+          )}
         </View>
       ) : null}
       {contentMode === 'recurring' &&
@@ -583,7 +659,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
           icon={Plus}
           onPress={() => setRecurringForm({ mode: 'new' })}
         >
-          New event
+          New Recurring Event
         </Button>
       ) : null}
       {alertsButton}
@@ -714,11 +790,29 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
     </View>
   );
 
-  const modeToggle = active ? (
+  // The phone's floating "+" button.
+  const fab = (label: string, onPress: () => void) => (
+    <Press
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      onPress={onPress}
+      style={
+        {
+          elevation: 6,
+          boxShadow: '0 8px 24px -6px rgba(0,0,0,0.35)',
+        } as object
+      }
+      className="h-14 w-14 items-center justify-center rounded-2xl bg-accent"
+    >
+      <Plus size={24} color={c.accentForeground} strokeWidth={2.25} />
+    </Press>
+  );
+
+  const modeToggle = showModeTabs ? (
     <View className="bg-bg-main px-3 pb-2">
       <SegmentedControl
         size="sm"
-        options={modeOptions}
+        options={MODE_OPTIONS}
         value={contentMode}
         onChange={setContentMode}
         trackClassName="bg-bg-main"
@@ -778,30 +872,17 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
             (contentMode === 'recurring' &&
               active?.showRecurring !== false)) ? (
             <View className="absolute bottom-6 right-5">
-              <Press
-                accessibilityRole="button"
-                accessibilityLabel={
-                  contentMode === 'tasks'
-                    ? active?.type === 'calendar'
-                      ? 'New event'
-                      : 'New task'
-                    : 'New event'
-                }
-                onPress={
-                  contentMode === 'tasks'
-                    ? newTask
-                    : () => setRecurringForm({ mode: 'new' })
-                }
-                style={
-                  {
-                    elevation: 6,
-                    boxShadow: '0 8px 24px -6px rgba(0,0,0,0.35)',
-                  } as object
-                }
-                className="h-14 w-14 items-center justify-center rounded-2xl bg-accent"
-              >
-                <Plus size={24} color={c.accentForeground} strokeWidth={2.25} />
-              </Press>
+              {contentMode === 'tasks' && onlyNewOption
+                ? fab(onlyNewOption.label, onlyNewOption.open)
+                : contentMode === 'tasks'
+                ? newMenu(ref => (
+                    <View ref={ref}>
+                      {fab('New', () => setNewMenuOpen(o => !o))}
+                    </View>
+                  ))
+                : fab('New Recurring Event', () =>
+                    setRecurringForm({ mode: 'new' }),
+                  )}
             </View>
           ) : null}
         </>
@@ -809,6 +890,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
 
       <ItemModal />
       <ItemFormModal />
+      <RecurringFormHost view={active} />
       <RecurringTaskViewModal />
       <SearchModal />
       <AlertFormModal

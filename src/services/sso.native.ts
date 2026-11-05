@@ -2,6 +2,7 @@ import { Platform } from 'react-native';
 import CookieManager from '@preeternal/react-native-cookie-manager';
 import { getEnv } from '../config/env';
 import { ssoLogin } from './auth';
+import { markLoggedOut } from './runtime';
 import { extractSsoProfile, getSsoAppId, getSsoUrl } from './ssoProfile';
 import { requestSsoLogin } from './ssoLoginRequest';
 import type { SsoAuthResponse } from './types';
@@ -57,6 +58,9 @@ export const isReturningFromSsoRedirect = (): boolean => false;
 
 // Clears the SSO session server-side, then drops local cookies so the WebView
 // doesn't sign straight back in on the next login.
+// The last step of signing out. The cookies are already cleared by ssoLogout.
+export const leaveAfterLogout = (): void => markLoggedOut();
+
 export const ssoLogout = async (): Promise<void> => {
   try {
     const res = await fetch(`${getSsoUrl()}/auth/logout`, {
@@ -78,7 +82,10 @@ export const ssoLogout = async (): Promise<void> => {
 // 401 = no session → null; any other failure throws ("couldn't check").
 const getWithSession = async <T>(path: string): Promise<T | null> => {
   await syncWebViewCookies();
-  const res = await fetch(`${getSsoUrl()}${path}`, { method: 'GET', credentials: 'include' });
+  const res = await fetch(`${getSsoUrl()}${path}`, {
+    method: 'GET',
+    credentials: 'include',
+  });
   if (res.status === 401) {
     return null;
   }

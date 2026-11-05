@@ -70,7 +70,7 @@ export function ShareViewModal({
     <Sheet visible={visible} onClose={onClose} size="md">
       <SheetHeader
         title={`Share “${view?.name ?? ''}”`}
-        description="People you share with see this view and its tasks."
+        description={`People you share with see this ${view?.name ?? 'view'}`}
         onClose={onClose}
       />
       <SheetBody>
@@ -217,7 +217,7 @@ function ShareRow({
         />
       </View>
       <View className="flex-row flex-wrap items-center gap-1.5 pl-[38px]">
-        <Text className="text-xs text-text-subtle">Can</Text>
+        <Text className="text-xs text-text-subtle">Can view. Also allow:</Text>
         {PERMS.map(p => (
           <Chip
             key={p.key}
@@ -227,7 +227,6 @@ function ShareRow({
             onPress={() => !busy && toggle(p.key)}
           />
         ))}
-        <Text className="text-xs text-text-subtle">tasks</Text>
       </View>
       {share.share_notes ? (
         <Text className="pl-[38px] text-xs italic text-text-main">
@@ -456,7 +455,7 @@ function AddPeople({
         <View className="mt-3 gap-3 border-t border-border-main pt-3">
           <View className="flex-row flex-wrap items-center gap-1.5">
             <Text className="text-xs text-text-subtle">
-              {count === 1 ? 'Can' : `All ${count} can`}
+              {count === 1 ? 'Can view' : `All ${count} can view`}. Also allow:
             </Text>
             {PERMS.map(p => (
               <Chip
@@ -467,7 +466,6 @@ function AddPeople({
                 onPress={() => setPerms(v => ({ ...v, [p.key]: !v[p.key] }))}
               />
             ))}
-            <Text className="text-xs text-text-subtle">tasks</Text>
           </View>
           <Field
             label="Note"

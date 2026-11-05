@@ -16,6 +16,7 @@ import {
   bucketKey,
   drainPages,
   findRootByTitle,
+  newestWithTitle,
   useRootRequest,
   type Bucket,
   refetchCalendarBuckets,
@@ -231,6 +232,10 @@ export function useTaskMutations() {
       'id' | 'createdById' | 'ownerId' | 'totalSubtasks' | 'assigneeIds'
     >,
     changes?: AssigneeChanges,
+    // The id must be this very task (invites are about to be e-mailed for it):
+    // only what's loaded could hold just an older task of the same title, so
+    // a root task is always looked up on the server.
+    exactId = false,
   ): Promise<{ id: string; failedAssignees: string[] }> => {
     const vid = ensure();
     await call(t => createTask(t, vid, taskToCreatePayload(draft)));
@@ -241,7 +246,10 @@ export function useTaskMutations() {
       : await refreshRoots([draft.start]);
     // A new root task is often past the pages loaded so far (or outside the
     // active quick filter) — look it up by title on the server instead.
-    let created = level.find(r => r.title === draft.title);
+    let created =
+      exactId && !draft.parentId
+        ? undefined
+        : newestWithTitle(level, draft.title);
     if (!created && !draft.parentId) {
       created = await withAuthRetry(token, t =>
         findRootByTitle(t, vid, activeView!, draft.title),
@@ -252,7 +260,9 @@ export function useTaskMutations() {
     }
     if (!created) {
       throw new Error(
-        'The task was created, but the server list doesn’t show it yet — it will appear after the next refresh.',
+        `The task was created, but the server list doesn’t show it yet — it will appear after the next refresh.${
+          exactId ? ' Invites weren’t sent; add them from the task.' : ''
+        }`,
       );
     }
     const assigning =

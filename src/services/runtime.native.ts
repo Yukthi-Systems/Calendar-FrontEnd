@@ -1,4 +1,6 @@
+import { Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import CookieManager from '@preeternal/react-native-cookie-manager';
 
 // iOS/Android: AsyncStorage for the persisted session; per-launch flags and the
 // post-logout marker live in memory (there's no URL or tab session to hang them on).
@@ -8,6 +10,16 @@ export const storage = {
   getItem: (key: string) => AsyncStorage.getItem(key),
   setItem: (key: string, value: string) => AsyncStorage.setItem(key, value),
   removeItem: (key: string) => AsyncStorage.removeItem(key),
+};
+
+// After a successful sign-out: everything in AsyncStorage, and all cookies.
+export const clearDeviceData = async (): Promise<void> => {
+  await Promise.allSettled([
+    AsyncStorage.clear(),
+    Platform.OS === 'ios'
+      ? CookieManager.clearAllStores()
+      : CookieManager.clearAll(),
+  ]);
 };
 
 const flags = new Set<string>();

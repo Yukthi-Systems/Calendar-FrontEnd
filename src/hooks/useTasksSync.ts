@@ -76,10 +76,25 @@ const cursorAfter = (page: TaskInfoDto[]): TaskCursor | undefined => {
     : { cursor_start_at: last.start_at, cursor_task_id: last.task_id };
 };
 
+// The most recently created of `rows` titled `title` — task ids only go up, and
+// POST /tasks/create returns no id, so this is how a new task is found again
+// even when an older one has the same title.
+export const newestWithTitle = (
+  rows: TaskInfoDto[],
+  title: string,
+  newest?: TaskInfoDto,
+): TaskInfoDto | undefined =>
+  rows.reduce(
+    (best, r) =>
+      r.title === title && (!best || r.task_id > best.task_id) ? r : best,
+    newest,
+  );
+
 // Exact-title lookup of one root task without loading the whole list: the
 // server narrows by the title's longest word (title_contains only takes
-// letters/digits/spaces), then this keeps the exact match. A title with no
-// searchable word falls back to draining the full list.
+// letters/digits/spaces), then this keeps the newest exact match, so it reads
+// every page of matches. A title with no searchable word falls back to
+// draining the full list.
 export async function findRootByTitle(
   token: string,
   viewId: number,
@@ -91,24 +106,22 @@ export async function findRootByTitle(
     '',
   );
   if (!word) {
-    return (await drainPages(token, viewId, view)).find(r => r.title === title);
+    return newestWithTitle(await drainPages(token, viewId, view), title);
   }
+  let newest: TaskInfoDto | undefined;
   let cursor: TaskCursor | undefined;
   for (let page = 0; page < MAX_PAGES; page++) {
     const batch = await listTasks(token, viewId, {
       ...buildTaskFilter(view, undefined, cursor),
       title_contains: word,
     });
-    const hit = batch.find(r => r.title === title);
-    if (hit) {
-      return hit;
-    }
+    newest = newestWithTitle(batch, title, newest);
     cursor = cursorAfter(batch);
     if (!cursor) {
-      return undefined;
+      break;
     }
   }
-  return undefined;
+  return newest;
 }
 
 // Populates itemsAtom from Tasks-Main-API's /tasks for the active view's ROOT

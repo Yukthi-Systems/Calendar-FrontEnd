@@ -9,6 +9,7 @@ import {
   parse,
 } from 'date-fns';
 import ChevronRight from 'lucide-react-native/icons/chevron-right';
+import X from 'lucide-react-native/icons/x';
 import {
   itemFormAtom,
   itemsAtom,
@@ -24,6 +25,7 @@ import {
   type Person,
 } from '../../hooks/useUsers';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
+import { useInviteAll } from '../../hooks/useEventInvitees';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import type { Status, TaskTag } from '../../data/types';
 import { errorMessage, toast } from '../../atoms/feedback';
@@ -42,6 +44,7 @@ import {
   SheetFooter,
   SheetHeader,
 } from '../ui';
+import { InviteEmailInput, isValidEmail } from './InviteEmailInput';
 import { MultiSelectDropdown } from './shared';
 
 const DATE_FMT = 'yyyy-MM-dd';
@@ -82,12 +85,15 @@ export function ItemFormModal() {
   const taskOwnerId = editing?.ownerId ?? activeView?.ownerId;
   const taskCreatorId = editing?.createdById;
   const statusOptions = allowedStatuses(activeView?.statusFilter);
-  // A Calendar view is for events — a brand-new task made from one only
-  // offers the Event tag. Doesn't apply when editing: an existing task's
+  // A new event only offers the Event tag — from the "New" menu, or by default
+  // in a Calendar view, which is for events. Doesn't apply when editing: an existing task's
   // real tag (whatever it is) always stays pickable, never force-swapped
   // just because of which view happened to open it.
-  const calendarEventOnly = activeView?.type === 'calendar' && !editing;
-  const tagOptions = calendarEventOnly
+  const kind = form?.mode === 'new' ? form.kind : undefined;
+  const eventOnly =
+    !editing &&
+    (kind === 'event' || (!kind && activeView?.type === 'calendar'));
+  const tagOptions = eventOnly
     ? TAGS.filter(t => t.key === 'event')
     : allowedTags(activeView?.tagFilter);
 
@@ -95,6 +101,7 @@ export function ItemFormModal() {
     form?.mode === 'new' && form.parentId
       ? items.find(i => i.id === form.parentId)
       : undefined;
+  const isNewEvent = eventOnly && !parent;
   // Prefilled from a recurring event's "Create task" action (a template row
   // in Table/Calendar, or its own view sheet) — this form is otherwise
   // visually identical to editing a real task, so without this there's
@@ -127,6 +134,13 @@ export function ItemFormModal() {
   // shows them inline in Start/Due instead. Auto-expanded whenever a
   // non-Event task already has a time, so it's never hidden.
   const [showAdvanced, setShowAdvanced] = useState(false);
+  // A new event's invitees: there's no task to invite to until it's saved, so
+  // they wait here and are sent right after it's created (see save).
+  const [invitees, setInvitees] = useState<string[]>([]);
+  const [inviteDraft, setInviteDraft] = useState('');
+  const inviteAll = useInviteAll(
+    activeView ? Number(activeView.id) : undefined,
+  );
 
   // Server-backed: adding and removing are their own API calls
   // (POST /assignees/create, DELETE /assignees/remove), sent by addItem/editItem
@@ -174,6 +188,8 @@ export function ItemFormModal() {
       tagOptions,
     );
     setTag(resolvedTag);
+    setInvitees([]);
+    setInviteDraft('');
     setAssigneeIds(editing ? editing.assigneeIds : parent?.assigneeIds ?? []);
     const presetStart =
       form.mode === 'new' && form.start ? parseDate(form.start) : null;
@@ -275,6 +291,16 @@ export function ItemFormModal() {
     ? confirmedAssigneeIds.filter(id => !assigneeIds.includes(id))
     : [];
 
+  const addInvitee = (picked?: string) => {
+    const email = (picked ?? inviteDraft).trim().toLowerCase();
+    if (!isValidEmail(email)) {
+      toast.error('Enter a valid e-mail address');
+      return;
+    }
+    setInvitees(prev => (prev.includes(email) ? prev : [...prev, email]));
+    setInviteDraft('');
+  };
+
   const save = async () => {
     if (!valid) {
       setAttempted(true);
@@ -283,6 +309,18 @@ export function ItemFormModal() {
     if (!canSaveNow || saving) {
       return;
     }
+    const takesInvitees = tag === 'event' && !editing;
+    // An address typed but not added yet still counts — it's clearly meant.
+    const draftEmail = takesInvitees ? inviteDraft.trim().toLowerCase() : '';
+    if (draftEmail && !isValidEmail(draftEmail)) {
+      toast.error('Enter a valid e-mail address', {
+        description: 'Fix or clear the invitee before saving.',
+      });
+      return;
+    }
+    const toInvite = takesInvitees
+      ? [...new Set([...invitees, ...(draftEmail ? [draftEmail] : [])])]
+      : [];
     const fields = {
       title: title.trim(),
       description: description.trim(),
@@ -307,12 +345,15 @@ export function ItemFormModal() {
     setSaving(true);
     try {
       // Save, assign, then the list is re-read from the server (useTaskMutations).
+      let failedInvites: string[] = [];
       const { failedAssignees } = editing
         ? await editItem({ ...editing, ...fields }, changes)
         : await addItem(
             { parentId: parent?.id ?? null, ...fields },
             changes,
-          ).then(r => {
+            toInvite.length > 0,
+          ).then(async r => {
+            failedInvites = await inviteAll(r.id, toInvite);
             setSelected(r.id);
             return r;
           });
@@ -327,11 +368,37 @@ export function ItemFormModal() {
           },
         );
       }
+      if (failedInvites.length > 0) {
+        toast.error(
+          `Saved, but ${failedInvites.length} invite${
+            failedInvites.length === 1 ? '' : 's'
+          } couldn’t be sent`,
+          {
+            description: `${failedInvites.join(
+              ', ',
+            )} — try again from Invitees on the task.`,
+          },
+        );
+      }
       close();
-      toast.success(editing ? 'Changes saved' : 'Task created');
+      const sent = toInvite.length - failedInvites.length;
+      toast.success(
+        editing
+          ? 'Changes saved'
+          : isNewEvent
+          ? 'Event created'
+          : 'Task created',
+        sent > 0
+          ? { description: `${sent} invite${sent === 1 ? '' : 's'} sent.` }
+          : undefined,
+      );
     } catch (err) {
       toast.error(
-        editing ? 'Couldn’t save changes' : 'Couldn’t create the task',
+        editing
+          ? 'Couldn’t save changes'
+          : isNewEvent
+          ? 'Couldn’t create the event'
+          : 'Couldn’t create the task',
         {
           description: errorMessage(err, 'Please try again.'),
         },
@@ -351,7 +418,7 @@ export function ItemFormModal() {
     ? 'Edit task'
     : parent
     ? 'New subtask'
-    : calendarEventOnly
+    : eventOnly
     ? 'New event'
     : 'New task';
   const subtitle = editing
@@ -359,7 +426,7 @@ export function ItemFormModal() {
     : parent
     ? `Under “${parent.title}”`
     : fromTemplate
-    ? `From “${fromTemplate.title}” — creates a new task, the recurring event itself is unchanged`
+    ? `From “${fromTemplate.title}” — creates a new task, the Recurring Event itself is unchanged`
     : undefined;
 
   return (
@@ -391,63 +458,104 @@ export function ItemFormModal() {
           />
         </Field>
 
-        <Field
-          label="Status"
-          hint={
-            statusOptions.length < 5
-              ? `“${activeView?.name}” only shows these statuses.`
-              : null
-          }
-        >
-          <View className="flex-row flex-wrap gap-1.5">
-            {statusOptions.map(s => (
-              <Chip
-                key={s.key}
-                label={s.label}
-                color={s.color}
-                active={status === s.key}
-                onPress={() => setStatus(s.key)}
-              />
-            ))}
-          </View>
-        </Field>
+        {/* A new event: nothing to choose — it's an Event,
+            Not Started (see the defaults set when the form opens). */}
+        {eventOnly ? null : (
+          <>
+            <Field
+              label="Status"
+              hint={
+                statusOptions.length < 5
+                  ? `“${activeView?.name}” only shows these statuses.`
+                  : null
+              }
+            >
+              <View className="flex-row flex-wrap gap-1.5">
+                {statusOptions.map(s => (
+                  <Chip
+                    key={s.key}
+                    label={s.label}
+                    color={s.color}
+                    active={status === s.key}
+                    onPress={() => setStatus(s.key)}
+                  />
+                ))}
+              </View>
+            </Field>
 
-        <Field
-          label="Tag"
-          required
-          hint={
-            calendarEventOnly
-              ? 'Calendar views are for events.'
-              : tagOptions.length < 6
-              ? `“${activeView?.name}” only shows these tags.`
-              : null
-          }
-        >
-          <View className="flex-row flex-wrap gap-1.5">
-            {tagOptions.map(t => (
-              <Chip
-                key={t.key}
-                label={t.label}
-                color={t.color}
-                active={tag === t.key}
-                onPress={() => {
-                  setTag(t.key);
-                  // Leaving Event with a time already picked: open Advanced
-                  // so that time stays visible instead of riding along hidden.
-                  if (t.key !== 'event' && (startTime || endTime)) {
-                    setShowAdvanced(true);
-                  }
-                }}
-              />
-            ))}
-          </View>
-        </Field>
+            <Field
+              label="Tag"
+              required
+              hint={
+                tagOptions.length < 6
+                  ? `“${activeView?.name}” only shows these tags.`
+                  : null
+              }
+            >
+              <View className="flex-row flex-wrap gap-1.5">
+                {tagOptions.map(t => (
+                  <Chip
+                    key={t.key}
+                    label={t.label}
+                    color={t.color}
+                    active={tag === t.key}
+                    onPress={() => {
+                      setTag(t.key);
+                      // Leaving Event with a time already picked: open Advanced
+                      // so that time stays visible instead of riding along hidden.
+                      if (t.key !== 'event' && (startTime || endTime)) {
+                        setShowAdvanced(true);
+                      }
+                    }}
+                  />
+                ))}
+              </View>
+            </Field>
+          </>
+        )}
 
-        {tag === 'event' ? (
+        {tag === 'event' && editing ? (
           <Callout>
             Event tasks invite people by e-mail instead of assigning them —
-            you’ll find Invitees on the task once it’s saved.
+            you’ll find Invitees on the task.
           </Callout>
+        ) : null}
+        {tag === 'event' && !editing ? (
+          <Field
+            label="Invitees"
+            hint="Optional. Each person gets an e-mail once the event is created."
+          >
+            <InviteEmailInput
+              value={inviteDraft}
+              onChangeText={setInviteDraft}
+              onAdd={addInvitee}
+              exclude={new Set(invitees)}
+              addLabel="Add"
+            />
+            {invitees.length > 0 ? (
+              <View className="mt-2 flex-row flex-wrap gap-1.5">
+                {invitees.map(email => (
+                  <View
+                    key={email}
+                    className="flex-row items-center gap-1 rounded-full border border-border-main bg-bg-card py-1 pl-2.5 pr-1"
+                  >
+                    <Text className="text-xs text-text-heading">{email}</Text>
+                    <Press
+                      accessibilityRole="button"
+                      accessibilityLabel={`Remove ${email}`}
+                      hitSlop={6}
+                      onPress={() =>
+                        setInvitees(prev => prev.filter(e => e !== email))
+                      }
+                      className="h-5 w-5 items-center justify-center rounded-full hover:bg-hover"
+                    >
+                      <X size={12} color={c.subtle} />
+                    </Press>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+          </Field>
         ) : null}
 
         {tag === 'event' ? null : (
@@ -598,9 +706,7 @@ export function ItemFormModal() {
                       mode="time"
                       value={endTime}
                       onChange={setEndTime}
-                      min={
-                        end === start && startTime ? startTime : undefined
-                      }
+                      min={end === start && startTime ? startTime : undefined}
                       clearable
                       placeholder="Any time"
                       accessibilityLabel="Due time"
@@ -623,7 +729,13 @@ export function ItemFormModal() {
           loading={saving}
           disabled={!canSaveNow || (attempted && !valid)}
         >
-          {editing ? 'Save changes' : parent ? 'Create subtask' : 'Create task'}
+          {editing
+            ? 'Save changes'
+            : parent
+            ? 'Create subtask'
+            : eventOnly
+            ? 'Create event'
+            : 'Create task'}
         </Button>
       </SheetFooter>
     </Sheet>

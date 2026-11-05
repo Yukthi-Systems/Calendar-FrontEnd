@@ -147,7 +147,7 @@ export function ViewModal({
   }[] = [
     {
       key: 'recurring',
-      label: 'Recurring tasks',
+      label: 'Recurring Event',
       on: showRecurring,
       set: setShowRecurring,
     },

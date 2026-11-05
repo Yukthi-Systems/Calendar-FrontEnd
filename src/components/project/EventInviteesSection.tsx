@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
-import { Platform, Text, View, type ViewInstance } from 'react-native';
+import { useEffect, useState } from 'react';
+import { Text, View } from 'react-native';
 import { format, parseISO } from 'date-fns';
 import ChevronRight from 'lucide-react-native/icons/chevron-right';
 import Clock from 'lucide-react-native/icons/clock';
 import Mail from 'lucide-react-native/icons/mail';
-import Plus from 'lucide-react-native/icons/plus';
 import Trash2 from 'lucide-react-native/icons/trash';
 import { confirm, errorMessage, toast } from '../../atoms/feedback';
 import { isServerTaskId } from '../../data/taskSync';
@@ -17,24 +16,9 @@ import {
   useEventInviteeMutations,
   useEventInvitees,
 } from '../../hooks/useEventInvitees';
-import { useUserSearch, type Person } from '../../hooks/useUsers';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { Badge, Button, IconButton, Input, Press } from '../ui';
-import { Avatar } from './shared';
-import { SuggestPortal } from '../ui/SuggestPortal';
-
-// Deliberately stricter than bare RFC 5322 (which technically allows local
-// parts like "user#name" and TLDs like "com2" — the `email-validator`
-// package this used to use let both through): local part limited to the
-// characters real mail addresses actually use, and the final domain label
-// must be letters-only (a real TLD never contains a digit).
-const EMAIL_RE =
-  /^[a-zA-Z0-9](?:[a-zA-Z0-9._%+-]*[a-zA-Z0-9])?@(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
-const isValidEmail = (value: string) => EMAIL_RE.test(value);
-
-// Below this many characters, a search is too unspecific to be worth a
-// round-trip (and would just flash a noisy "no matches" dropdown).
-const SEARCH_MIN_CHARS = 3;
+import { Badge, IconButton, Press } from '../ui';
+import { InviteEmailInput, isValidEmail } from './InviteEmailInput';
 
 // How long "Resend" is locked after a click — session-local only (nothing on
 // the server records when an invite was last resent, so this doesn't survive
@@ -75,50 +59,7 @@ export function EventInviteesSection({
     useEventInviteeMutations(viewId, taskId);
   const [email, setEmail] = useState('');
   const [inviting, setInviting] = useState(false);
-  const [suggestOpen, setSuggestOpen] = useState(false);
   const [busyEmail, setBusyEmail] = useState<string | null>(null);
-  const trimmedEmail = email.trim();
-  const searchQuery =
-    trimmedEmail.length >= SEARCH_MIN_CHARS ? trimmedEmail : '';
-  const { people: searchHits, isSearching } = useUserSearch(searchQuery);
-  // Inline dropdown, portaled to document.body on web (not a Popover/Modal —
-  // react-native-web's Modal traps focus, which was stealing it right out of
-  // the input the moment a suggestion appeared, making the field look
-  // uneditable; and rendering it nested in place, even with a high z-index,
-  // could still lose to a later, unrelated sibling subtree — see
-  // SuggestPortal's comment). Closed by a plain outside-click listener,
-  // scoped to this field's own container plus the portaled panel itself.
-  const suggestBoxRef = useRef<ViewInstance | null>(null);
-  const suggestPanelRef = useRef<ViewInstance | null>(null);
-  const [anchor, setAnchor] = useState<{
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-  } | null>(null);
-  useEffect(() => {
-    if (!suggestOpen) {
-      return;
-    }
-    suggestBoxRef.current?.measureInWindow((x, y, width, height) =>
-      setAnchor({ x, y, width, height }),
-    );
-  }, [suggestOpen]);
-  useEffect(() => {
-    if (!suggestOpen || Platform.OS !== 'web') {
-      return;
-    }
-    const onPointerDown = (e: PointerEvent) => {
-      const target = e.target as Node;
-      const box = suggestBoxRef.current as unknown as HTMLElement | null;
-      const panel = suggestPanelRef.current as unknown as HTMLElement | null;
-      if (!box?.contains(target) && !panel?.contains(target)) {
-        setSuggestOpen(false);
-      }
-    };
-    document.addEventListener('pointerdown', onPointerDown);
-    return () => document.removeEventListener('pointerdown', onPointerDown);
-  }, [suggestOpen]);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const toggleExpanded = (inviteeEmail: string) =>
     setExpanded(prev => {
@@ -154,7 +95,6 @@ export function EventInviteesSection({
       toast.error('Enter a valid e-mail address');
       return;
     }
-    setSuggestOpen(false);
     setInviting(true);
     try {
       await inviteByEmail(value);
@@ -215,14 +155,6 @@ export function EventInviteesSection({
   const invitedEmails = new Set(
     invitees.map(inv => inv.invitee_email.toLowerCase()),
   );
-  const suggestions = searchHits.filter(
-    p => !invitedEmails.has(p.email.toLowerCase()),
-  );
-  const showSuggestions =
-    suggestOpen && searchQuery.length > 0 && (Platform.OS !== 'web' || !!anchor);
-
-  const selectSuggestion = (person: Person) => invite(person.email);
-
   return (
     <View>
       <View className="mb-3 flex-row items-center gap-2">
@@ -233,122 +165,15 @@ export function EventInviteesSection({
       </View>
 
       {canInvite ? (
-        <View className="mb-3 flex-row items-end gap-2">
-          <View ref={suggestBoxRef} style={{ position: 'relative', flex: 1 }}>
-            <Input
-              value={email}
-              onChangeText={text => {
-                setEmail(text);
-                setSuggestOpen(text.trim().length >= SEARCH_MIN_CHARS);
-              }}
-              onFocus={() =>
-                setSuggestOpen(trimmedEmail.length >= SEARCH_MIN_CHARS)
-              }
-              onSubmitEditing={() => {
-                if (trimmedEmail) {
-                  invite();
-                }
-              }}
-              placeholder="person@example.com"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              returnKeyType="done"
-            />
-            {showSuggestions ? (
-              <SuggestPortal>
-                {/* Positioning/background/border/stacking are all inline
-                    (not Tailwind classes) for the same reason this is
-                    portaled at all: it has to float reliably above
-                    whatever's behind it, with no ambiguity about whether a
-                    class resolved or which stacking context it landed in. */}
-                <View
-                  ref={suggestPanelRef}
-                  style={[
-                    Platform.OS === 'web'
-                      ? {
-                          position: 'fixed' as const,
-                          left: anchor?.x ?? 0,
-                          top: (anchor?.y ?? 0) + (anchor?.height ?? 0) + 4,
-                          width: anchor?.width,
-                          zIndex: 9999,
-                        }
-                      : {
-                          position: 'absolute' as const,
-                          left: 0,
-                          right: 0,
-                          top: '100%',
-                          marginTop: 4,
-                          zIndex: 50,
-                          elevation: 12,
-                        },
-                    {
-                      backgroundColor: c.card,
-                      borderColor: c.border,
-                      borderWidth: 1,
-                      borderRadius: 12,
-                      overflow: 'hidden',
-                      padding: 6,
-                    },
-                    Platform.OS === 'web'
-                      ? ({
-                          boxShadow: c.dark
-                            ? '0 16px 40px -8px rgba(0,0,0,0.7)'
-                            : '0 16px 40px -12px rgba(20,20,40,0.28), 0 2px 6px rgba(20,20,40,0.06)',
-                        } as object)
-                      : null,
-                  ]}
-                >
-                  {isSearching ? (
-                    <Text className="px-2 py-1.5 text-sm text-text-subtle">
-                      Searching…
-                    </Text>
-                  ) : suggestions.length > 0 ? (
-                    <View className="gap-0.5">
-                      {suggestions.map(p => (
-                        <Press
-                          key={p.id}
-                          accessibilityRole="button"
-                          accessibilityLabel={`Invite ${p.name} (${p.email})`}
-                          onPress={() => selectSuggestion(p)}
-                          className="flex-row items-center gap-2 rounded-md px-2 py-1.5 hover:bg-hover"
-                        >
-                          <Avatar id={p.id} size={22} />
-                          <View className="flex-1">
-                            <Text
-                              numberOfLines={1}
-                              className="text-sm text-text-heading"
-                            >
-                              {p.name}
-                            </Text>
-                            <Text
-                              numberOfLines={1}
-                              className="text-2xs text-text-subtle"
-                            >
-                              {p.email}
-                            </Text>
-                          </View>
-                        </Press>
-                      ))}
-                    </View>
-                  ) : (
-                    <Text className="px-2 py-1.5 text-sm text-text-subtle">
-                      No matching members — press Invite to add “
-                      {trimmedEmail}” by e-mail anyway.
-                    </Text>
-                  )}
-                </View>
-              </SuggestPortal>
-            ) : null}
-          </View>
-          <Button
-            variant="primary"
-            icon={Plus}
-            onPress={() => invite()}
+        <View className="mb-3">
+          <InviteEmailInput
+            value={email}
+            onChangeText={setEmail}
+            onAdd={invite}
+            exclude={invitedEmails}
             loading={inviting}
-            disabled={!email.trim()}
-          >
-            Invite
-          </Button>
+            addLabel="Invite"
+          />
         </View>
       ) : null}
 

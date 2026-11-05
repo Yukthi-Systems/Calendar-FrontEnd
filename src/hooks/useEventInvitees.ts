@@ -42,6 +42,29 @@ export function useEventInvitees(
   };
 }
 
+// Invites a list of people to a task that was only just created (the new-event
+// form), one at a time. Resolves to the e-mails that were refused.
+export function useInviteAll(viewId: number | undefined) {
+  const token = useAtomValue(tokenAtom);
+  const queryClient = useQueryClient();
+  return async (taskId: string, emails: string[]): Promise<string[]> => {
+    const failed: string[] = [];
+    for (const email of emails) {
+      try {
+        await withAuthRetry(token, t =>
+          createInvite(t, viewId!, Number(taskId), email),
+        );
+      } catch {
+        failed.push(email);
+      }
+    }
+    queryClient.invalidateQueries({
+      queryKey: inviteesKey(viewId ?? 0, taskId),
+    });
+    return failed;
+  };
+}
+
 export function useEventInviteeMutations(
   viewId: number | undefined,
   taskId: string | undefined,

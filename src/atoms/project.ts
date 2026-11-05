@@ -66,6 +66,10 @@ export type ItemFormState =
   // further link back to the template once saved, same as any other task.
   | {
       mode: 'new';
+      // Picked from the "New" menu: 'event' locks the form to the Event tag,
+      // 'task' offers every tag the view allows. Unset: a Calendar view makes
+      // events, any other view behaves like 'task'.
+      kind?: 'event' | 'task';
       status?: Status;
       parentId?: string;
       start?: string;

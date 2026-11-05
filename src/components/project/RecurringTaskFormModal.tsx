@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Text, View } from 'react-native';
+import { useAtom } from 'jotai';
 import { allowedTags } from '../../data/constants';
 import {
   RRULE_PRESETS,
@@ -7,12 +8,13 @@ import {
   describeRRule,
   normalizeRRule,
   parseRRule,
-  rruleColor,
 } from '../../data/rrule';
-import { RECURRING_ICONS } from '../../data/recurringIcons';
 import { errorMessage, toast } from '../../atoms/feedback';
-import { useThemeColors, useTone } from '../../hooks/useThemeColors';
-import type { TemplateDraft } from '../../hooks/useRecurringTasks';
+import { recurringFormAtom } from '../../atoms/project';
+import {
+  useRecurringTaskMutations,
+  type TemplateDraft,
+} from '../../hooks/useRecurringTasks';
 import type { RecurringTemplate } from '../../data/recurringTemplate';
 import type { ProjectView, TaskTag } from '../../data/types';
 import {
@@ -22,7 +24,6 @@ import {
   Field,
   Input,
   MarkdownEditor,
-  Press,
   Sheet,
   SheetBody,
   SheetFooter,
@@ -57,14 +58,13 @@ export function RecurringTaskFormModal({
   onSave: (draft: TemplateDraft) => Promise<void>;
 }) {
   const tagOptions = allowedTags(view?.tagFilter);
-  const c = useThemeColors();
-  const toneOf = useTone();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [tag, setTag] = useState<TaskTag>('work');
   const [customText, setCustomText] = useState<string>(RRULE_PRESETS[0].rule);
   const [time, setTime] = useState('');
+  // No picker: a new one gets the default, an existing one keeps its own.
   const [icon, setIcon] = useState('repeat');
   const [saving, setSaving] = useState(false);
   const [attempted, setAttempted] = useState(false);
@@ -101,6 +101,11 @@ export function RecurringTaskFormModal({
       return err instanceof RRuleError ? err.message : 'Invalid rule';
     }
   })();
+  // A rule none of the chips stand for (made before the rule box was hidden) is
+  // kept as it is when saving, so it's spelled out rather than looking unset.
+  const isPreset = RRULE_PRESETS.some(
+    p => p.rule === safeNormalize(customText),
+  );
   const titleError = title.trim() ? null : 'Name is required';
   const valid = !titleError && !ruleError;
 
@@ -127,7 +132,7 @@ export function RecurringTaskFormModal({
       });
       close();
     } catch (err) {
-      toast.error('Couldn’t save the event', {
+      toast.error('Couldn’t save the Recurring Event', {
         description: errorMessage(err, 'Please try again.'),
       });
     } finally {
@@ -138,7 +143,7 @@ export function RecurringTaskFormModal({
   return (
     <Sheet visible={visible} onClose={close} size="sm" dismissable={!saving}>
       <SheetHeader
-        title={template ? 'Edit event' : 'New event'}
+        title={template ? 'Edit Recurring Event' : 'New Recurring Event'}
         onClose={close}
       />
       <SheetBody>
@@ -155,7 +160,7 @@ export function RecurringTaskFormModal({
           <MarkdownEditor
             value={description}
             onChangeText={setDescription}
-            placeholder="What this event is for"
+            placeholder="What this Recurring Event is for"
             minHeight={60}
           />
         </Field>
@@ -191,21 +196,7 @@ export function RecurringTaskFormModal({
               />
             ))}
           </View>
-          <View className="mt-2">
-            <Input
-              value={customText}
-              onChangeText={setCustomText}
-              placeholder="FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,FR"
-              autoCapitalize="characters"
-              autoCorrect={false}
-              invalid={attempted && !!ruleError}
-            />
-            <Text className="mt-1 text-xs text-text-subtle">
-              RFC 5545 RRULE: FREQ, INTERVAL, COUNT or UNTIL, BYDAY, BYMONTHDAY,
-              BYMONTH, BYSETPOS, WKST.
-            </Text>
-          </View>
-          {rule ? (
+          {rule && !isPreset ? (
             <Text className="mt-1.5 text-sm text-text-heading">
               {describeRRule(rule)}
             </Text>
@@ -225,35 +216,6 @@ export function RecurringTaskFormModal({
             </View>
           </Field>
         ) : null}
-        <Field label="Icon">
-          <View className="flex-row flex-wrap gap-1.5">
-            {RECURRING_ICONS.map(({ key, icon: Icon, label }) => {
-              const active = icon === key;
-              const tone = toneOf(rruleColor(customText));
-              return (
-                <Press
-                  key={key}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: active }}
-                  accessibilityLabel={label}
-                  onPress={() => setIcon(key)}
-                  style={
-                    active
-                      ? { backgroundColor: tone.bg, borderColor: tone.bg }
-                      : undefined
-                  }
-                  className={`h-9 w-9 items-center justify-center rounded-lg border ${
-                    active
-                      ? ''
-                      : 'border-border-main bg-bg-card hover:border-border-strong hover:bg-hover'
-                  }`}
-                >
-                  <Icon size={16} color={active ? tone.fg : c.text} />
-                </Press>
-              );
-            })}
-          </View>
-        </Field>
       </SheetBody>
       <SheetFooter>
         <Button variant="ghost" onPress={close} disabled={saving}>
@@ -264,5 +226,28 @@ export function RecurringTaskFormModal({
         </Button>
       </SheetFooter>
     </Sheet>
+  );
+}
+
+// The form as the whole workspace opens it (recurringFormAtom): the Recurring
+// tab's rows and buttons, and the navbar's "New" menu on any tab.
+export function RecurringFormHost({ view }: { view: ProjectView | undefined }) {
+  const [form, setForm] = useAtom(recurringFormAtom);
+  const { createTemplate, updateTemplate } = useRecurringTaskMutations(view);
+  return (
+    <RecurringTaskFormModal
+      visible={!!form}
+      view={view}
+      template={form?.mode === 'edit' ? form.template : null}
+      onClose={() => setForm(null)}
+      onSave={async draft => {
+        if (form?.mode === 'edit') {
+          await updateTemplate({ id: form.template.id, ...draft });
+        } else {
+          await createTemplate(draft);
+        }
+        setForm(null);
+      }}
+    />
   );
 }
