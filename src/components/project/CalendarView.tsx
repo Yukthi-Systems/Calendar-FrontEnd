@@ -37,6 +37,7 @@ import {
 } from 'date-fns';
 import {
   itemFormAtom,
+  calendarNewDateAtom,
   calendarRangeAtom,
   itemsAtom,
   selectedItemIdAtom,
@@ -269,6 +270,18 @@ function CalendarBody({
     setCalendarRange({ from: rangeFrom, to: rangeTo, agendaFrom, agendaTo });
   }, [rangeFrom, rangeTo, agendaFrom, agendaTo, setCalendarRange]);
   useEffect(() => () => setCalendarRange(null), [setCalendarRange]);
+
+  const setCalendarNewDate = useSetAtom(calendarNewDateAtom);
+  const newDate =
+    mode === 'day'
+      ? format(cursor, DATE_FMT)
+      : mode === 'week'
+      ? format(endOfWeek(cursor, WEEK), DATE_FMT)
+      : null;
+  useEffect(() => {
+    setCalendarNewDate(newDate);
+  }, [newDate, setCalendarNewDate]);
+  useEffect(() => () => setCalendarNewDate(null), [setCalendarNewDate]);
   const { loadingEarlier, truncatedMonths } = useCalendarBuckets(view);
   const loadNote = truncatedMonths.length
     ? `Over 2,000 tasks in ${truncatedMonths
@@ -356,7 +369,12 @@ function CalendarBody({
     setMode('day');
   };
   const newTaskOn = canCreate
-    ? (day: Date) => setForm({ mode: 'new', start: format(day, DATE_FMT) })
+    ? (day: Date) =>
+        setForm({
+          mode: 'new',
+          start: format(day, DATE_FMT),
+          keepPast: mode === 'day',
+        })
     : undefined;
 
   useShortcuts({

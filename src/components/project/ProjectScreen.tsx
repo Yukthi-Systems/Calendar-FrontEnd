@@ -32,9 +32,10 @@ import Search from 'lucide-react-native/icons/search';
 import X from 'lucide-react-native/icons/x';
 import Table2 from 'lucide-react-native/icons/table-2';
 import type { LucideIcon } from 'lucide-react-native';
-import { useAtom, useSetAtom } from 'jotai';
+import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import {
   activeViewIdAtom,
+  calendarNewDateAtom,
   contentModeAtom,
   itemFormAtom,
   recurringFormAtom,
@@ -226,7 +227,11 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
     ) : null;
   // New task only where I may create (always in my own views; per share otherwise).
   const { canCreate } = useViewAccess(active);
-  const newTask = () => setItemForm({ mode: 'new' });
+  const calendarNewDate = useAtomValue(calendarNewDateAtom);
+  const newDatePreset = calendarNewDate
+    ? { start: calendarNewDate, keepPast: true }
+    : {};
+  const newTask = () => setItemForm({ mode: 'new', ...newDatePreset });
   const [newMenuOpen, setNewMenuOpen] = useState(false);
   // What this view can make — the server refuses a tag outside the view's
   // filter, and a Recurring Event where they're off. More than one choice is a
@@ -237,7 +242,8 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
         {
           label: 'New Event',
           icon: CalendarDays,
-          open: () => setItemForm({ mode: 'new', kind: 'event' }),
+          open: () =>
+            setItemForm({ mode: 'new', kind: 'event', ...newDatePreset }),
         },
       ]
     : [];
@@ -246,7 +252,8 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
         {
           label: 'New Task',
           icon: ListTodo,
-          open: () => setItemForm({ mode: 'new', kind: 'task' }),
+          open: () =>
+            setItemForm({ mode: 'new', kind: 'task', ...newDatePreset }),
         },
       ]
     : [];

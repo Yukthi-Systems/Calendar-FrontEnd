@@ -73,6 +73,9 @@ export type ItemFormState =
       status?: Status;
       parentId?: string;
       start?: string;
+      // Use `start` as given even if it's in the past, instead of falling back
+      // to today — for a date the person is deliberately looking at.
+      keepPast?: boolean;
       fromTemplate?: {
         title: string;
         description: string;
@@ -109,3 +112,8 @@ export interface CalendarRange {
   agendaTo?: string;
 }
 export const calendarRangeAtom = atom<CalendarRange | null>(null);
+
+// The date ('yyyy-MM-dd') the navbar's "New" should prefill while a Calendar
+// view is open: the day shown in Day layout, the week's last day in Week
+// layout. Null otherwise, so the form falls back to today.
+export const calendarNewDateAtom = atom<string | null>(null);
