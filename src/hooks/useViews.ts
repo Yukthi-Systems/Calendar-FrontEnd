@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { getDefaultStore, useAtomValue } from 'jotai';
 import { tokenAtom } from '../atoms/auth';
@@ -65,7 +66,8 @@ export function useViewList() {
     // slower `shared` query on reload, landing on `views[0]` (see
     // useActiveView's fallback) instead of the shared view in the URL
     // whenever `mine` happened to resolve first.
-    ready: (mine.isSuccess || mine.isError) && (shared.isSuccess || shared.isError),
+    ready:
+      (mine.isSuccess || mine.isError) && (shared.isSuccess || shared.isError),
     isLoading: mine.isLoading,
     error: mine.error,
     refetch: () => Promise.all([mine.refetch(), shared.refetch()]),
@@ -83,10 +85,13 @@ export function useActiveView(): ProjectView | undefined {
   const activeId = useAtomValue(activeViewIdAtom);
   const base = views.find(v => v.id === activeId) ?? views[0];
   const myShare = useMyShare(base);
-  if (base?.shared && myShare.data) {
-    return applySharedUiInfo(base, myShare.data.ui_info);
-  }
-  return base;
+  // The same object until something really changes, so a memoized view isn't
+  // redrawn for it.
+  const myUiInfo = base?.shared ? myShare.data?.ui_info : undefined;
+  return useMemo(
+    () => (base?.shared && myUiInfo ? applySharedUiInfo(base, myUiInfo) : base),
+    [base, myUiInfo],
+  );
 }
 
 // Same, for code outside React (the native widget bridge).

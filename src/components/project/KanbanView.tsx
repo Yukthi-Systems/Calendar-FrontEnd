@@ -19,6 +19,7 @@ import {
 import { allowedStatuses, statusInfo, tagInfo } from '../../data/constants';
 import { errorMessage, toast } from '../../atoms/feedback';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
+import { isNearScrollEnd } from '../../hooks/useRenderLimit';
 import { useViewAccess } from '../../hooks/useViews';
 import type { ProjectView, Status, WorkItem } from '../../data/types';
 import { useThemeColors } from '../../hooks/useThemeColors';
@@ -53,6 +54,8 @@ const DRAG_SLOP = 6;
 // to the server and the board re-reads (no optimistic update); order inside a
 // column is the server's (by start date) — the API has nowhere to store a manual
 // order, so there's no within-column reordering.
+const COLUMN_STEP = 30;
+
 export function KanbanView({ view }: { view: ProjectView }) {
   // A card can't be created in, or moved to, a status outside the view's filter
   // (the server refuses it), so those columns don't exist here.
@@ -73,6 +76,10 @@ export function KanbanView({ view }: { view: ProjectView }) {
   // so showing them as their own cards would make the board depend on whatever
   // happened to get fetched elsewhere.
   const rootItems = items.filter(i => !i.parentId);
+  // Each column draws its first cards, and more as it's scrolled (see
+  // useRenderLimit — per column here, since they scroll separately).
+  const [limits, setLimits] = useState<Partial<Record<Status, number>>>({});
+  const limitOf = (status: Status) => limits[status] ?? COLUMN_STEP;
 
   const move = (item: WorkItem, status: Status) =>
     editItem({ ...item, status })
@@ -247,6 +254,15 @@ export function KanbanView({ view }: { view: ProjectView }) {
               ) : (
                 <ScrollView
                   scrollEnabled={!dragging}
+                  scrollEventThrottle={100}
+                  onScroll={e => {
+                    if (isNearScrollEnd(e) && limitOf(col.key) < list.length) {
+                      setLimits(prev => ({
+                        ...prev,
+                        [col.key]: limitOf(col.key) + COLUMN_STEP,
+                      }));
+                    }
+                  }}
                   className="flex-1"
                   contentContainerStyle={{
                     gap: 8,
@@ -254,7 +270,7 @@ export function KanbanView({ view }: { view: ProjectView }) {
                     paddingBottom: 80,
                   }}
                 >
-                  {list.map(item => (
+                  {list.slice(0, limitOf(col.key)).map(item => (
                     <DraggableCard
                       key={item.id}
                       item={item}

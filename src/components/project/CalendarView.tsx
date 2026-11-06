@@ -50,6 +50,7 @@ import {
   templateOccurrences,
   withoutCreatedOccurrences,
 } from '../../data/recurringOccurrences';
+import { passesTaskFilter } from '../../data/taskFilter';
 import { showsField } from '../../data/viewFields';
 import type { ProjectView, ViewField, WorkItem } from '../../data/types';
 import { useThemeColors, useTone } from '../../hooks/useThemeColors';
@@ -63,6 +64,7 @@ import { useViewAccess } from '../../hooks/useViews';
 import { mix } from '../../theme/color';
 import { Button, IconButton, Kbd, Press, SegmentedControl } from '../ui';
 import { AssigneeAvatars, ItemRow, RecurrenceIcon, StatusIcon } from './shared';
+import { TaskFilterPopover, useTaskFilter } from './TaskFilter';
 import { Tooltip } from './Tooltip';
 
 const WEEK = { weekStartsOn: 1 } as const;
@@ -299,12 +301,17 @@ function CalendarBody({
           ),
     [view.showRecurring, recurringTemplates, occRange, agendaRange, allItems],
   );
+  const filter = useTaskFilter(view);
+  const { filters } = filter;
+  // Applied here rather than by the server, so changing it needs no refetch of
+  // the month buckets. Everything below (grid, agenda, task count) reads this.
   const items = useMemo(
-    () => [
-      ...allItems.filter(i => !i.parentId),
-      ...virtualOccurrences.map(v => v.item),
-    ],
-    [allItems, virtualOccurrences],
+    () =>
+      [
+        ...allItems.filter(i => !i.parentId),
+        ...virtualOccurrences.map(v => v.item),
+      ].filter(i => passesTaskFilter(i, filters)),
+    [allItems, virtualOccurrences, filters],
   );
   const fields = view.fields;
   const setForm = useSetAtom(itemFormAtom);
@@ -453,6 +460,7 @@ function CalendarBody({
             {loadNote ? ` · ${loadNote}` : ''}
           </Text>
         ) : null}
+        <TaskFilterPopover view={view} filter={filter} />
         <SegmentedControl options={MODES} value={mode} onChange={pickMode} />
       </View>
 
@@ -497,7 +505,6 @@ function CalendarBody({
                 day={selected}
                 items={items}
                 fields={fields}
-                onNewTask={newTaskOn}
                 onSelectDay={setSelected}
                 onOccurrencePress={openOccurrence}
               />
@@ -523,7 +530,6 @@ function CalendarBody({
                 day={selected}
                 items={items}
                 fields={fields}
-                onNewTask={newTaskOn}
                 onSelectDay={setSelected}
                 onOccurrencePress={openOccurrence}
               />
@@ -1178,14 +1184,12 @@ function AgendaPanel({
   day,
   items,
   fields,
-  onNewTask,
   onSelectDay,
   onOccurrencePress,
 }: {
   day: Date;
   items: WorkItem[];
   fields?: ViewField[];
-  onNewTask?: (d: Date) => void;
   onSelectDay: (d: Date) => void;
   onOccurrencePress: (item: WorkItem) => void;
 }) {
@@ -1212,23 +1216,13 @@ function AgendaPanel({
 
   return (
     <View>
-      <View className="mb-3 flex-row items-center justify-between">
-        <View>
-          <Text className="text-2xs font-semibold uppercase tracking-wider text-text-subtle">
-            {isToday(day) ? 'Today' : format(day, 'EEEE')}
-          </Text>
-          <Text className="text-lg font-semibold text-text-heading">
-            {format(day, 'MMMM d')}
-          </Text>
-        </View>
-        {onNewTask ? (
-          <IconButton
-            icon={Plus}
-            variant="outline"
-            label={`New event on ${format(day, 'MMM d')}`}
-            onPress={() => onNewTask(day)}
-          />
-        ) : null}
+      <View className="mb-3">
+        <Text className="text-2xs font-semibold uppercase tracking-wider text-text-subtle">
+          {isToday(day) ? 'Today' : format(day, 'EEEE')}
+        </Text>
+        <Text className="text-lg font-semibold text-text-heading">
+          {format(day, 'MMMM d')}
+        </Text>
       </View>
       <View className="gap-1.5">
         {agenda.map(o => (

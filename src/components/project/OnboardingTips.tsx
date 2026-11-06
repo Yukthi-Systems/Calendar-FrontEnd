@@ -27,9 +27,9 @@ const TIPS: { target: TourTargetKey; title: string; body: string }[] = [
     body: 'We’ve set up three views for you: Work & Priorities (work, important, urgent and other tasks), Events Calendar (your meetings and events by day, week, month and year) and All Tasks (everything). Switch between them here.',
   },
   {
-    target: 'newView',
+    target: 'views',
     title: 'Make your own view',
-    body: 'Create a table, board, roadmap or calendar with its own status and tag filters.',
+    body: 'Choose New view in this menu to create a table, board, roadmap or calendar with its own status and tag filters.',
   },
   {
     target: 'tabs',

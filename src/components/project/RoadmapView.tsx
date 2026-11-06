@@ -11,6 +11,7 @@ import { useAtomValue, useSetAtom } from 'jotai';
 import GanttChart from 'lucide-react-native/icons/chart-no-axes-gantt';
 import Plus from 'lucide-react-native/icons/plus';
 import type { ProjectView, Status, WorkItem } from '../../data/types';
+import { isNearScrollEnd, useRenderLimit } from '../../hooks/useRenderLimit';
 import { useViewAccess } from '../../hooks/useViews';
 import {
   addDays,
@@ -173,9 +174,11 @@ function RoadmapTimeline({
   const { dayWidth, groupBy, headerLabel, padBefore, padAfter } =
     ZOOM_CONFIG[zoom];
 
-  const rows = flattenTree(
+  const allRows = flattenTree(
     [...items].sort((a, b) => a.start.localeCompare(b.start)),
   );
+  const { limit, showMore } = useRenderLimit();
+  const rows = allRows.slice(0, limit);
   const starts = items.map(i => i.start).sort();
   const ends = items.map(i => i.end).sort();
   const first = startOfWeek(addDays(parseISO(starts[0]), -padBefore), {
@@ -253,7 +256,16 @@ function RoadmapTimeline({
           </ScrollView>
         </View>
 
-        <ScrollView className="flex-1" contentContainerClassName="pb-20">
+        <ScrollView
+          className="flex-1"
+          contentContainerClassName="pb-20"
+          scrollEventThrottle={100}
+          onScroll={e => {
+            if (isNearScrollEnd(e) && limit < allRows.length) {
+              showMore();
+            }
+          }}
+        >
           <View className="flex-row">
             <View
               style={{ width: LABEL_W }}

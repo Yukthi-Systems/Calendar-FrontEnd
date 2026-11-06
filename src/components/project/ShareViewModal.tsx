@@ -3,7 +3,6 @@ import { ScrollView, Text, View } from 'react-native';
 import Plus from 'lucide-react-native/icons/plus';
 import Search from 'lucide-react-native/icons/search';
 import Trash2 from 'lucide-react-native/icons/trash';
-import Users from 'lucide-react-native/icons/users';
 import X from 'lucide-react-native/icons/x';
 import { useAtomValue } from 'jotai';
 import { formatDistanceToNow, parseISO } from 'date-fns';
@@ -53,7 +52,6 @@ export function ShareViewModal({
   view: ProjectView | null;
   onClose: () => void;
 }) {
-  const c = useThemeColors();
   const shares = useViewShares(visible ? view : null);
   // Alphabetical by name, so rows don't jump when the server's order changes —
   // a permission change re-adds that person (see useShareMutations), which moves
@@ -70,13 +68,14 @@ export function ShareViewModal({
     <Sheet visible={visible} onClose={onClose} size="md">
       <SheetHeader
         title={`Share “${view?.name ?? ''}”`}
-        description={`People you share with see this ${view?.name ?? 'view'}`}
         onClose={onClose}
       />
       <SheetBody>
-        <Text className="mb-2 text-xs font-medium text-text-heading">
-          People with access{list.length ? ` · ${list.length}` : ''}
-        </Text>
+        {list.length > 0 ? (
+          <Text className="mb-2 text-xs font-medium text-text-heading">
+            People with access · {list.length}
+          </Text>
+        ) : null}
         {shares.isLoading ? (
           <View className="mb-5 gap-2">
             <Skeleton className="h-12 w-full rounded-lg" />
@@ -88,14 +87,7 @@ export function ShareViewModal({
               {errorMessage(shares.error, 'Please try again.')}
             </Callout>
           </View>
-        ) : list.length === 0 ? (
-          <View className="mb-5 flex-row items-center gap-2.5 rounded-lg border border-dashed border-border-strong px-3 py-3">
-            <Users size={16} color={c.subtle} />
-            <Text className="flex-1 text-sm text-text-main">
-              Only you can see this view.
-            </Text>
-          </View>
-        ) : (
+        ) : list.length > 0 ? (
           <View className="mb-5 overflow-hidden rounded-xl border border-border-main">
             {list.map((s, i) => (
               <ShareRow
@@ -106,7 +98,7 @@ export function ShareViewModal({
               />
             ))}
           </View>
-        )}
+        ) : null}
 
         {view ? (
           <AddPeople view={view} existing={list.map(s => s.user_id)} />
@@ -471,11 +463,6 @@ function AddPeople({
             label="Note"
             required
             className="mb-0"
-            hint={
-              count === 1
-                ? `${picked[0].name} sees this at the top of the view.`
-                : 'Everyone you add sees this at the top of the view.'
-            }
             error={
               tried && noteMissing ? 'Add a short note so they know why.' : null
             }

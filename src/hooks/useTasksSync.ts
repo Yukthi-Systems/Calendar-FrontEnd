@@ -439,9 +439,10 @@ export function useCalendarBuckets(view: ProjectView | undefined) {
 const QUICK_FILTER_DEBOUNCE_MS = 300;
 
 // TableView's quick filter, as the root task list request applies it (debounced,
-// so a burst of chip taps is one request). Only Table views have that filter
-// UI — taskFiltersAtom is session-wide, so any other layout ignores it rather
-// than inherit a Table view's leftover filter.
+// so a burst of chip taps is one request). taskFiltersAtom is session-wide, so
+// every other layout ignores it here rather than inherit a leftover filter —
+// the Calendar has the same filter UI but applies it to its month buckets
+// itself (CalendarView).
 export function useRootQuickFilter(
   view: ProjectView | undefined,
 ): ServerQuickFilter | undefined {

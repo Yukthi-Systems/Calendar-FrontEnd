@@ -5,7 +5,6 @@ import type { ViewInstance } from 'react-native';
 // whichever are on screen and skips the rest (e.g. Filter outside a table).
 export type TourTargetKey =
   | 'views'
-  | 'newView'
   | 'tabs'
   | 'newTask'
   | 'filter'

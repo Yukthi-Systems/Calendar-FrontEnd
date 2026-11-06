@@ -20,7 +20,6 @@ import type { ProjectView, TaskTag } from '../../data/types';
 import {
   Button,
   Chip,
-  DateField,
   Field,
   Input,
   MarkdownEditor,
@@ -47,6 +46,7 @@ export function RecurringTaskFormModal({
   visible,
   view,
   template,
+  kind,
   onClose,
   onSave,
 }: {
@@ -54,15 +54,28 @@ export function RecurringTaskFormModal({
   view: ProjectView | undefined;
   // null = creating.
   template: RecurringTemplate | null;
+  // What's being created, when the "New" menu said (see RecurringFormState).
+  kind?: 'event' | 'task';
   onClose: () => void;
   onSave: (draft: TemplateDraft) => Promise<void>;
 }) {
-  const tagOptions = allowedTags(view?.tagFilter);
+  const viewTags = allowedTags(view?.tagFilter);
+  const tagOptions =
+    kind === 'event'
+      ? viewTags.filter(t => t.key === 'event')
+      : kind === 'task'
+      ? viewTags.filter(t => t.key !== 'event')
+      : viewTags;
+  const noun =
+    kind === 'task' || (template && template.tag !== 'event')
+      ? 'Recurring Task'
+      : 'Recurring Event';
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [tag, setTag] = useState<TaskTag>('work');
   const [customText, setCustomText] = useState<string>(RRULE_PRESETS[0].rule);
+  // No field for it: a new one has none, an existing one keeps its own.
   const [time, setTime] = useState('');
   // No picker: a new one gets the default, an existing one keeps its own.
   const [icon, setIcon] = useState('repeat');
@@ -132,7 +145,7 @@ export function RecurringTaskFormModal({
       });
       close();
     } catch (err) {
-      toast.error('Couldn’t save the Recurring Event', {
+      toast.error(`Couldn’t save the ${noun}`, {
         description: errorMessage(err, 'Please try again.'),
       });
     } finally {
@@ -143,7 +156,7 @@ export function RecurringTaskFormModal({
   return (
     <Sheet visible={visible} onClose={close} size="sm" dismissable={!saving}>
       <SheetHeader
-        title={template ? 'Edit Recurring Event' : 'New Recurring Event'}
+        title={`${template ? 'Edit' : 'New'} ${noun}`}
         onClose={close}
       />
       <SheetBody>
@@ -160,31 +173,34 @@ export function RecurringTaskFormModal({
           <MarkdownEditor
             value={description}
             onChangeText={setDescription}
-            placeholder="What this Recurring Event is for"
+            placeholder={`What this ${noun} is for`}
             minHeight={60}
           />
         </Field>
-        <Field label="Tag" required>
-          <View className="flex-row flex-wrap gap-1.5">
-            {tagOptions.map(t => (
-              <Chip
-                key={t.key}
-                label={t.label}
-                color={t.color}
-                active={tag === t.key}
-                onPress={() => {
-                  setTag(t.key);
-                  // Only Event occurrences have a time of day — switching
-                  // away drops whatever time was picked so it doesn't
-                  // silently ride along hidden.
-                  if (t.key !== 'event') {
-                    setTime('');
-                  }
-                }}
-              />
-            ))}
-          </View>
-        </Field>
+        {/* A new Recurring Event is always tagged Event, so there's no choice to show. */}
+        {kind === 'event' ? null : (
+          <Field label="Tag" required>
+            <View className="flex-row flex-wrap gap-1.5">
+              {tagOptions.map(t => (
+                <Chip
+                  key={t.key}
+                  label={t.label}
+                  color={t.color}
+                  active={tag === t.key}
+                  onPress={() => {
+                    setTag(t.key);
+                    // Only Event occurrences have a time of day — switching
+                    // away drops whatever time was picked so it doesn't
+                    // silently ride along hidden.
+                    if (t.key !== 'event') {
+                      setTime('');
+                    }
+                  }}
+                />
+              ))}
+            </View>
+          </Field>
+        )}
         <Field label="Repeats" required error={attempted ? ruleError : null}>
           <View className="flex-row flex-wrap gap-1.5">
             {RRULE_PRESETS.map(p => (
@@ -202,20 +218,6 @@ export function RecurringTaskFormModal({
             </Text>
           ) : null}
         </Field>
-        {tag === 'event' ? (
-          <Field label="Time" hint="Optional — what time of day this is for.">
-            <View className="w-32">
-              <DateField
-                mode="time"
-                value={time}
-                onChange={setTime}
-                clearable
-                placeholder="Any time"
-                accessibilityLabel="Time of day"
-              />
-            </View>
-          </Field>
-        ) : null}
       </SheetBody>
       <SheetFooter>
         <Button variant="ghost" onPress={close} disabled={saving}>
@@ -239,6 +241,7 @@ export function RecurringFormHost({ view }: { view: ProjectView | undefined }) {
       visible={!!form}
       view={view}
       template={form?.mode === 'edit' ? form.template : null}
+      kind={form?.mode === 'new' ? form.kind : undefined}
       onClose={() => setForm(null)}
       onSave={async draft => {
         if (form?.mode === 'edit') {

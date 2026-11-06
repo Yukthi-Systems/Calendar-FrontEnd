@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState, useMemo, useRef } from 'react';
 import { ScrollView, Text, View } from 'react-native';
-import { useAtom, useAtomValue, useSetAtom } from 'jotai';
+import { useAtomValue, useSetAtom } from 'jotai';
 import { format, parseISO } from 'date-fns';
 import ArrowDown from 'lucide-react-native/icons/arrow-down';
 import ArrowUp from 'lucide-react-native/icons/arrow-up';
@@ -11,19 +11,15 @@ import Filter from 'lucide-react-native/icons/funnel';
 import ListTodo from 'lucide-react-native/icons/list-todo';
 import Plus from 'lucide-react-native/icons/plus';
 import Repeat from 'lucide-react-native/icons/repeat';
-import X from 'lucide-react-native/icons/x';
 import {
-  EMPTY_TASK_FILTERS,
   itemFormAtom,
   itemsAtom,
   selectedItemIdAtom,
   selectedTemplateIdAtom,
-  taskFiltersAtom,
   tasksLoadingAtom,
-  type TaskFilters,
 } from '../../atoms/project';
 import { currentUserIdAtom } from '../../atoms/members';
-import { allowedStatuses, allowedTags, tagInfo } from '../../data/constants';
+import { tagInfo } from '../../data/constants';
 import { MAX_DEPTH, hasSubtasks } from '../../data/tree';
 import { TABLE_FIELDS, showsField } from '../../data/viewFields';
 import {
@@ -35,30 +31,19 @@ import {
 } from '../../data/recurringOccurrences';
 import { useTaskMutations } from '../../hooks/useTaskMutations';
 import { useRootTasksQuery } from '../../hooks/useTasksSync';
+import { isNearScrollEnd, useRenderLimit } from '../../hooks/useRenderLimit';
 import { useRecurringTasks } from '../../hooks/useRecurringTasks';
-import {
-  useUpdateMySharedViewInfo,
-  useViewAccess,
-  useViewMutations,
-} from '../../hooks/useViews';
+import { useViewAccess, useViewMutations } from '../../hooks/useViews';
 import { errorMessage, toast } from '../../atoms/feedback';
-import type {
-  ProjectView,
-  Status,
-  TaskTag,
-  ViewField,
-  WorkItem,
-} from '../../data/types';
+import type { ProjectView, ViewField, WorkItem } from '../../data/types';
 import { useThemeColors } from '../../hooks/useThemeColors';
-import { useUserSearch, usePeople, type Person } from '../../hooks/useUsers';
+import { usePeople, type Person } from '../../hooks/useUsers';
 import {
   Badge,
   Button,
   Chip,
-  DateField,
   EmptyState,
   IconButton,
-  Popover,
   Press,
   Skeleton,
 } from '../ui';
@@ -66,12 +51,12 @@ import {
   AssigneeAvatars,
   Avatar,
   DueDate,
-  MultiSelectDropdown,
   RecurrenceIcon,
   StatusBadge,
   SubtaskBadge,
   namesOf,
 } from './shared';
+import { TaskFilterPopover, useTaskFilter } from './TaskFilter';
 import { tourTarget } from './tourTargets';
 
 type SortKey =
@@ -214,8 +199,6 @@ type Row =
     };
 
 const LEVEL_W = 22; // width of one indentation column
-// How close to the bottom (px) scrolling gets before the next page is fetched.
-const LOAD_MORE_THRESHOLD_PX = 400;
 const ROW_H = 44;
 const CHILD_ROW_H = 40;
 const GROUP_ROW_H = 32; // loading / add-subtask rows
@@ -320,20 +303,12 @@ function TreeGuides({
 
 export function TableView({ view }: { view: ProjectView }) {
   const allItems = useAtomValue(itemsAtom);
-  const [filters, setFilters] = useAtom(taskFiltersAtom);
-  const filterActive =
-    filters.statuses.length > 0 ||
-    filters.tags.length > 0 ||
-    filters.assigneeIds.length > 0 ||
-    !!filters.dueFrom ||
-    !!filters.dueTo;
-  const passesFilter = (i: WorkItem) =>
-    (filters.statuses.length === 0 || filters.statuses.includes(i.status)) &&
-    (filters.tags.length === 0 || filters.tags.includes(i.tag)) &&
-    (filters.assigneeIds.length === 0 ||
-      i.assigneeIds.some(id => filters.assigneeIds.includes(id))) &&
-    (!filters.dueFrom || i.end >= filters.dueFrom) &&
-    (!filters.dueTo || i.end <= filters.dueTo);
+  const filter = useTaskFilter(view);
+  const {
+    active: filterActive,
+    passes: passesFilter,
+    clear: clearFilters,
+  } = filter;
   // Each task — root or subtask — is judged on its own fields, not just
   // whether its root happens to match: a subtask now shows only when it (or
   // one of its own loaded descendants) actually passes the filter. A
@@ -343,9 +318,17 @@ export function TableView({ view }: { view: ProjectView }) {
   // as top level). Subtasks that haven't been fetched yet (a row never
   // expanded) can only be judged by their root, same as before — there's
   // nothing else loaded to check.
+  const childrenByParent = useMemo(() => {
+    const map = new Map<string, WorkItem[]>();
+    for (const i of allItems) {
+      if (i.parentId) {
+        map.set(i.parentId, [...(map.get(i.parentId) ?? []), i]);
+      }
+    }
+    return map;
+  }, [allItems]);
   const matchesFilter = (i: WorkItem): boolean =>
-    passesFilter(i) ||
-    allItems.some(x => x.parentId === i.id && matchesFilter(x));
+    passesFilter(i) || (childrenByParent.get(i.id) ?? []).some(matchesFilter);
   const items = filterActive ? allItems.filter(matchesFilter) : allItems;
 
   // Each recurring template's own next occurrence, shown as one extra row
@@ -378,8 +361,13 @@ export function TableView({ view }: { view: ProjectView }) {
     data: rootPages,
   } = useRootTasksQuery(view);
   const rootPageCount = rootPages?.pages.length ?? 0;
+  const { limit: rowLimit, showMore: showMoreRows } = useRenderLimit();
+  const rowCount = useRef(0);
+  // Rows already fetched but not drawn yet come first; then the next page.
   const loadMoreRoots = () => {
-    if (hasMoreRoots && !loadingMoreRoots) {
+    if (rowLimit < rowCount.current) {
+      showMoreRows();
+    } else if (hasMoreRoots && !loadingMoreRoots) {
       fetchMoreRoots();
     }
   };
@@ -413,7 +401,6 @@ export function TableView({ view }: { view: ProjectView }) {
     parent.ownerId === CURRENT_USER_ID ||
     parent.createdById === CURRENT_USER_ID ||
     parent.assigneeIds.includes(CURRENT_USER_ID);
-  const updateMySharedViewInfo = useUpdateMySharedViewInfo();
   const c = useThemeColors();
   const columns = COLUMNS.filter(
     col => col.key === 'title' || showsField(view.fields, col.key),
@@ -457,57 +444,6 @@ export function TableView({ view }: { view: ProjectView }) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [loadingRows, setLoadingRows] = useState<Set<string>>(new Set());
   const [loadedRows, setLoadedRows] = useState<Set<string>>(new Set());
-  const [filterOpen, setFilterOpen] = useState(false);
-  const [assigneeQuery, setAssigneeQuery] = useState('');
-  const { people: assigneeSearchHits } = useUserSearch(assigneeQuery);
-  const filterAssigneePeople = usePeople(filters.assigneeIds);
-  const filterAssigneeOptions = [
-    ...new Map(
-      [...filterAssigneePeople.values(), ...assigneeSearchHits].map(
-        p => [p.id, p] as const,
-      ),
-    ).values(),
-  ].map(p => ({ id: p.id, label: p.name, hint: p.email, color: p.color }));
-  const toggleStatusFilter = (key: Status) =>
-    setFilters(f => ({
-      ...f,
-      statuses: f.statuses.includes(key)
-        ? f.statuses.filter(s => s !== key)
-        : [...f.statuses, key],
-    }));
-  const toggleTagFilter = (key: TaskTag) =>
-    setFilters(f => ({
-      ...f,
-      tags: f.tags.includes(key)
-        ? f.tags.filter(t => t !== key)
-        : [...f.tags, key],
-    }));
-  const toggleAssigneeFilter = (id: string) =>
-    setFilters(f => ({
-      ...f,
-      assigneeIds: f.assigneeIds.includes(id)
-        ? f.assigneeIds.filter(a => a !== id)
-        : [...f.assigneeIds, id],
-    }));
-  const setDueFrom = (dueFrom: string) => setFilters(f => ({ ...f, dueFrom }));
-  const setDueTo = (dueTo: string) => setFilters(f => ({ ...f, dueTo }));
-  // Saves right away rather than waiting on the filter popover's open→close
-  // (see the effect below) — "Clear filters" also appears outside the
-  // popover, in the no-matches EmptyState, where that close transition never
-  // fires at all, so without this the cleared filter only ever updated what
-  // was on screen, never what's saved for next time, in either a normal or a
-  // shared view.
-  const clearFilters = () => {
-    setFilters(EMPTY_TASK_FILTERS);
-    const save = view.shared
-      ? updateMySharedViewInfo(view.id, { filter: null })
-      : updateView({ ...view, quickFilter: undefined });
-    save.catch(err => {
-      toast.error('Couldn’t save the filter', {
-        description: errorMessage(err, 'Please try again.'),
-      });
-    });
-  };
   // Which columns this view shows — part of the view's own definition, so
   // only its owner can change it (a shared view's columns are the owner's).
   // Saved straight away; every column on is stored as "no restriction".
@@ -528,64 +464,6 @@ export function TableView({ view }: { view: ProjectView }) {
       });
     });
   };
-  const filterCount =
-    filters.statuses.length +
-    filters.tags.length +
-    filters.assigneeIds.length +
-    (filters.dueFrom || filters.dueTo ? 1 : 0);
-
-  // The filter atom is session-wide (taskFiltersAtom), not per view, so a
-  // status/tag picked while looking at one view could silently keep filtering
-  // another one that doesn't even offer it — load this view's own saved
-  // filter (view.quickFilter, round-tripped through ui_info by viewSync.ts)
-  // on every view change, instead of carrying over whatever was showing. For
-  // a shared view, `view` itself starts out without the viewer's own
-  // quickFilter and gets it a moment later once useMyShare resolves (see
-  // useActiveView) — same view.id both times — so this also has to react to
-  // the filter content arriving, not just to switching views, or a shared
-  // view's saved filter never gets applied after a fresh page load.
-  const quickFilterSignature = JSON.stringify(view.quickFilter ?? null);
-  useEffect(() => {
-    setFilters(view.quickFilter ?? EMPTY_TASK_FILTERS);
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run when switching views or when this view's saved filter content changes
-  }, [view.id, quickFilterSignature]);
-
-  // Save the filter back onto the view (so it's there again next time anyone
-  // opens it) once someone's done adjusting it, not on every single chip
-  // toggle — "done" being whenever the filter popover goes from open to
-  // closed, however that happened (trigger button, backdrop, Escape).
-  const quickFilterEqual = (a: TaskFilters, b: TaskFilters) =>
-    JSON.stringify([...a.statuses].sort()) ===
-      JSON.stringify([...b.statuses].sort()) &&
-    JSON.stringify([...a.tags].sort()) === JSON.stringify([...b.tags].sort()) &&
-    JSON.stringify([...a.assigneeIds].sort()) ===
-      JSON.stringify([...b.assigneeIds].sort()) &&
-    a.dueFrom === b.dueFrom &&
-    a.dueTo === b.dueTo;
-  const wasFilterOpen = useRef(filterOpen);
-  useEffect(() => {
-    if (wasFilterOpen.current && !filterOpen) {
-      const saved = view.quickFilter ?? EMPTY_TASK_FILTERS;
-      if (!quickFilterEqual(filters, saved)) {
-        const nextFilter = filterCount > 0 ? filters : undefined;
-        // My own (shared view) or the view's own (mine) — a shared view's
-        // definition is the owner's alone to edit (see ViewMenuModal.tsx),
-        // but saving just my own filter preference on it needs no edit grant
-        // at all (see useUpdateMySharedViewInfo).
-        const save = view.shared
-          ? updateMySharedViewInfo(view.id, { filter: nextFilter ?? null })
-          : updateView({ ...view, quickFilter: nextFilter });
-        save.catch(err => {
-          toast.error('Couldn’t save the filter', {
-            description: errorMessage(err, 'Please try again.'),
-          });
-        });
-      }
-    }
-    wasFilterOpen.current = filterOpen;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only react to the popover's own open/close
-  }, [filterOpen]);
-
   const sorted = [...displayItems].sort((a, b) => {
     const x = sortValue(a, sort.key, people);
     const y = sortValue(b, sort.key, people);
@@ -613,6 +491,7 @@ export function TableView({ view }: { view: ProjectView }) {
     loadingRows,
     canAddSubtaskTo,
   );
+  rowCount.current = rows.length;
   const roots = items.filter(i => !i.parentId);
   // Every loaded task that has subtasks (for Expand all) — the header counts only
   // top-level ones, so the number doesn't change as rows are expanded.
@@ -962,137 +841,33 @@ export function TableView({ view }: { view: ProjectView }) {
           ) : null}
         </Text>
         <View className="flex-row items-center gap-1.5">
-          <Popover
-            open={filterOpen}
-            onClose={() => setFilterOpen(false)}
-            width={320}
-            variant="menu"
-            renderTrigger={ref => (
-              <View ref={ref}>
-                <View ref={tourTarget('filter')}>
-                  <Button
-                    variant={filterCount > 0 ? 'secondary' : 'ghost'}
-                    size="sm"
-                    icon={Filter}
-                    onPress={() => setFilterOpen(o => !o)}
-                  >
-                    {filterCount > 0 ? `Filter (${filterCount})` : 'Filter'}
-                  </Button>
-                </View>
-              </View>
-            )}
+          <TaskFilterPopover
+            view={view}
+            filter={filter}
+            triggerRef={tourTarget('filter')}
           >
-            <View className="gap-3 p-3">
-              {!view.shared ? (
-                <View>
-                  <Text className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-text-subtle">
-                    Fields shown
-                  </Text>
-                  <View className="flex-row flex-wrap gap-1.5">
-                    {TABLE_FIELDS.map(f => (
-                      <Chip
-                        key={f.key}
-                        role="checkbox"
-                        label={f.label}
-                        active={showsField(view.fields, f.key)}
-                        onPress={() => toggleField(f.key)}
-                      />
-                    ))}
-                  </View>
-                  <Text className="mt-1 text-2xs text-text-subtle">
-                    The task title is always shown.
-                  </Text>
-                </View>
-              ) : null}
+            {!view.shared ? (
               <View>
                 <Text className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-text-subtle">
-                  Status
+                  Fields shown
                 </Text>
                 <View className="flex-row flex-wrap gap-1.5">
-                  {allowedStatuses(view.statusFilter).map(s => (
+                  {TABLE_FIELDS.map(f => (
                     <Chip
-                      key={s.key}
-                      label={s.label}
-                      color={s.color}
-                      active={filters.statuses.includes(s.key)}
-                      onPress={() => toggleStatusFilter(s.key)}
+                      key={f.key}
+                      role="checkbox"
+                      label={f.label}
+                      active={showsField(view.fields, f.key)}
+                      onPress={() => toggleField(f.key)}
                     />
                   ))}
                 </View>
-              </View>
-              <View>
-                <Text className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-text-subtle">
-                  Tag
+                <Text className="mt-1 text-2xs text-text-subtle">
+                  The task title is always shown.
                 </Text>
-                <View className="flex-row flex-wrap gap-1.5">
-                  {allowedTags(view.tagFilter).map(t => (
-                    <Chip
-                      key={t.key}
-                      label={t.label}
-                      color={t.color}
-                      active={filters.tags.includes(t.key)}
-                      onPress={() => toggleTagFilter(t.key)}
-                    />
-                  ))}
-                </View>
               </View>
-              <View>
-                <Text className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-text-subtle">
-                  Assignee
-                </Text>
-                <MultiSelectDropdown
-                  label="Filter by assignee"
-                  placeholder="Anyone"
-                  options={filterAssigneeOptions}
-                  selectedIds={filters.assigneeIds}
-                  onToggle={toggleAssigneeFilter}
-                  onQueryChange={setAssigneeQuery}
-                />
-              </View>
-              <View>
-                <Text className="mb-1.5 text-2xs font-semibold uppercase tracking-wider text-text-subtle">
-                  Due date
-                </Text>
-                <View className="flex-row items-center gap-1.5">
-                  <View className="flex-1">
-                    <DateField
-                      mode="date"
-                      value={filters.dueFrom}
-                      onChange={setDueFrom}
-                      max={filters.dueTo || undefined}
-                      clearable
-                      placeholder="From"
-                      accessibilityLabel="Due from"
-                    />
-                  </View>
-                  <View className="flex-1">
-                    <DateField
-                      mode="date"
-                      value={filters.dueTo}
-                      onChange={setDueTo}
-                      min={filters.dueFrom || undefined}
-                      clearable
-                      placeholder="To"
-                      accessibilityLabel="Due to"
-                    />
-                  </View>
-                </View>
-              </View>
-              {filterCount > 0 ? (
-                <Press
-                  feedback="none"
-                  accessibilityRole="button"
-                  onPress={clearFilters}
-                  className="flex-row items-center gap-1 self-start rounded-md py-1"
-                >
-                  <X size={13} color={c.accent} />
-                  <Text className="text-sm font-medium text-accent">
-                    Clear filters
-                  </Text>
-                </Press>
-              ) : null}
-            </View>
-          </Popover>
+            ) : null}
+          </TaskFilterPopover>
           {subtasksEnabled && parents.length > 0 ? (
             <Button
               variant="ghost"
@@ -1183,12 +958,7 @@ export function TableView({ view }: { view: ProjectView }) {
                 scrollEventThrottle={100}
                 onLayout={e => setBodyHeight(e.nativeEvent.layout.height)}
                 onScroll={e => {
-                  const { contentOffset, contentSize, layoutMeasurement } =
-                    e.nativeEvent;
-                  if (
-                    contentOffset.y + layoutMeasurement.height >=
-                    contentSize.height - LOAD_MORE_THRESHOLD_PX
-                  ) {
+                  if (isNearScrollEnd(e)) {
                     loadMoreRoots();
                   }
                 }}
@@ -1213,8 +983,9 @@ export function TableView({ view }: { view: ProjectView }) {
                         <Skeleton className="h-3 w-16 rounded" />
                       </View>
                     ))
-                  : rows.map(renderRow)}
-                {hasMoreRoots && items.length > 0 ? (
+                  : rows.slice(0, rowLimit).map(renderRow)}
+                {(hasMoreRoots || rowLimit < rows.length) &&
+                items.length > 0 ? (
                   <View
                     style={{ width: viewportWidth || undefined }}
                     className="h-12 items-center justify-center"

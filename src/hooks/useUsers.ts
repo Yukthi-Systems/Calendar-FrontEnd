@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import {
   useMutation,
   useQueries,
@@ -174,17 +174,24 @@ export function usePeople(ids: string[]): Map<string, Person> {
       staleTime: USER_STALE_MS,
     })),
   });
-  const map = new Map<string, Person>();
-  unique.forEach((id, i) => {
-    const data = results[i]?.data;
-    map.set(
-      id,
-      data
-        ? personFrom(data, id === me ? session?.username : undefined)
-        : placeholder(id),
-    );
-  });
-  return map;
+  // The same Map until someone's record changes.
+  const sig = `${me}|${session?.username}|${unique.join()}|${results
+    .map(r => r.dataUpdatedAt)
+    .join()}`;
+  return useMemo(() => {
+    const map = new Map<string, Person>();
+    unique.forEach((id, i) => {
+      const data = results[i]?.data;
+      map.set(
+        id,
+        data
+          ? personFrom(data, id === me ? session?.username : undefined)
+          : placeholder(id),
+      );
+    });
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- results is a new array every render; sig captures what matters
+  }, [sig]);
 }
 
 // Exact lookups for a pasted list of emails: each through GET /user/search (same

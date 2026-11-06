@@ -1,4 +1,11 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import {
+  memo,
+  useEffect,
+  useRef,
+  useState,
+  type ComponentType,
+  type RefObject,
+} from 'react';
 import {
   ScrollView,
   Text,
@@ -15,13 +22,14 @@ import ChevronDown from 'lucide-react-native/icons/chevron-down';
 import ChevronLeft from 'lucide-react-native/icons/chevron-left';
 import CloudOff from 'lucide-react-native/icons/cloud-off';
 import Ellipsis from 'lucide-react-native/icons/ellipsis';
+import Info from 'lucide-react-native/icons/info';
 import LayoutGrid from 'lucide-react-native/icons/layout-grid';
 import ListTodo from 'lucide-react-native/icons/list-todo';
-import MessageSquareText from 'lucide-react-native/icons/message-square-text';
 import Plus from 'lucide-react-native/icons/plus';
 import RefreshCw from 'lucide-react-native/icons/refresh-cw';
 import Repeat from 'lucide-react-native/icons/repeat';
 import Search from 'lucide-react-native/icons/search';
+import X from 'lucide-react-native/icons/x';
 import Table2 from 'lucide-react-native/icons/table-2';
 import type { LucideIcon } from 'lucide-react-native';
 import { useAtom, useSetAtom } from 'jotai';
@@ -55,7 +63,6 @@ import { useOnboarding } from '../../hooks/useOnboarding';
 import { VIEW_TYPES, allowedTags } from '../../data/constants';
 import type { ProjectView, ViewType } from '../../data/types';
 import {
-  Badge,
   Button,
   EmptyState,
   IconButton,
@@ -94,20 +101,22 @@ const MODE_OPTIONS: {
   icon: typeof ListTodo;
 }[] = [
   { key: 'tasks', label: 'Tasks', icon: ListTodo },
-  { key: 'recurring', label: 'Recurring Event', icon: Repeat },
+  { key: 'recurring', label: 'Recurring', icon: Repeat },
 ];
 
 // Width at which the view tabs become a left rail.
 const WIDE_BREAKPOINT = 1024;
 
+// memo: this screen re-renders on every navbar click (a menu opening, say), which
+// must not redraw hundreds of tasks underneath it.
 const VIEW_COMPONENTS: Record<
   ViewType,
-  (props: { view: ProjectView }) => React.JSX.Element
+  ComponentType<{ view: ProjectView }>
 > = {
-  table: TableView,
-  kanban: KanbanView,
-  roadmap: RoadmapView,
-  calendar: CalendarView,
+  table: memo(TableView),
+  kanban: memo(KanbanView),
+  roadmap: memo(RoadmapView),
+  calendar: memo(CalendarView),
 };
 
 // GitHub-Projects-style workspace: a saved view per rail entry (desktop) or tab
@@ -189,6 +198,32 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   }, [active?.id, active?.showRecurring]);
 
   const wide = width >= WIDE_BREAKPOINT;
+  // The bar above the view closes with its own ✕; the header's info button, there
+  // only while it's closed, brings it back. Stays as set when switching views,
+  // until the page reloads.
+  const [viewInfoOpen, setViewInfoOpen] = useState(true);
+  const { data: myShare } = useMyShare(active);
+  const shareNote = active?.shared ? myShare?.share_notes?.trim() : undefined;
+  const hasViewInfo =
+    !!shareNote || (wide && (!!active?.shared || !!active?.description));
+  const viewInfoToggle = (size?: 'lg') =>
+    hasViewInfo && !viewInfoOpen ? (
+      <IconButton
+        icon={Info}
+        label="Show view info"
+        size={size}
+        onPress={() => setViewInfoOpen(true)}
+      />
+    ) : null;
+  const viewInfoBar =
+    active && hasViewInfo && viewInfoOpen ? (
+      <ViewInfoBar
+        view={active}
+        note={shareNote}
+        showDetails={wide}
+        onClose={() => setViewInfoOpen(false)}
+      />
+    ) : null;
   // New task only where I may create (always in my own views; per share otherwise).
   const { canCreate } = useViewAccess(active);
   const newTask = () => setItemForm({ mode: 'new' });
@@ -224,10 +259,34 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
         },
       ]
     : [];
+  // The Recurring tab only makes recurring things, one of each kind the view's
+  // tags allow.
+  const recurringKindOptions = active?.showRecurring
+    ? [
+        ...(eventOption.length
+          ? [
+              {
+                label: 'New Recurring Event',
+                icon: Repeat,
+                open: () => setRecurringForm({ mode: 'new', kind: 'event' }),
+              },
+            ]
+          : []),
+        ...(taskOption.length
+          ? [
+              {
+                label: 'New Recurring Task',
+                icon: Repeat,
+                open: () => setRecurringForm({ mode: 'new', kind: 'task' }),
+              },
+            ]
+          : []),
+      ]
+    : [];
   // What the screen holds comes first.
   const newOptions: { label: string; icon: LucideIcon; open: () => void }[] =
     contentMode === 'recurring'
-      ? [...recurringOption, ...eventOption, ...taskOption]
+      ? recurringKindOptions
       : active?.type === 'calendar'
       ? [...eventOption, ...taskOption, ...recurringOption]
       : [...taskOption, ...eventOption, ...recurringOption];
@@ -431,49 +490,37 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
     </ScrollView>
   );
 
-  // ── Desktop: view switcher + "New view", in the content header ────────────
+  // ── Desktop: view switcher, in the content header ─────────────────────────
   const viewSwitcher = (
-    <View className="flex-row items-center gap-1.5">
-      <View ref={tourTarget('views')}>
-        <Popover
-          open={viewPickerOpen}
-          onClose={() => setViewPickerOpen(false)}
-          width={248}
-          variant="menu"
-          renderTrigger={ref => (
-            <View ref={ref}>
-              <Press
-                feedback="subtle"
-                accessibilityRole="button"
-                accessibilityLabel="Switch view"
-                onPress={() => setViewPickerOpen(o => !o)}
-                className="h-9 max-w-[280px] flex-row items-center gap-2 rounded-lg border border-border-main bg-bg-main px-2.5 hover:border-border-strong"
+    <View ref={tourTarget('views')}>
+      <Popover
+        open={viewPickerOpen}
+        onClose={() => setViewPickerOpen(false)}
+        width={248}
+        variant="menu"
+        renderTrigger={ref => (
+          <View ref={ref}>
+            <Press
+              feedback="subtle"
+              accessibilityRole="button"
+              accessibilityLabel="Switch view"
+              onPress={() => setViewPickerOpen(o => !o)}
+              className="h-9 max-w-[280px] flex-row items-center gap-2 rounded-lg border border-border-main bg-bg-main px-2.5 hover:border-border-strong"
+            >
+              {active ? viewIcon(active.type, c.text) : null}
+              <Text
+                numberOfLines={1}
+                className="shrink text-sm font-semibold text-text-heading"
               >
-                {active ? viewIcon(active.type, c.text) : null}
-                <Text
-                  numberOfLines={1}
-                  className="shrink text-sm font-semibold text-text-heading"
-                >
-                  {active?.name ?? 'Select a view'}
-                </Text>
-                <ChevronDown size={14} color={c.subtle} />
-              </Press>
-            </View>
-          )}
-        >
-          {viewPickerList}
-        </Popover>
-      </View>
-      <View ref={tourTarget('newView')}>
-        <IconButton
-          icon={Plus}
-          label="New view"
-          onPress={() => {
-            setViewPickerOpen(false);
-            openNewView();
-          }}
-        />
-      </View>
+                {active?.name ?? 'Select a view'}
+              </Text>
+              <ChevronDown size={14} color={c.subtle} />
+            </Press>
+          </View>
+        )}
+      >
+        {viewPickerList}
+      </Popover>
     </View>
   );
 
@@ -600,16 +647,9 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
       {navDivider}
       {viewSwitcher}
       {navTabs}
-      <View className="flex-1 flex-row items-center gap-3">
-        {active.shared ? <SharedByBadge ownerId={active.ownerId} /> : null}
-        {active.description ? (
-          <Text numberOfLines={1} className="flex-1 text-sm text-text-subtle">
-            {active.description}
-          </Text>
-        ) : null}
-      </View>
+      {/* Fills the space between the tabs and the actions. */}
       {contentMode === 'tasks' ? (
-        <View ref={tourTarget('search')}>
+        <View ref={tourTarget('search')} className="min-w-9 flex-1">
           <Press
             feedback="subtle"
             accessibilityRole="button"
@@ -618,23 +658,30 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
             className="h-8 flex-row items-center gap-2 rounded-lg border border-border-main bg-bg-main px-2.5 hover:border-border-strong"
           >
             <Search size={14} color={c.subtle} />
-            {/* The navbar is tight below ~1280px — keep just the icon there. */}
-            {width >= 1280 ? (
+            {/* Too little room for words on a tight navbar — just the icon. */}
+            {width >= 1180 ? (
               <>
-                <Text className="text-sm text-text-subtle">Search tasks</Text>
+                <Text
+                  numberOfLines={1}
+                  className="flex-1 text-sm text-text-subtle"
+                >
+                  Search tasks
+                </Text>
                 <Kbd>/</Kbd>
               </>
             ) : null}
           </Press>
         </View>
-      ) : null}
+      ) : (
+        <View className="flex-1" />
+      )}
+      {viewInfoToggle()}
       <IconButton
         icon={RefreshCw}
         label={refreshing ? 'Refreshing…' : 'Refresh (R)'}
         disabled={refreshing}
         onPress={refresh}
       />
-      <MenuButton label="View options" onOpen={ref => openMenu(active, ref)} />
       {canCreate ? (
         <View ref={tourTarget('newTask')}>
           {onlyNewOption ? (
@@ -728,10 +775,13 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
         }
       />
     ) : contentMode === 'recurring' ? (
-      <RecurringTasksView view={active} />
+      <>
+        {viewInfoBar}
+        <RecurringTasksView view={active} />
+      </>
     ) : ActiveView ? (
       <>
-        {active.shared ? <SharedNote view={active} /> : null}
+        {viewInfoBar}
         <ActiveView key={active.id} view={active} />
       </>
     ) : null;
@@ -768,6 +818,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
           size="lg"
         />
       ) : null}
+      {viewInfoToggle('lg')}
       <IconButton
         icon={RefreshCw}
         label={refreshing ? 'Refreshing…' : 'Refresh'}
@@ -985,31 +1036,48 @@ function OwnerAvatar({ ownerId }: { ownerId: string }) {
   ) : null;
 }
 
-// The note the owner wrote when sharing this view with me, above the view.
-function SharedNote({ view }: { view: ProjectView }) {
-  const c = useThemeColors();
-  const owner = usePerson(view.ownerId);
-  const { data: share } = useMyShare(view);
-  const note = share?.share_notes?.trim();
-  if (!note) {
-    return null;
-  }
+// Above the view: who shared it and its description (`showDetails`, desktop),
+// and the note the owner wrote when sharing it with me. They sit on one line
+// when they fit; the note wraps otherwise.
+function ViewInfoBar({
+  view,
+  note,
+  showDetails,
+  onClose,
+}: {
+  view: ProjectView;
+  note?: string;
+  showDetails: boolean;
+  onClose: () => void;
+}) {
+  const owner = usePerson(view.shared ? view.ownerId : null);
+  const shared = showDetails && view.shared;
+  const description = showDetails ? view.description : undefined;
   return (
-    <View className="flex-row items-start gap-2 border-b border-border-main bg-muted px-6 py-2">
-      <View className="pt-0.5">
-        <MessageSquareText size={14} color={c.subtle} />
+    <View className="flex-row items-center gap-3 border-b border-border-main bg-muted py-1 pl-6 pr-4">
+      <View className="flex-1 flex-row flex-wrap items-center gap-x-3 gap-y-1.5">
+        {shared ? (
+          <Text numberOfLines={1} className="text-sm text-text-main">
+            Shared by{' '}
+            <Text className="font-semibold text-text-heading">
+              {owner?.name ?? '…'}
+            </Text>
+          </Text>
+        ) : null}
+        {description ? (
+          <Text numberOfLines={1} className="shrink text-sm text-text-subtle">
+            {description}
+          </Text>
+        ) : null}
+        {note ? (
+          <Text numberOfLines={2} className="shrink text-sm text-text-main">
+            {'( '}
+            <Text className="font-medium text-text-heading">Note</Text>
+            {` : ${note} )`}
+          </Text>
+        ) : null}
       </View>
-      <Text numberOfLines={2} className="flex-1 text-sm text-text-main">
-        <Text className="font-medium text-text-heading">
-          {owner?.name ?? 'Owner'}:{' '}
-        </Text>
-        {note}
-      </Text>
+      <IconButton icon={X} size="sm" label="Hide view info" onPress={onClose} />
     </View>
   );
-}
-
-function SharedByBadge({ ownerId }: { ownerId: string }) {
-  const owner = usePerson(ownerId);
-  return <Badge label={`Shared by ${owner?.name ?? '…'}`} size="sm" />;
 }

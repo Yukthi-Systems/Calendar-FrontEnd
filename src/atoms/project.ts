@@ -90,7 +90,9 @@ export const itemFormAtom = atom<ItemFormState>(null);
 // template rather than just an id since there's nowhere else to look it up from
 // outside RecurringTasksView's own query.
 export type RecurringFormState =
-  | { mode: 'new' }
+  // `kind`, from the Recurring tab's "New" menu: 'event' locks the form to the
+  // Event tag, 'task' offers every other tag the view allows. Unset: all of them.
+  | { mode: 'new'; kind?: 'event' | 'task' }
   | { mode: 'edit'; template: RecurringTemplate }
   | null;
 export const recurringFormAtom = atom<RecurringFormState>(null);
