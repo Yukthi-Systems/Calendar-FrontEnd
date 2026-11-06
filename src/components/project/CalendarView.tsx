@@ -53,6 +53,9 @@ import {
 import { showsField } from '../../data/viewFields';
 import type { ProjectView, ViewField, WorkItem } from '../../data/types';
 import { useThemeColors, useTone } from '../../hooks/useThemeColors';
+import { currentUserIdAtom } from '../../atoms/members';
+import { CALENDAR_MODE_KEY_PREFIX } from '../../services/deviceKeys';
+import { storage } from '../../services/runtime';
 import { useRecurringTasks } from '../../hooks/useRecurringTasks';
 import { useCalendarBuckets } from '../../hooks/useTasksSync';
 import { useShortcuts } from '../../hooks/useShortcuts';
@@ -159,8 +162,53 @@ const dedupeById = <T extends { item: { id: string } }>(list: T[]): T[] => {
   return list.filter(o => !seen.has(o.item.id) && !!seen.add(o.item.id));
 };
 
+const isCalMode = (v: string | null): v is CalMode =>
+  MODES.some(m => m.key === v);
+
+// Reads the layout this user last picked before showing anything, so the calendar
+// opens on it straight away rather than loading Month's tasks first. Kept on the
+// device, through sign-out too (see deviceKeys.ts).
 export function CalendarView({ view }: { view: ProjectView }) {
-  const [mode, setMode] = useState<CalMode>('month');
+  const modeKey = `${CALENDAR_MODE_KEY_PREFIX}${useAtomValue(
+    currentUserIdAtom,
+  )}`;
+  const [savedMode, setSavedMode] = useState<CalMode | null>(null);
+  useEffect(() => {
+    let active = true;
+    const load = async () => {
+      const value = await storage.getItem(modeKey).catch(() => null);
+      if (active) {
+        setSavedMode(isCalMode(value) ? value : 'month');
+      }
+    };
+    load();
+    return () => {
+      active = false;
+    };
+  }, [modeKey]);
+  return savedMode ? (
+    <CalendarBody view={view} initialMode={savedMode} modeKey={modeKey} />
+  ) : (
+    <View className="flex-1" />
+  );
+}
+
+function CalendarBody({
+  view,
+  initialMode,
+  modeKey,
+}: {
+  view: ProjectView;
+  initialMode: CalMode;
+  modeKey: string;
+}) {
+  const [mode, setMode] = useState<CalMode>(initialMode);
+  // A layout the user chose (the tabs, or their shortcuts) is remembered; opening
+  // a day from the grid isn't a choice of default, so it just uses setMode.
+  const pickMode = (next: CalMode) => {
+    setMode(next);
+    storage.setItem(modeKey, next);
+  };
   const [cursor, setCursor] = useState(() => new Date());
 
   // Top-level tasks only — subtasks load lazily (useTasksSync's header comment)
@@ -308,10 +356,10 @@ export function CalendarView({ view }: { view: ProjectView }) {
     arrowleft: () => step(-1),
     arrowright: () => step(1),
     t: goToday,
-    d: () => setMode('day'),
-    w: () => setMode('week'),
-    m: () => setMode('month'),
-    y: () => setMode('year'),
+    d: () => pickMode('day'),
+    w: () => pickMode('week'),
+    m: () => pickMode('month'),
+    y: () => pickMode('year'),
   });
 
   // Swipe left/right on the grid to page (touch); a mouse drag works too.
@@ -405,7 +453,7 @@ export function CalendarView({ view }: { view: ProjectView }) {
             {loadNote ? ` · ${loadNote}` : ''}
           </Text>
         ) : null}
-        <SegmentedControl options={MODES} value={mode} onChange={setMode} />
+        <SegmentedControl options={MODES} value={mode} onChange={pickMode} />
       </View>
 
       <View className="flex-1" {...swipe.panHandlers}>

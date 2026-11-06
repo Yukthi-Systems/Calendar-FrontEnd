@@ -1,4 +1,4 @@
-import { TIPS_SHOWN_KEY_PREFIX } from './deviceKeys';
+import { keptOnSignOut } from './deviceKeys';
 
 // Web: localStorage for the persisted session, sessionStorage for per-tab flags, and
 // the `?logout=true` query param as the post-logout marker (same as YFS-FrontEnd).
@@ -29,14 +29,14 @@ export const storage = {
 };
 
 // After a successful sign-out: everything this site keeps in localStorage (except
-// the tips count, see deviceKeys.ts), and every cookie it can see. A cookie has to be expired with the domain and path it
+// what deviceKeys.ts lists), and every cookie it can see. A cookie has to be expired with the domain and path it
 // was set on, which JS can't read, so each is tried on this host and its parents.
 // HttpOnly cookies (SSO-Session-ID) can't be touched from here — the logout
 // responses remove those.
 export const clearDeviceData = async (): Promise<void> => {
   try {
     Object.keys(localStorage)
-      .filter(key => !key.startsWith(TIPS_SHOWN_KEY_PREFIX))
+      .filter(key => !keptOnSignOut(key))
       .forEach(key => localStorage.removeItem(key));
   } catch {
     /* ignore */

@@ -197,35 +197,40 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   // filter, and a Recurring Event where they're off. More than one choice is a
   // "New" menu; a single one is just a button for it (see newButton, fab).
   const viewTags = allowedTags(active?.tagFilter);
-  const newOptions: { label: string; icon: LucideIcon; open: () => void }[] = [
-    ...(viewTags.some(t => t.key === 'event')
-      ? [
-          {
-            label: 'New Event',
-            icon: CalendarDays,
-            open: () => setItemForm({ mode: 'new', kind: 'event' }),
-          },
-        ]
-      : []),
-    ...(viewTags.some(t => t.key !== 'event')
-      ? [
-          {
-            label: 'New Task',
-            icon: ListTodo,
-            open: () => setItemForm({ mode: 'new', kind: 'task' }),
-          },
-        ]
-      : []),
-    ...(active?.showRecurring
-      ? [
-          {
-            label: 'New Recurring Event',
-            icon: Repeat,
-            open: () => setRecurringForm({ mode: 'new' }),
-          },
-        ]
-      : []),
-  ];
+  const eventOption = viewTags.some(t => t.key === 'event')
+    ? [
+        {
+          label: 'New Event',
+          icon: CalendarDays,
+          open: () => setItemForm({ mode: 'new', kind: 'event' }),
+        },
+      ]
+    : [];
+  const taskOption = viewTags.some(t => t.key !== 'event')
+    ? [
+        {
+          label: 'New Task',
+          icon: ListTodo,
+          open: () => setItemForm({ mode: 'new', kind: 'task' }),
+        },
+      ]
+    : [];
+  const recurringOption = active?.showRecurring
+    ? [
+        {
+          label: 'New Recurring Event',
+          icon: Repeat,
+          open: () => setRecurringForm({ mode: 'new' }),
+        },
+      ]
+    : [];
+  // What the screen holds comes first.
+  const newOptions: { label: string; icon: LucideIcon; open: () => void }[] =
+    contentMode === 'recurring'
+      ? [...recurringOption, ...eventOption, ...taskOption]
+      : active?.type === 'calendar'
+      ? [...eventOption, ...taskOption, ...recurringOption]
+      : [...taskOption, ...eventOption, ...recurringOption];
   const onlyNewOption = newOptions.length === 1 ? newOptions[0] : null;
   const newMenu = (
     renderTrigger: (ref: RefObject<ViewInstance | null>) => React.ReactNode,
@@ -630,7 +635,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
         onPress={refresh}
       />
       <MenuButton label="View options" onOpen={ref => openMenu(active, ref)} />
-      {contentMode === 'tasks' && canCreate ? (
+      {canCreate ? (
         <View ref={tourTarget('newTask')}>
           {onlyNewOption ? (
             <Button variant="primary" icon={Plus} onPress={onlyNewOption.open}>
@@ -651,17 +656,6 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
             ))
           )}
         </View>
-      ) : null}
-      {contentMode === 'recurring' &&
-      canCreate &&
-      active?.showRecurring !== false ? (
-        <Button
-          variant="primary"
-          icon={Plus}
-          onPress={() => setRecurringForm({ mode: 'new' })}
-        >
-          New Recurring Event
-        </Button>
       ) : null}
       {alertsButton}
       {profileButton}
@@ -868,22 +862,15 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
           {phoneHeader}
           {modeToggle}
           <View className="flex-1">{content}</View>
-          {canCreate &&
-          ((contentMode === 'tasks' && ActiveView) ||
-            (contentMode === 'recurring' &&
-              active?.showRecurring !== false)) ? (
+          {canCreate && ActiveView ? (
             <View className="absolute bottom-6 right-5">
-              {contentMode === 'tasks' && onlyNewOption
+              {onlyNewOption
                 ? fab(onlyNewOption.label, onlyNewOption.open)
-                : contentMode === 'tasks'
-                ? newMenu(ref => (
+                : newMenu(ref => (
                     <View ref={ref}>
                       {fab('New', () => setNewMenuOpen(o => !o))}
                     </View>
-                  ))
-                : fab('New Recurring Event', () =>
-                    setRecurringForm({ mode: 'new' }),
-                  )}
+                  ))}
             </View>
           ) : null}
         </>
