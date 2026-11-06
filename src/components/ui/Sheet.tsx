@@ -53,10 +53,20 @@ export function bringPortalToFront(node: unknown) {
   while (el && el.parentElement && el.parentElement !== document.body) {
     el = el.parentElement;
   }
-  if (el && el.parentElement === document.body) {
+  if (el && el.parentElement === document.body && el.nextSibling) {
+    // Moving a node blurs whatever's focused inside it (an autoFocus field).
+    const focused = document.activeElement as HTMLElement | null;
     document.body.appendChild(el);
+    if (focused && el.contains(focused)) {
+      focused.focus();
+    }
   }
 }
+
+// Marks a Sheet's backdrop in the DOM: what's behind it is meant to stay still, so
+// a Popover passing the mouse wheel through (see Popover.tsx) stops here.
+export const MODAL_BACKDROP_SELECTOR = '[data-modal-backdrop]';
+const MODAL_BACKDROP = { dataSet: { modalBackdrop: 'true' } } as object;
 
 // The one modal shell every dialog/sheet in the app uses: animated backdrop + panel
 // (spring in, quick ease out), bottom-sheet on phones, centred dialog elsewhere,
@@ -89,12 +99,13 @@ export function Sheet({
   const rootRef = useRef<ViewInstance | null>(null);
 
   // See bringPortalToFront's comment above: without this, which sheet visually
-  // wins is decided by mount order, not open order.
+  // wins is decided by mount order, not open order. Waits for `mounted`: until
+  // then the Modal has rendered nothing, so there's no node to move.
   useEffect(() => {
-    if (visible) {
+    if (visible && mounted) {
       bringPortalToFront(rootRef.current);
     }
-  }, [visible]);
+  }, [visible, mounted]);
 
   // Register while open, so the topmost sheet can host the toasts.
   useEffect(() => {
@@ -204,6 +215,7 @@ export function Sheet({
               accessibilityLabel="Close"
               onPress={requestClose}
               style={{ flex: 1, cursor: 'default' } as object}
+              {...MODAL_BACKDROP}
             />
           </Animated.View>
           <Animated.View

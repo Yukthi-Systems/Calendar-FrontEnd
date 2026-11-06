@@ -35,7 +35,6 @@ import type { RecurringTemplate } from '../../data/recurringTemplate';
 import type { ProjectView } from '../../data/types';
 import {
   Badge,
-  Button,
   EmptyState,
   IconButton,
   Input,
@@ -128,7 +127,7 @@ export function RecurringTasksView({
       <ScrollView contentContainerClassName="px-4 pb-10 pt-4 lg:px-6">
         <Text className="mb-3 text-sm text-text-subtle">
           {templates.length === 0
-            ? 'No Recurring Events yet'
+            ? 'No Recurring Events or Tasks yet'
             : q
             ? `${visible.length} of ${templates.length} Recurring Event${
                 templates.length === 1 ? '' : 's'
@@ -175,19 +174,8 @@ export function RecurringTasksView({
         ) : templates.length === 0 ? (
           <EmptyState
             icon={Repeat}
-            title="No Recurring Events"
-            description="A Recurring Event is a reusable rule — a name, a tag and a schedule — for the kind of thing that repeats."
-            action={
-              canCreate ? (
-                <Button
-                  variant="primary"
-                  icon={Plus}
-                  onPress={() => setForm({ mode: 'new' })}
-                >
-                  New Recurring Event
-                </Button>
-              ) : undefined
-            }
+            title="No Recurring Events or Tasks"
+            description="Recurring Events and Tasks are reusable rules — a name and a schedule — for the things that repeat."
           />
         ) : visible.length === 0 ? (
           <EmptyState

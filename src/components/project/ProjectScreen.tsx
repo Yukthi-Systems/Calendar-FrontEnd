@@ -392,6 +392,7 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
   const onShareView = (v: ProjectView) => {
     setModalView(undefined);
     setMenuView(null);
+    setViewPickerOpen(false);
     setShareView(v);
   };
 
@@ -986,10 +987,12 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
         onShare={v => onShareView(v)}
         onEdit={v => {
           setMenuView(null);
+          setViewPickerOpen(false);
           setModalView(v);
         }}
         onDelete={v => {
           setMenuView(null);
+          setViewPickerOpen(false);
           remove(v);
         }}
       />

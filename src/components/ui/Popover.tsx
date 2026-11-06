@@ -10,13 +10,42 @@ import {
 } from 'react-native';
 import { useThemeColors } from '../../hooks/useThemeColors';
 import { DOCK_BREAKPOINT } from './layout';
-import { Sheet, bringPortalToFront } from './Sheet';
+import { MODAL_BACKDROP_SELECTOR, Sheet, bringPortalToFront } from './Sheet';
 
 const NATIVE_DRIVER = Platform.OS !== 'web';
 const GAP = 6;
 const MARGIN = 12;
+// A wheel event measured in lines rather than pixels (deltaMode 1).
+const WHEEL_LINE_PX = 16;
 
 type Anchor = { x: number; y: number; width: number; height: number };
+
+// What the mouse wheel would be scrolling at this point if `backdrop` weren't in
+// the way, or null if that's nothing, or something behind a Sheet.
+function scrollerBehind(backdrop: HTMLElement, x: number, y: number) {
+  for (const el of document.elementsFromPoint(x, y)) {
+    if (backdrop.contains(el)) {
+      continue;
+    }
+    if (el.closest(MODAL_BACKDROP_SELECTOR)) {
+      return null;
+    }
+    for (
+      let node: HTMLElement | null = el as HTMLElement;
+      node;
+      node = node.parentElement
+    ) {
+      const { overflowY } = getComputedStyle(node);
+      if (
+        (overflowY === 'auto' || overflowY === 'scroll') &&
+        node.scrollHeight > node.clientHeight
+      ) {
+        return node;
+      }
+    }
+  }
+  return null;
+}
 
 // A floating panel anchored under (or, without room, above) its trigger —
 // date/time pickers, small menus. On phones it becomes a bottom Sheet instead,
@@ -62,6 +91,26 @@ export function Popover({
       bringPortalToFront(backdropRef.current);
     }
   }, [open, docked]);
+
+  // The invisible backdrop would otherwise swallow the wheel for the whole page.
+  // Scrolling what's behind it closes the panel, since its trigger may be moving
+  // away; the wheel then reaches the page directly.
+  useEffect(() => {
+    const backdrop = backdropRef.current as unknown as HTMLElement | null;
+    if (Platform.OS !== 'web' || !open || docked || !backdrop) {
+      return;
+    }
+    const onWheel = (e: WheelEvent) => {
+      const scroller = scrollerBehind(backdrop, e.clientX, e.clientY);
+      if (scroller) {
+        const unit = e.deltaMode === 1 ? WHEEL_LINE_PX : 1;
+        scroller.scrollBy({ left: e.deltaX * unit, top: e.deltaY * unit });
+        onClose();
+      }
+    };
+    backdrop.addEventListener('wheel', onWheel, { passive: true });
+    return () => backdrop.removeEventListener('wheel', onWheel);
+  }, [open, docked, onClose]);
 
   useEffect(() => {
     if (!open || docked) {
