@@ -203,6 +203,17 @@ const ROW_H = 44;
 const CHILD_ROW_H = 40;
 const GROUP_ROW_H = 32; // loading / add-subtask rows
 
+const SKELETON_ROWS = 10;
+// Varied bar lengths, so the placeholder reads as rows of text, not a grid.
+const skeletonWidth = (key: string, row: number) =>
+  key === 'title'
+    ? ['w-3/4', 'w-1/2', 'w-2/3', 'w-2/5'][row % 4]
+    : key === 'assignee'
+    ? 'w-12'
+    : row % 2
+    ? 'w-2/3'
+    : 'w-1/2';
+
 function buildRows(
   sorted: WorkItem[],
   expanded: ReadonlySet<string>,
@@ -971,16 +982,30 @@ export function TableView({ view }: { view: ProjectView }) {
                 }}
               >
                 {tasksLoading && items.length === 0
-                  ? Array.from({ length: 8 }, (_, n) => (
+                  ? Array.from({ length: SKELETON_ROWS }, (_, n) => (
                       <View
                         key={n}
-                        className="h-11 flex-row items-center gap-6 border-b border-border-main pl-[40px] pr-3"
+                        style={{ height: ROW_H }}
+                        className="flex-row border-b border-border-main"
                       >
-                        <Skeleton
-                          className={`h-3 rounded ${n % 2 ? 'w-64' : 'w-80'}`}
-                        />
-                        <Skeleton className="h-3 w-20 rounded" />
-                        <Skeleton className="h-3 w-16 rounded" />
+                        {/* One bar per real column, at its width, so the
+                            placeholder lines up with the header above. */}
+                        {columns.map(col => (
+                          <View
+                            key={col.key}
+                            style={cellStyle(widthOf(col))}
+                            className={`justify-center ${
+                              col.key === 'title' ? 'pl-[40px] pr-3' : 'px-3'
+                            }`}
+                          >
+                            <Skeleton
+                              className={`h-3 rounded ${skeletonWidth(
+                                col.key,
+                                n,
+                              )}`}
+                            />
+                          </View>
+                        ))}
                       </View>
                     ))
                   : rows.slice(0, rowLimit).map(renderRow)}

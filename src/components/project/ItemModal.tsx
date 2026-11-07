@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Text, View } from 'react-native';
+import { Text, useWindowDimensions, View } from 'react-native';
 import { useAtom, useAtomValue, useSetAtom } from 'jotai';
 import { useQueryClient } from '@tanstack/react-query';
 import { endOfDay, format, parseISO } from 'date-fns';
@@ -7,6 +7,8 @@ import ArrowRight from 'lucide-react-native/icons/arrow-right';
 import Bell from 'lucide-react-native/icons/bell';
 import ChevronRight from 'lucide-react-native/icons/chevron-right';
 import ListTree from 'lucide-react-native/icons/list-tree';
+import Maximize2 from 'lucide-react-native/icons/maximize-2';
+import Minimize2 from 'lucide-react-native/icons/minimize-2';
 import Pencil from 'lucide-react-native/icons/pencil';
 import Plus from 'lucide-react-native/icons/plus';
 import Repeat from 'lucide-react-native/icons/repeat';
@@ -62,6 +64,7 @@ import {
   SheetBody,
   SheetFooter,
   SheetHeader,
+  DOCK_BREAKPOINT,
 } from '../ui';
 import { CommentsSection } from './CommentsSection';
 import { EventInviteesSection } from './EventInviteesSection';
@@ -80,6 +83,10 @@ import {
 // Detail sheet for any work item, opened from every view.
 export function ItemModal() {
   const [selectedId, setSelectedId] = useAtom(selectedItemIdAtom);
+  // Expanded fills the window; it stays that way for the next task opened. Phones
+  // already show it full width, so there's no toggle there.
+  const [expanded, setExpanded] = useState(false);
+  const docked = useWindowDimensions().width < DOCK_BREAKPOINT;
   const items = useAtomValue(itemsAtom);
   const setForm = useSetAtom(itemFormAtom);
   const {
@@ -361,7 +368,7 @@ export function ItemModal() {
 
   return (
     <>
-      <Sheet visible={!!item} onClose={close} size="lg">
+      <Sheet visible={!!item} onClose={close} size={expanded ? 'full' : 'lg'}>
         {item ? (
           <>
             <SheetHeader
@@ -406,6 +413,13 @@ export function ItemModal() {
               }
               actions={
                 <>
+                  {docked ? null : (
+                    <IconButton
+                      icon={expanded ? Minimize2 : Maximize2}
+                      label={expanded ? 'Collapse view' : 'Expand view'}
+                      onPress={() => setExpanded(e => !e)}
+                    />
+                  )}
                   <IconButton
                     icon={RefreshCw}
                     label="Refresh this task"

@@ -81,7 +81,8 @@ export function Sheet({
 }: {
   visible: boolean;
   onClose: () => void;
-  size?: keyof typeof WIDTH;
+  // 'full': an expanded view — full width (less its margin), 97% of the height.
+  size?: keyof typeof WIDTH | 'full';
   // false: backdrop taps and Esc don't close it (unsaved / in-flight work).
   dismissable?: boolean;
   children: ReactNode;
@@ -90,6 +91,8 @@ export function Sheet({
   const insets = useSafeAreaInsets();
   const { dark } = useThemeColors();
   const docked = width < DOCK_BREAKPOINT;
+  // Expanded: 97% of the window's height, so no top/bottom padding around it.
+  const full = size === 'full' && !docked;
   const anim = useRef(new Animated.Value(0)).current;
   const [mounted, setMounted] = useState(visible);
   const [sheetId] = useState(newSheetId);
@@ -197,7 +200,13 @@ export function Sheet({
         <View
           ref={rootRef}
           style={{ flex: 1 }}
-          className={docked ? 'justify-end' : 'items-center justify-center p-6'}
+          className={
+            docked
+              ? 'justify-end'
+              : full
+              ? 'items-center justify-center px-6'
+              : 'items-center justify-center p-6'
+          }
         >
           <Animated.View
             pointerEvents={visible ? 'auto' : 'none'}
@@ -223,8 +232,11 @@ export function Sheet({
             style={[
               {
                 width: '100%',
-                maxWidth: docked ? undefined : WIDTH[size],
+                maxWidth: docked || size === 'full' ? undefined : WIDTH[size],
                 maxHeight: docked ? height * 0.92 : height * 0.86,
+                ...(full
+                  ? { height: height * 0.97, maxHeight: height * 0.97 }
+                  : {}),
               },
               panelMotion,
             ]}
@@ -236,6 +248,8 @@ export function Sheet({
                   maxHeight: '100%',
                   paddingBottom: docked ? insets.bottom : 0,
                 },
+                // Expanded: the card itself fills the panel, not just its content.
+                full ? { height: '100%' } : null,
                 Platform.OS === 'web'
                   ? ({
                       boxShadow: dark
