@@ -39,7 +39,7 @@ const TIPS: { target: TourTargetKey; title: string; body: string }[] = [
   {
     target: 'newTask',
     title: 'Add something new',
-    body: 'Add a task here. When the view allows them, you can also choose New Event or New Recurring Event. Events have start and due times and you can invite people. Tasks are by date; set a time under Advanced options if you need one.',
+    body: 'Add a task here. When the view allows them, you can also choose New Event. Events have start and due times and you can invite people. Tasks are by date; set a time under Advanced options if you need one.',
   },
   {
     target: 'filter',

@@ -257,15 +257,6 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
         },
       ]
     : [];
-  const recurringOption = active?.showRecurring
-    ? [
-        {
-          label: 'New Recurring Event',
-          icon: Repeat,
-          open: () => setRecurringForm({ mode: 'new' }),
-        },
-      ]
-    : [];
   // The Recurring tab only makes recurring things, one of each kind the view's
   // tags allow.
   const recurringKindOptions = active?.showRecurring
@@ -290,13 +281,14 @@ export function ProjectScreen({ onSignOut }: { onSignOut?: () => void }) {
           : []),
       ]
     : [];
-  // What the screen holds comes first.
+  // What the screen holds comes first. Recurring Events are only made from the
+  // Recurring tab.
   const newOptions: { label: string; icon: LucideIcon; open: () => void }[] =
     contentMode === 'recurring'
       ? recurringKindOptions
       : active?.type === 'calendar'
-      ? [...eventOption, ...taskOption, ...recurringOption]
-      : [...taskOption, ...eventOption, ...recurringOption];
+      ? [...eventOption, ...taskOption]
+      : [...taskOption, ...eventOption];
   const onlyNewOption = newOptions.length === 1 ? newOptions[0] : null;
   const newMenu = (
     renderTrigger: (ref: RefObject<ViewInstance | null>) => React.ReactNode,
